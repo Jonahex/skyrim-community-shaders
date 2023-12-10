@@ -181,7 +181,6 @@ namespace SIE
 			Cloud = 17,  // unused
 			LODLandNoise = 18,
 			MTLandLODBlend = 19,
-			Outline = 20,
 		};
 
 		enum class LightingShaderFlags

@@ -49,14 +49,7 @@ namespace SIE
 			static REL::Relocation<void(uint32_t, D3D_SHADER_MACRO*)> VanillaGetLightingShaderDefines(
 				RELOCATION_ID(101631, 108698));
 
-			const auto technique =
-				static_cast<ShaderCache::LightingShaderTechniques>(GetTechnique(descriptor));
-
 			int lastIndex = 0;
-
-			if (technique == ShaderCache::LightingShaderTechniques::Outline) {
-				defines[lastIndex++] = { "OUTLINE", nullptr };
-			}
 
 			for (auto* feature : Feature::GetFeatureList()) {
 				if (feature->loaded && feature->HasShaderDefine(RE::BSShader::Type::Lighting)) {
