@@ -2,6 +2,7 @@
 
 #include <detours/Detours.h>
 
+#include "BSLightingShaderMaterialPBR.h"
 #include "Menu.h"
 #include "ShaderCache.h"
 #include "State.h"
@@ -9,6 +10,13 @@
 #include "ShaderTools/BSShaderHooks.h"
 
 std::unordered_map<void*, std::pair<std::unique_ptr<uint8_t[]>, size_t>> ShaderBytecodeMap;
+
+struct BSLightingShader : RE::BSShader
+{
+	char _pad0[4];
+	uint32_t currentRawTechnique;
+	char _pad1[96];
+};
 
 void RegisterShaderBytecode(void* Shader, const void* Bytecode, size_t BytecodeLength)
 {
@@ -111,17 +119,34 @@ void hk_BSShader_LoadShaders(RE::BSShader* shader, std::uintptr_t stream)
 	BSShaderHooks::hk_LoadShaders((REX::BSShader*)shader, stream);
 };
 
-bool hk_BSShader_BeginTechnique(RE::BSShader* shader, int vertexDescriptor, int pixelDescriptor, bool skipPIxelShader);
+bool hk_BSShader_BeginTechnique(RE::BSShader* shader, int vertexDescriptor, int pixelDescriptor, bool skipPixelShader);
 
 decltype(&hk_BSShader_BeginTechnique) ptr_BSShader_BeginTechnique;
 
-bool hk_BSShader_BeginTechnique(RE::BSShader* shader, int vertexDescriptor, int pixelDescriptor, bool skipPIxelShader)
+bool hk_BSShader_BeginTechnique(RE::BSShader* shader, int vertexDescriptor, int pixelDescriptor, bool skipPixelShader)
 {
 	auto state = State::GetSingleton();
 	state->currentShader = shader;
 	state->currentVertexDescriptor = vertexDescriptor;
 	state->currentPixelDescriptor = pixelDescriptor;
-	return (ptr_BSShader_BeginTechnique)(shader, vertexDescriptor, pixelDescriptor, skipPIxelShader);
+	const bool shaderFound = (ptr_BSShader_BeginTechnique)(shader, vertexDescriptor, pixelDescriptor, skipPixelShader);
+	if (shaderFound)
+	{
+		return shaderFound;
+	}
+
+	auto& shaderCache = SIE::ShaderCache::Instance();
+	RE::BSGraphics::VertexShader* vertexShader = shaderCache.GetVertexShader(*shader, vertexDescriptor);
+	RE::BSGraphics::PixelShader* pixelShader = shaderCache.GetPixelShader(*shader, pixelDescriptor);
+	if (vertexShader == nullptr || pixelShader == nullptr) {
+		return false;
+	}
+	RE::BSGraphics::RendererShadowState::GetSingleton()->SetVertexShader(vertexShader);
+	if (skipPixelShader) {
+		pixelShader = nullptr;
+	}
+	RE::BSGraphics::RendererShadowState::GetSingleton()->SetPixelShader(pixelShader);
+	return true;
 }
 
 decltype(&IDXGISwapChain::Present) ptr_IDXGISwapChain_Present;
@@ -298,6 +323,149 @@ namespace Hooks
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
+	struct BSLightingShaderProperty_GetRenderPasses
+	{
+		static RE::BSShaderProperty::RenderPassArray* thunk(RE::BSLightingShaderProperty* property, RE::BSGeometry* geometry, std::uint32_t renderFlags, RE::BSShaderAccumulator* accumulator)
+		{
+			auto renderPasses = func(property, geometry, renderFlags, accumulator);
+			if (renderPasses == nullptr)
+			{
+				return renderPasses;
+			}
+
+			const bool isPbr = property->material ? property->material->GetFeature() == BSLightingShaderMaterialPBR::FEATURE : false;
+			//const bool isPbr = property->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kMenuScreen);
+
+			auto currentPass = renderPasses->head;
+			while (currentPass != nullptr) {
+				if (currentPass->shader->shaderType == RE::BSShader::Type::Lighting) {
+					constexpr uint32_t LightingTechniqueStart = 0x4800002D;
+					auto lightingTechnique = currentPass->passEnum - LightingTechniqueStart;
+					auto lightingFlags = lightingTechnique & ~(~0u << 24);
+					auto lightingType = (lightingTechnique >> 24) & 0x3F;
+					lightingFlags &= ~0b111000u;
+					if (isPbr) {
+						lightingFlags |= static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::TruePbr);
+
+						if (static_cast<SIE::ShaderCache::LightingShaderTechniques>(lightingType) == SIE::ShaderCache::LightingShaderTechniques::Glowmap)
+						{
+							lightingType = 0;
+						}
+					}
+					lightingTechnique = (lightingType << 24) | lightingFlags;
+					currentPass->passEnum = lightingTechnique + LightingTechniqueStart;
+				}
+				currentPass = currentPass->next;
+			}
+
+			return renderPasses;
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	struct BSLightingShader_SetupMaterial
+	{
+		static void thunk(BSLightingShader* shader, RE::BSLightingShaderMaterialBase const* material)
+		{
+			if (shader->currentRawTechnique & static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::TruePbr)) {
+			//if (material->GetFeature() == BSLightingShaderMaterialPBR::FEATURE) {
+				auto* pbrMaterial = static_cast<const BSLightingShaderMaterialPBR*>(material);
+				auto shadowState = RE::BSGraphics::RendererShadowState::GetSingleton();
+
+				shadowState->SetPSTexture(0, pbrMaterial->diffuseTexture->rendererTexture);
+				shadowState->SetPSTextureAddressMode(0, static_cast<RE::BSGraphics::TextureAddressMode>(pbrMaterial->textureClampMode));
+				shadowState->SetPSTextureFilterMode(0, RE::BSGraphics::TextureFilterMode::kAnisotropic);
+
+				shadowState->SetPSTexture(1, pbrMaterial->normalTexture->rendererTexture);
+				shadowState->SetPSTextureAddressMode(1, static_cast<RE::BSGraphics::TextureAddressMode>(pbrMaterial->textureClampMode));
+				shadowState->SetPSTextureFilterMode(1, RE::BSGraphics::TextureFilterMode::kAnisotropic);
+
+				shadowState->SetPSTexture(3, pbrMaterial->rmaosTexture->rendererTexture);
+				shadowState->SetPSTextureAddressMode(3, static_cast<RE::BSGraphics::TextureAddressMode>(pbrMaterial->textureClampMode));
+				shadowState->SetPSTextureFilterMode(3, RE::BSGraphics::TextureFilterMode::kAnisotropic);
+
+				const bool hasEmissive = pbrMaterial->emissiveTexture != nullptr && pbrMaterial->emissiveTexture != RE::BSGraphics::State::GetSingleton()->defaultTextureBlack;
+				if (hasEmissive)
+				{
+					shadowState->SetPSTexture(6, pbrMaterial->emissiveTexture->rendererTexture);
+					shadowState->SetPSTextureAddressMode(6, static_cast<RE::BSGraphics::TextureAddressMode>(pbrMaterial->textureClampMode));
+					shadowState->SetPSTextureFilterMode(6, RE::BSGraphics::TextureFilterMode::kAnisotropic);
+				}
+
+				RE::BSGraphics::Renderer::PrepareVSConstantGroup(RE::BSGraphics::ConstantGroupLevel::PerMaterial);
+				RE::BSGraphics::Renderer::PreparePSConstantGroup(RE::BSGraphics::ConstantGroupLevel::PerMaterial);
+
+				{
+					const uint32_t bufferIndex = RE::BSShaderManager::State::GetSingleton().textureTransformCurrentBuffer;
+
+					std::array<float, 4> texCoordOffsetScale;
+					texCoordOffsetScale[0] = pbrMaterial->texCoordOffset[bufferIndex].x;
+					texCoordOffsetScale[1] = pbrMaterial->texCoordOffset[bufferIndex].y;
+					texCoordOffsetScale[2] = pbrMaterial->texCoordScale[bufferIndex].x;
+					texCoordOffsetScale[3] = pbrMaterial->texCoordScale[bufferIndex].x;
+					shadowState->SetVSConstant(texCoordOffsetScale, RE::BSGraphics::ConstantGroupLevel::PerMaterial, 11);
+				}
+
+				{
+					std::array<float, 4> PBRParams;
+					PBRParams[0] = pbrMaterial->roughnessScale;
+					PBRParams[1] = pbrMaterial->metallicScale;
+					PBRParams[2] = pbrMaterial->specularLevel;
+					PBRParams[3] = hasEmissive;
+					shadowState->SetPSConstant(PBRParams, RE::BSGraphics::ConstantGroupLevel::PerMaterial, 36);
+				}
+
+				RE::BSGraphics::Renderer::FlushVSConstantGroup(RE::BSGraphics::ConstantGroupLevel::PerMaterial);
+				RE::BSGraphics::Renderer::FlushPSConstantGroup(RE::BSGraphics::ConstantGroupLevel::PerMaterial);
+				RE::BSGraphics::Renderer::ApplyVSConstantGroup(RE::BSGraphics::ConstantGroupLevel::PerMaterial);
+				RE::BSGraphics::Renderer::ApplyPSConstantGroup(RE::BSGraphics::ConstantGroupLevel::PerMaterial);
+			}
+			else {
+				func(shader, material);
+			}
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	struct BSLightingShader_SetupGeometry
+	{
+		static void thunk(BSLightingShader* shader, RE::BSRenderPass* pass, uint32_t renderFlags)
+		{
+			const uint32_t originalExtraFlags = shader->currentRawTechnique & 0b111000u;
+
+			shader->currentRawTechnique &= ~0b111000u;
+			shader->currentRawTechnique |= ((pass->numLights - 1) << 3);
+
+			func(shader, pass, renderFlags);
+
+			shader->currentRawTechnique &= ~0b111000u;
+			shader->currentRawTechnique |= originalExtraFlags;
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	uint32_t hk_BSLightingShader_GetPixelTechnique(uint32_t rawTechnique)
+	{
+		uint32_t pixelTechnique = rawTechnique;
+
+		pixelTechnique &= ~0b111000000u;
+		if ((pixelTechnique & static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::ModelSpaceNormals)) == 0) 
+		{
+			pixelTechnique &= ~static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::Skinned);
+		}
+		pixelTechnique |= static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::VC);
+
+		return pixelTechnique;
+	}
+
+	RE::BSLightingShaderMaterialBase* hk_BSLightingShaderMaterialBase_CreateMaterial(RE::BSShaderMaterial::Feature feature)
+	{
+		if (feature == BSLightingShaderMaterialPBR::FEATURE) {
+			return BSLightingShaderMaterialPBR::Make();
+		}
+		return RE::BSLightingShaderMaterialBase::CreateMaterial(feature);
+	}
+
 	void Install()
 	{
 		SKSE::AllocTrampoline(14);
@@ -325,5 +493,16 @@ namespace Hooks
 
 		logger::info("Hooking BSShaderRenderTargets::Create");
 		*(uintptr_t*)&ptr_BSShaderRenderTargets_Create = Detours::X64::DetourFunction(REL::RelocationID(100458, 107175).address(), (uintptr_t)&hk_BSShaderRenderTargets_Create);
+
+		logger::info("Hooking BSLightingShaderProperty");
+		stl::write_vfunc<0x2A, BSLightingShaderProperty_GetRenderPasses>(RE::VTABLE_BSLightingShaderProperty[0]);
+
+		logger::info("Hooking BSLightingShader");
+		stl::write_vfunc<0x4, BSLightingShader_SetupMaterial>(RE::VTABLE_BSLightingShader[0]);
+		stl::write_vfunc<0x6, BSLightingShader_SetupGeometry>(RE::VTABLE_BSLightingShader[0]);
+		std::ignore = Detours::X64::DetourFunction(REL::RelocationID(101633, 108700).address(), (uintptr_t)&hk_BSLightingShader_GetPixelTechnique);
+
+		logger::info("Hooking BSLightingShaderMaterialBase");
+		std::ignore = Detours::X64::DetourFunction(REL::RelocationID(100016, 106723).address(), (uintptr_t)&hk_BSLightingShaderMaterialBase_CreateMaterial);
 	}
 }

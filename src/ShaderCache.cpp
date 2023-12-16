@@ -51,6 +51,10 @@ namespace SIE
 
 			int lastIndex = 0;
 
+			if ((descriptor & static_cast<uint32_t>(ShaderCache::LightingShaderFlags::TruePbr)) != 0) {
+				defines[lastIndex++] = { "TRUE_PBR", nullptr };
+			}
+
 			for (auto* feature : Feature::GetFeatureList()) {
 				if (feature->loaded && feature->HasShaderDefine(RE::BSShader::Type::Lighting)) {
 					defines[lastIndex++] = { feature->GetShaderDefineName().data(), nullptr };
@@ -559,6 +563,8 @@ namespace SIE
 				{ "SSRParams", 16 },
 				{ "WorldMapOverlayParametersPS", 17 },
 				{ "AmbientColor", 18 },
+
+				{ "PBRParams", 36 },
 			};
 
 			auto& bloodSplatterVS = result[static_cast<size_t>(RE::BSShader::Type::BloodSplatter)]
@@ -810,10 +816,6 @@ namespace SIE
 				return;
 			}
 
-			if (desc.ConstantBuffers <= 0) {
-				return;
-			}
-
 			if (shaderClass == ShaderClass::Vertex) {
 				vertexDesc = 0b1111;
 				bool hasTexcoord2 = false;
@@ -863,6 +865,10 @@ namespace SIE
 						AddAttribute(vertexDesc, RE::BSGraphics::Vertex::VA_EYEDATA);
 					}
 				}
+			}
+
+			if (desc.ConstantBuffers <= 0) {
+				return;
 			}
 
 			auto mapBufferConsts =
@@ -1030,7 +1036,6 @@ namespace SIE
 			ID3DBlob* strippedShaderBlob = nullptr;
 
 			const uint32_t stripFlags = D3DCOMPILER_STRIP_DEBUG_INFO |
-			                            D3DCOMPILER_STRIP_REFLECTION_DATA |
 			                            D3DCOMPILER_STRIP_TEST_BLOBS |
 			                            D3DCOMPILER_STRIP_PRIVATE_DATA;
 

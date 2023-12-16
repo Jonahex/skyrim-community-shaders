@@ -188,7 +188,11 @@ namespace SIE
 			VC = 1 << 0,
 			Skinned = 1 << 1,
 			ModelSpaceNormals = 1 << 2,
-			// flags 3 to 8 are unused
+
+			// bits 3-5 used to store point lights count
+			// bits 6-8 used to store shadow lights count
+			TruePbr = 1 << 3,
+
 			Specular = 1 << 9,
 			SoftLighting = 1 << 10,
 			RimLighting = 1 << 11,
