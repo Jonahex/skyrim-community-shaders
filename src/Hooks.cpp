@@ -329,11 +329,67 @@ namespace Hooks
 		{
 			using enum RE::BSShaderProperty::EShaderPropertyFlag;
 
-			func(property, stream);
+			RE::BSShaderMaterial::Feature feature = RE::BSShaderMaterial::Feature::kDefault;
+			stream.iStr->read(&feature, 1);
+
+			{
+				auto vtable = REL::Relocation<void***>(RE::NiShadeProperty::VTABLE[0]);
+				auto baseMethod = reinterpret_cast<void (*)(RE::NiShadeProperty*, RE::NiStream&)>((vtable.get()[0x18]));
+				baseMethod(property, stream);
+			}
+
+			stream.iStr->read(&property->flags, 1);
+
+			{
+				RE::BSLightingShaderMaterialBase* material = nullptr;
+				if (property->flags.any(kMenuScreen)) {
+					auto pbrMaterial = BSLightingShaderMaterialPBR::Make();
+
+					material = pbrMaterial;
+				} else {
+					material = RE::BSLightingShaderMaterialBase::CreateMaterial(feature);
+				}
+				property->LinkMaterial(nullptr, nullptr);
+				property->material = material;
+			}
+
+			{
+				stream.iStr->read(&property->material->texCoordOffset[0].x, 1);
+				stream.iStr->read(&property->material->texCoordOffset[0].y, 1);
+				stream.iStr->read(&property->material->texCoordScale[0].x, 1);
+				stream.iStr->read(&property->material->texCoordScale[0].y, 1);
+
+				property->material->texCoordOffset[1] = property->material->texCoordOffset[0];
+				property->material->texCoordScale[1] = property->material->texCoordScale[0];
+			}
+
+			stream.LoadLinkID();
+
+			{
+				RE::NiColor emissiveColor{};
+				stream.iStr->read(&property->emissiveColor->red, 1);
+				stream.iStr->read(&property->emissiveColor->green, 1);
+				stream.iStr->read(&property->emissiveColor->blue, 1);
+
+				if (property->emissiveColor != nullptr && property->flags.any(kOwnEmit)) {
+					*property->emissiveColor = emissiveColor;
+				}
+			}
+
+			stream.iStr->read(&property->emissiveMult, 1);
+
+			static_cast<RE::BSLightingShaderMaterialBase*>(property->material)->LoadBinary(stream);
 
 			if (property->material->GetFeature() == BSLightingShaderMaterialPBR::FEATURE)
 			{
-				property->flags.reset(kGlowMap, kEnvMap, kSpecular);
+				auto pbrMaterial = static_cast<BSLightingShaderMaterialPBR*>(property->material);
+				if (property->flags.any(kSoftLighting))
+				{
+					pbrMaterial->pbrFlags.set(PBRFlags::TwoSidedFoliage);
+				} else if (property->flags.any(kRimLighting)) {
+					pbrMaterial->pbrFlags.set(PBRFlags::Subsurface);
+				}
+				property->flags.reset(kSpecular, kGlowMap, kEnvMap, kSoftLighting, kRimLighting, kBackLighting);
 			}
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
@@ -451,22 +507,24 @@ namespace Hooks
 				}
 
 				{
-					std::array<float, 4> PBRParams;
-					PBRParams[0] = pbrMaterial->roughnessScale;
-					PBRParams[1] = pbrMaterial->metallicScale;
-					PBRParams[2] = pbrMaterial->specularLevel;
-					PBRParams[3] = static_cast<float>(shaderFlags.underlying());
-					shadowState->SetPSConstant(PBRParams, RE::BSGraphics::ConstantGroupLevel::PerMaterial, 36);
+					shadowState->SetPSConstant(shaderFlags, RE::BSGraphics::ConstantGroupLevel::PerMaterial, 36);
 				}
 
 				{
-					shadowState->SetPSConstant(pbrMaterial->subsurfaceColor, RE::BSGraphics::ConstantGroupLevel::PerMaterial, 37);
+					std::array<float, 3> PBRParams1;
+					PBRParams1[0] = pbrMaterial->GetRoughnessScale();
+					PBRParams1[1] = pbrMaterial->GetDisplacementScale();
+					PBRParams1[2] = pbrMaterial->GetSpecularLevel();
+					shadowState->SetPSConstant(PBRParams1, RE::BSGraphics::ConstantGroupLevel::PerMaterial, 37);
 				}
 
 				{
-					std::array<float, 1> PBRParams1;
-					PBRParams1[0] = pbrMaterial->displacementScale;
-					shadowState->SetPSConstant(PBRParams1, RE::BSGraphics::ConstantGroupLevel::PerMaterial, 38);
+					std::array<float, 4> PBRParams2;
+					PBRParams2[0] = pbrMaterial->GetSubsurfaceColor().red;
+					PBRParams2[1] = pbrMaterial->GetSubsurfaceColor().green;
+					PBRParams2[2] = pbrMaterial->GetSubsurfaceColor().blue;
+					PBRParams2[3] = pbrMaterial->GetSubsurfaceOpacity();
+					shadowState->SetPSConstant(PBRParams2, RE::BSGraphics::ConstantGroupLevel::PerMaterial, 38);
 				}
 
 				RE::BSGraphics::Renderer::FlushVSConstantGroup(RE::BSGraphics::ConstantGroupLevel::PerMaterial);
@@ -487,6 +545,10 @@ namespace Hooks
 		{
 			const uint32_t originalExtraFlags = shader->currentRawTechnique & 0b111000u;
 
+			if ((shader->currentRawTechnique & static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::TruePbr)) != 0) {
+				shader->currentRawTechnique |= static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::Specular);
+			}
+
 			shader->currentRawTechnique &= ~0b111000u;
 			shader->currentRawTechnique |= ((pass->numLights - 1) << 3);
 
@@ -494,6 +556,10 @@ namespace Hooks
 
 			shader->currentRawTechnique &= ~0b111000u;
 			shader->currentRawTechnique |= originalExtraFlags;
+
+			if ((shader->currentRawTechnique & static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::TruePbr)) != 0) {
+				shader->currentRawTechnique &= ~static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::Specular);
+			}
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
@@ -549,6 +615,7 @@ namespace Hooks
 		*(uintptr_t*)&ptr_BSShaderRenderTargets_Create = Detours::X64::DetourFunction(REL::RelocationID(100458, 107175).address(), (uintptr_t)&hk_BSShaderRenderTargets_Create);
 
 		logger::info("Hooking BSLightingShaderProperty");
+		stl::write_vfunc<0x18, BSLightingShaderProperty_LoadBinary>(RE::VTABLE_BSLightingShaderProperty[0]);
 		stl::write_vfunc<0x2A, BSLightingShaderProperty_GetRenderPasses>(RE::VTABLE_BSLightingShaderProperty[0]);
 
 		logger::info("Hooking BSLightingShader");

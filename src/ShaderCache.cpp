@@ -564,9 +564,9 @@ namespace SIE
 				{ "WorldMapOverlayParametersPS", 17 },
 				{ "AmbientColor", 18 },
 
-				{ "PBRParams", 36 },
-				{ "SubsurfaceColor", 37 },
-				{ "PBRParams1", 38 },
+				{ "PBRFlags", 36 },
+				{ "PBRParams1", 37 },
+				{ "PBRParams2", 38 },
 			};
 
 			auto& bloodSplatterVS = result[static_cast<size_t>(RE::BSShader::Type::BloodSplatter)]

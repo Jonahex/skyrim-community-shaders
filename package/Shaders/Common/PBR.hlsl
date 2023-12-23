@@ -166,15 +166,16 @@ void GetDirectLightInputPBR(out float3 diffuse, out float3 transmission, out flo
 	diffuse *= 1 - RGBToLuminanceAlternative(E);
 	specular *= W;
 	
-	[branch] if ((uint(PBRParams.w) & 4) != 0) // Two-sided foliage
+	transmission = 0;
+	[branch] if ((PBRFlags & 4) != 0) // Two-sided foliage
 	{
 		float wrap = 0.5;
 		float wrapNdotL = saturate((-NdotL + wrap) / ((1 + wrap) * (1 + wrap)));
 		float scatter = GetDistributionFunctionGGX(0.6, saturate(-VdotL));
 
-		transmission = PI * wrapNdotL * scatter * lightColor * subsurfaceColor;
+		transmission += PI * wrapNdotL * scatter * lightColor * subsurfaceColor;
 	}
-	else if ((uint(PBRParams.w) & 8) != 0) // Subsurface
+	else if ((PBRFlags & 8) != 0) // Subsurface
 	{
 		float scatter = pow(saturate(-VdotL), 12) * lerp(3, .1f, subsurfaceOpacity);
 		float wrappedDiffuse = pow(saturate(NdotL * (1.f / 1.5f) + (0.5f / 1.5f)), 1.5f) * (2.5f / 1.5f);
@@ -184,7 +185,7 @@ void GetDirectLightInputPBR(out float3 diffuse, out float3 transmission, out flo
 		float3 rawTransmittedColor = ExtinctionToTransmittance(extinctionCoefficients, 1.0f);
 		float3 transmittedColor = HSV2Lin(float3(Lin2HSV(rawTransmittedColor).xy, Lin2HSV(subsurfaceColor).z));
 
-		transmission = PI * lerp(backScatter, 1, scatter) * lerp(transmittedColor, subsurfaceColor, shadow) * lightColor;
+		transmission += PI * lerp(backScatter, 1, scatter) * lerp(transmittedColor, subsurfaceColor, shadow) * lightColor;
 	}
 }
 
@@ -237,7 +238,7 @@ void GetAmbientLightInputPBR(out float3 diffuse, out float3 specular, float3 N, 
 	specular = PI * specularIrradiance * (specularColor * specularBRDF.x + saturate(50.0 * specularColor.g) * specularBRDF.y);
 
 	// Subsurface
-	[branch] if((uint(PBRParams.w) & 8) != 0) // Subsurface
+	[branch] if((PBRFlags & 8) != 0) // Subsurface
 	{
 		float dependentSplit = 0.5f;
 		diffuse += PI * diffuseIrradiance * subsurfaceColor * dependentSplit;

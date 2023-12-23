@@ -33,13 +33,6 @@ void BSLightingShaderMaterialPBR::CopyMembers(RE::BSShaderMaterial* that)
 	if (subsurfaceTexture != pbrThat->subsurfaceTexture) {
 		subsurfaceTexture = pbrThat->subsurfaceTexture;
 	}
-
-	roughnessScale = pbrThat->roughnessScale;
-	metallicScale = pbrThat->metallicScale;
-	specularLevel = pbrThat->specularLevel;
-	displacementScale = pbrThat->displacementScale;
-
-	subsurfaceColor = pbrThat->subsurfaceColor;
 }
 
 std::uint32_t BSLightingShaderMaterialPBR::ComputeCRC32(uint32_t srcHash)
@@ -51,11 +44,6 @@ std::uint32_t BSLightingShaderMaterialPBR::ComputeCRC32(uint32_t srcHash)
 		uint32_t emissiveHash = 0;
 		uint32_t displacementHash = 0;
 		uint32_t subsurfaceHash = 0;
-		float roughnessScale = 0.f;
-		float metallicScale = 0.f;
-		float specularLevel = 0.f;
-		float displacementScale = 0.f;
-		RE::NiColorA subsurfaceColor;
 		uint32_t baseHash = 0;
 	} hashes;
 
@@ -67,11 +55,6 @@ std::uint32_t BSLightingShaderMaterialPBR::ComputeCRC32(uint32_t srcHash)
 		hashes.displacementHash = RE::BSCRC32<const char*>()(textureSet->GetTexturePath(DisplacementTexture));
 		hashes.subsurfaceHash = RE::BSCRC32<const char*>()(textureSet->GetTexturePath(SubsurfaceTexture));
 	}
-	hashes.roughnessScale = roughnessScale;
-	hashes.metallicScale = metallicScale;
-	hashes.specularLevel = specularLevel;
-	hashes.displacementScale = displacementScale;
-	hashes.subsurfaceColor = subsurfaceColor;
 
 	hashes.baseHash = BSLightingShaderMaterialBase::ComputeCRC32(srcHash);
 
@@ -171,40 +154,27 @@ uint32_t BSLightingShaderMaterialPBR::GetTextures(RE::NiSourceTexture** textures
 	return textureIndex;
 }
 
-void BSLightingShaderMaterialPBR::SaveBinary(RE::NiStream& stream)
+float BSLightingShaderMaterialPBR::GetRoughnessScale() const
 {
-	stream.iStr->write(&Version, 1);
-
-	BSLightingShaderMaterialBase::SaveBinary(stream);
-
-	stream.iStr->write(&roughnessScale, 1);
-	stream.iStr->write(&metallicScale, 1);
-	stream.iStr->write(&specularLevel, 1);
-	stream.iStr->write(&displacementScale, 1);
+	return specularColorScale;
 }
 
-void BSLightingShaderMaterialPBR::LoadBinary(RE::NiStream& stream)
+float BSLightingShaderMaterialPBR::GetSpecularLevel() const
 {
-	uint32_t pbrVersion = BSLightingShaderMaterialPBR::Version;
-	stream.iStr->read(&pbrVersion, 1);
-
-	BSLightingShaderMaterialBase::LoadBinary(stream);
-
-	if (pbrVersion > 0)
-	{
-		stream.iStr->read(&pbrFlags, 1);
-	}
-
-	stream.iStr->read(&roughnessScale, 1);
-	stream.iStr->read(&metallicScale, 1);
-	stream.iStr->read(&specularLevel, 1);
-
-	if (pbrVersion > 0) {
-		stream.iStr->read(&subsurfaceColor, 1);
-	}
-
-	if (pbrVersion > 1) {
-		stream.iStr->read(&displacementScale, 1);
-	}
+	return specularPower;
 }
 
+float BSLightingShaderMaterialPBR::GetDisplacementScale() const
+{
+	return rimLightPower;
+}
+
+const RE::NiColor& BSLightingShaderMaterialPBR::GetSubsurfaceColor() const
+{
+	return specularColor;
+}
+
+float BSLightingShaderMaterialPBR::GetSubsurfaceOpacity() const
+{
+	return subSurfaceLightRolloff;
+}

@@ -658,9 +658,9 @@ cbuffer PerMaterial : register(b1)
 	float4 CharacterLightParams : packoffset(c14);
 	// VR is [9] instead of [15]
 	
-	float4 PBRParams : packoffset(c15);
-	float4 SubsurfaceColor : packoffset(c16);
-	float4 PBRParams1 : packoffset(c17);
+	uint PBRFlags : packoffset(c15.x);
+	float3 PBRParams1 : packoffset(c15.y);
+	float4 PBRParams2 : packoffset(c16);
 };
 
 cbuffer PerGeometry : register(b2)
@@ -1100,9 +1100,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #		if defined(TRUE_PBR)
 	bool PBRParallax = false;
-	[branch] if ((uint(PBRParams.w) & 16) != 0) {
+	[branch] if ((PBRFlags & 16) != 0) {
 		PBRParallax = true;
-		displacementScale = PBRParams1.x;
+		displacementScale = PBRParams1.y;
 		mipLevel = GetMipLevel(uv, TexParallaxSampler);
 		uv = GetParallaxCoords(viewPosition.z, uv, mipLevel, viewDirection, tbnTr, TexParallaxSampler, SampParallaxSampler, 0, displacementScale);
 		if (perPassParallax[0].EnableShadows && parallaxShadowQuality > 0.0f)
@@ -1491,18 +1491,18 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float3 f0 = 0.04;
 	
 	float4 rawRMAOS = TexRMAOSSampler.Sample(SampRMAOSSampler, diffuseUv);
-	roughness = PBRParams.x * rawRMAOS.x;
-	metallic = PBRParams.y * rawRMAOS.y;
-	f0 = PBRParams.z * rawRMAOS.w;
+	roughness = PBRParams1.x * rawRMAOS.x;
+	metallic = rawRMAOS.y;
+	f0 = PBRParams1.z * rawRMAOS.w;
 	
 	f0 = lerp(f0, baseColor.xyz, metallic);
 	baseColor.xyz *= 1 - metallic;
 	
 	ao = AOMultiBounce(RGBToLuminanceAlternative(f0), rawRMAOS.z).y;
 	
-	float3 subsurfaceColor = SubsurfaceColor.xyz;
-	float subsurfaceOpacity = SubsurfaceColor.w;
-	[branch] if ((uint(PBRParams.w) & 2) != 0)
+	float3 subsurfaceColor = PBRParams2.xyz;
+	float subsurfaceOpacity = PBRParams2.w;
+	[branch] if ((PBRFlags & 2) != 0)
 	{
 		float4 sampledSubsurfaceProperties = TexRimSoftLightWorldMapOverlaySampler.Sample(SampRimSoftLightWorldMapOverlaySampler, uv);
 		subsurfaceColor *= sampledSubsurfaceProperties.xyz;
@@ -2019,7 +2019,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 	float3 emitColor = EmitColor;
 #	if !defined(LANDSCAPE)
-	[branch] if ((0x3F & (shaderDescriptors[0].PixelShaderDescriptor >> 24)) == _Glowmap || (uint(PBRParams.w) & 0x1 != 0)) {
+	[branch] if ((0x3F & (shaderDescriptors[0].PixelShaderDescriptor >> 24)) == _Glowmap || (PBRFlags & 0x1 != 0)) {
 		float3 glowColor = TexGlowSampler.Sample(SampGlowSampler, uv).xyz;
 		emitColor *= glowColor;
 	}
@@ -2056,7 +2056,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	specularColorPBR += specularIrradiance * ao;
 	
 	color.xyz += emitColor.xyz;
-	//color.xyz += transmissionColor;
+	color.xyz += transmissionColor;
 #	endif
 
 #	if defined(HAIR)
@@ -2166,7 +2166,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	endif
 
 #	if defined(TRUE_PBR)
-	//color.xyz = 0.5 * worldSpaceViewDirection.xyz + 0.5;
+	//color.xyz = 0.5 * input.ViewVector.xyz + 0.5;
 #	endif
 
 #	if defined(LANDSCAPE) && !defined(LOD_LAND_BLEND)

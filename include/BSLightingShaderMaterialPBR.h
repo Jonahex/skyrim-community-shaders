@@ -25,8 +25,6 @@ public:
 	inline static constexpr auto DisplacementTexture = static_cast<RE::BSTextureSet::Texture>(3);
 	inline static constexpr auto SubsurfaceTexture = static_cast<RE::BSTextureSet::Texture>(7);
 
-	inline static constexpr uint32_t Version = 2;
-
 	~BSLightingShaderMaterialPBR();
 
 	// override (BSLightingShaderMaterialBase)
@@ -38,10 +36,16 @@ public:
 	void ClearTextures() override;                                                                                                // 09
 	void ReceiveValuesFromRootMaterial(bool skinned, bool rimLighting, bool softLighting, bool backLighting, bool MSN) override;  // 0A
 	uint32_t GetTextures(RE::NiSourceTexture** textures) override;                                                                // 0B
-	void SaveBinary(RE::NiStream& stream) override;                                                                               // 0C
-	void LoadBinary(RE::NiStream& stream) override;                                                                               // 0D
-
+	
 	static BSLightingShaderMaterialPBR* Make();
+
+	float GetRoughnessScale() const;
+	float GetSpecularLevel() const;
+
+	float GetDisplacementScale() const;
+
+	const RE::NiColor& GetSubsurfaceColor() const;
+	float GetSubsurfaceOpacity() const;
 
 	// members
 	stl::enumeration<PBRFlags> pbrFlags;
@@ -50,11 +54,4 @@ public:
 	RE::NiPointer<RE::NiSourceTexture> emissiveTexture;
 	RE::NiPointer<RE::NiSourceTexture> displacementTexture;
 	RE::NiPointer<RE::NiSourceTexture> subsurfaceTexture;
-
-	float roughnessScale = 1.f;
-	float metallicScale = 1.f;
-	float specularLevel = 0.04f;
-	float displacementScale = 1.f;
-
-	RE::NiColorA subsurfaceColor;
 };
