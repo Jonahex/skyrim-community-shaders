@@ -565,6 +565,8 @@ namespace SIE
 				{ "AmbientColor", 18 },
 
 				{ "PBRParams", 36 },
+				{ "SubsurfaceColor", 37 },
+				{ "PBRParams1", 38 },
 			};
 
 			auto& bloodSplatterVS = result[static_cast<size_t>(RE::BSShader::Type::BloodSplatter)]

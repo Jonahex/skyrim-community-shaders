@@ -1,5 +1,20 @@
 #pragma once
 
+enum class PBRFlags : uint32_t
+{
+	TwoSidedFoliage = 1 << 0,
+	Subsurface = 1 << 1,
+};
+
+enum class PBRShaderFlags : uint32_t
+{
+	HasEmissive = 1 << 0,
+	HasSubsurface = 1 << 1,
+	TwoSidedFoliage = 1 << 2,
+	Subsurface = 1 << 3,
+	HasDisplacement = 1 << 4,
+};
+
 class BSLightingShaderMaterialPBR : public RE::BSLightingShaderMaterialBase
 {
 public:
@@ -7,8 +22,10 @@ public:
 
 	inline static constexpr auto RmaosTexture = static_cast<RE::BSTextureSet::Texture>(5);
 	inline static constexpr auto EmissiveTexture = static_cast<RE::BSTextureSet::Texture>(2);
+	inline static constexpr auto DisplacementTexture = static_cast<RE::BSTextureSet::Texture>(3);
+	inline static constexpr auto SubsurfaceTexture = static_cast<RE::BSTextureSet::Texture>(7);
 
-	inline static constexpr uint32_t Version = 0;
+	inline static constexpr uint32_t Version = 2;
 
 	~BSLightingShaderMaterialPBR();
 
@@ -27,10 +44,17 @@ public:
 	static BSLightingShaderMaterialPBR* Make();
 
 	// members
+	stl::enumeration<PBRFlags> pbrFlags;
+
 	RE::NiPointer<RE::NiSourceTexture> rmaosTexture;
 	RE::NiPointer<RE::NiSourceTexture> emissiveTexture;
+	RE::NiPointer<RE::NiSourceTexture> displacementTexture;
+	RE::NiPointer<RE::NiSourceTexture> subsurfaceTexture;
 
 	float roughnessScale = 1.f;
 	float metallicScale = 1.f;
-	float specularLevel = 0.04;
+	float specularLevel = 0.04f;
+	float displacementScale = 1.f;
+
+	RE::NiColorA subsurfaceColor;
 };

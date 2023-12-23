@@ -5,6 +5,10 @@
 
 #define PI 3.1415927
 
+#if defined (TRUE_PBR)
+#undef ENVMAP
+#endif
+
 struct LightingData
 {
 	float WaterHeight[25];
@@ -382,7 +386,7 @@ VS_OUTPUT main(VS_INPUT input)
 #	elif defined(PROJECTED_UV) && !defined(SKINNED)
 	vsout.TexProj = TextureProj[eyeIndex][2].xyz;
 #	endif
-
+	
 #	if defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX) || defined(SKINNED)
 	vsout.ViewVector = EyePosition[eyeIndex].xyz - worldPosition.xyz;
 #	else
@@ -508,7 +512,7 @@ SamplerState SampSpecularSampler : register(s2);
 #		if defined(FACEGEN)
 SamplerState SampTintSampler : register(s3);
 SamplerState SampDetailSampler : register(s4);
-#		elif defined(PARALLAX) && !defined(TRUE_PBR)
+#		elif defined(PARALLAX) || defined(TRUE_PBR)
 SamplerState SampParallaxSampler : register(s3);
 #		elif defined(PROJECTED_UV) && !defined(SPARKLE)
 SamplerState SampProjDiffuseSampler : register(s3);
@@ -520,7 +524,7 @@ SamplerState SampEnvMaskSampler : register(s5);
 #		endif
 
 #		if defined(TRUE_PBR)
-SamplerState SampRMAOSSampler : register(s3);
+SamplerState SampRMAOSSampler : register(s5);
 #		endif
 
 SamplerState SampGlowSampler : register(s6);
@@ -581,7 +585,7 @@ Texture2D<float4> TexSpecularSampler : register(t2);
 #		if defined(FACEGEN)
 Texture2D<float4> TexTintSampler : register(t3);
 Texture2D<float4> TexDetailSampler : register(t4);
-#		elif defined(PARALLAX) && !defined(TRUE_PBR)
+#		elif defined(PARALLAX) || defined(TRUE_PBR)
 Texture2D<float4> TexParallaxSampler : register(t3);
 #		elif defined(PROJECTED_UV) && !defined(SPARKLE)
 Texture2D<float4> TexProjDiffuseSampler : register(t3);
@@ -593,7 +597,7 @@ Texture2D<float4> TexEnvMaskSampler : register(t5);
 #		endif
 
 #		if defined(TRUE_PBR)
-Texture2D<float4> TexRMAOSSampler : register(t3);
+Texture2D<float4> TexRMAOSSampler : register(t5);
 #		endif
 
 Texture2D<float4> TexGlowSampler : register(t6);
@@ -655,6 +659,8 @@ cbuffer PerMaterial : register(b1)
 	// VR is [9] instead of [15]
 	
 	float4 PBRParams : packoffset(c15);
+	float4 SubsurfaceColor : packoffset(c16);
+	float4 PBRParams1 : packoffset(c17);
 };
 
 cbuffer PerGeometry : register(b2)
@@ -960,7 +966,7 @@ float2 ComputeTriplanarUV(float3 InputPosition)
 #		undef LIGHT_LIMIT_FIX
 #	endif
 
-#	if defined(COMPLEX_PARALLAX_MATERIALS) && !defined(LOD) && (defined(PARALLAX) || defined(LANDSCAPE) || defined(ENVMAP))
+#	if defined(COMPLEX_PARALLAX_MATERIALS) && !defined(LOD) && (defined(PARALLAX) || defined(LANDSCAPE) || defined(ENVMAP) || defined(TRUE_PBR))
 #		define CPM_AVAILABLE
 #	endif
 
@@ -1038,6 +1044,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 	float3 viewDirection = normalize(input.ViewVector.xyz);
 	float3 worldSpaceViewDirection = -normalize(input.WorldPosition.xyz);
+	
+//	float3 worldSpaceViewDirection = viewDirection;
+//#	if !defined(DRAW_IN_WORLDSPACE)
+//	if (!input.WorldSpace) {
+//	float3 worldSpaceViewDirection = normalize(mul(input.World[eyeIndex], float4(input.ViewVector.xyz, 0)));
+//	}
+//#	endif
 
 	float2 uv = input.TexCoord0.xy;
 	float2 uvOriginal = uv;
@@ -1050,11 +1063,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float sh0;
 #	endif  // LANDSCAPE
 
+	float displacementScale = 1.f;
+	
 #	if defined(CPM_AVAILABLE)
 #		if defined(PARALLAX)
 	if (perPassParallax[0].EnableParallax) {
 		mipLevel = GetMipLevel(uv, TexParallaxSampler);
-		uv = GetParallaxCoords(viewPosition.z, uv, mipLevel, viewDirection, tbnTr, TexParallaxSampler, SampParallaxSampler, 0);
+		uv = GetParallaxCoords(viewPosition.z, uv, mipLevel, viewDirection, tbnTr, TexParallaxSampler, SampParallaxSampler, 0, displacementScale);
 		if (perPassParallax[0].EnableShadows && parallaxShadowQuality > 0.0f)
 			sh0 = TexParallaxSampler.SampleLevel(SampParallaxSampler, uv, mipLevel).x;
 	}
@@ -1073,7 +1088,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 			if (envMaskTest > (4.0f / 255.0f)) {
 				complexMaterialParallax = true;
 				mipLevel = GetMipLevel(uv, TexEnvMaskSampler);
-				uv = GetParallaxCoords(viewPosition.z, uv, mipLevel, viewDirection, tbnTr, TexEnvMaskSampler, SampTerrainParallaxSampler, 3);
+				uv = GetParallaxCoords(viewPosition.z, uv, mipLevel, viewDirection, tbnTr, TexEnvMaskSampler, SampTerrainParallaxSampler, 3, displacementScale);
 				if (perPassParallax[0].EnableShadows && parallaxShadowQuality > 0.0f)
 					sh0 = TexEnvMaskSampler.SampleLevel(SampEnvMaskSampler, uv, mipLevel).w;
 			}
@@ -1082,6 +1097,19 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		}
 	}
 #		endif  // ENVMAP
+
+#		if defined(TRUE_PBR)
+	bool PBRParallax = false;
+	[branch] if ((uint(PBRParams.w) & 16) != 0) {
+		PBRParallax = true;
+		displacementScale = PBRParams1.x;
+		mipLevel = GetMipLevel(uv, TexParallaxSampler);
+		uv = GetParallaxCoords(viewPosition.z, uv, mipLevel, viewDirection, tbnTr, TexParallaxSampler, SampParallaxSampler, 0, displacementScale);
+		if (perPassParallax[0].EnableShadows && parallaxShadowQuality > 0.0f)
+			sh0 = displacementScale * (TexParallaxSampler.SampleLevel(SampParallaxSampler, uv, mipLevel).x - 0.5) + 0.5;
+	}
+#		endif  // TRUE_PBR
+
 #	endif      // CPM_AVAILABLE
 
 #	if defined(SNOW)
@@ -1111,7 +1139,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float2 terrainUVs[6];
 	if (perPassParallax[0].EnableTerrainParallax && input.LandBlendWeights1.x > 0.0) {
 		mipLevel[0] = GetMipLevel(uv, TexColorSampler);
-		uv = GetParallaxCoords(viewPosition.z, uv, mipLevel[0], viewDirection, tbnTr, TexColorSampler, SampTerrainParallaxSampler, 3, input.LandBlendWeights1.x);
+		uv = GetParallaxCoords(viewPosition.z, uv, mipLevel[0], viewDirection, tbnTr, TexColorSampler, SampTerrainParallaxSampler, 3, input.LandBlendWeights1.x, displacementScale);
 		terrainUVs[0] = uv;
 		if (perPassParallax[0].EnableShadows && parallaxShadowQuality > 0.0f)
 			sh0[0] = TexColorSampler.SampleLevel(SampTerrainParallaxSampler, uv, mipLevel[0]).w;
@@ -1213,7 +1241,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		if defined(CPM_AVAILABLE)
 		if (perPassParallax[0].EnableTerrainParallax) {
 			mipLevel[1] = GetMipLevel(uvOriginal, TexLandColor2Sampler);
-			uv = GetParallaxCoords(viewPosition.z, uvOriginal, mipLevel[1], viewDirection, tbnTr, TexLandColor2Sampler, SampTerrainParallaxSampler, 3, input.LandBlendWeights1.y);
+			uv = GetParallaxCoords(viewPosition.z, uvOriginal, mipLevel[1], viewDirection, tbnTr, TexLandColor2Sampler, SampTerrainParallaxSampler, 3, input.LandBlendWeights1.y, displacementScale);
 			terrainUVs[1] = uv;
 			if (perPassParallax[0].EnableShadows && parallaxShadowQuality > 0.0f)
 				sh0[1] = TexLandColor2Sampler.SampleLevel(SampTerrainParallaxSampler, uv, mipLevel[1]).w;
@@ -1235,7 +1263,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		if defined(CPM_AVAILABLE)
 		if (perPassParallax[0].EnableTerrainParallax) {
 			mipLevel[2] = GetMipLevel(uvOriginal, TexLandColor3Sampler);
-			uv = GetParallaxCoords(viewPosition.z, uvOriginal, mipLevel[2], viewDirection, tbnTr, TexLandColor3Sampler, SampTerrainParallaxSampler, 3, input.LandBlendWeights1.z);
+			uv = GetParallaxCoords(viewPosition.z, uvOriginal, mipLevel[2], viewDirection, tbnTr, TexLandColor3Sampler, SampTerrainParallaxSampler, 3, input.LandBlendWeights1.z, displacementScale);
 			terrainUVs[2] = uv;
 			if (perPassParallax[0].EnableShadows && parallaxShadowQuality > 0.0f)
 				sh0[2] = TexLandColor3Sampler.SampleLevel(SampTerrainParallaxSampler, uv, mipLevel[2]).w;
@@ -1257,7 +1285,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		if defined(CPM_AVAILABLE)
 		if (perPassParallax[0].EnableTerrainParallax) {
 			mipLevel[3] = GetMipLevel(uvOriginal, TexLandColor4Sampler);
-			uv = GetParallaxCoords(viewPosition.z, uvOriginal, mipLevel[3], viewDirection, tbnTr, TexLandColor4Sampler, SampTerrainParallaxSampler, 3, input.LandBlendWeights1.w);
+			uv = GetParallaxCoords(viewPosition.z, uvOriginal, mipLevel[3], viewDirection, tbnTr, TexLandColor4Sampler, SampTerrainParallaxSampler, 3, input.LandBlendWeights1.w, displacementScale);
 			terrainUVs[3] = uv;
 			if (perPassParallax[0].EnableShadows && parallaxShadowQuality > 0.0f)
 				sh0[3] = TexLandColor4Sampler.SampleLevel(SampTerrainParallaxSampler, uv, mipLevel[3]).w;
@@ -1279,7 +1307,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		if defined(CPM_AVAILABLE)
 		if (perPassParallax[0].EnableTerrainParallax) {
 			mipLevel[4] = GetMipLevel(uvOriginal, TexLandColor5Sampler);
-			uv = GetParallaxCoords(viewPosition.z, uvOriginal, mipLevel[4], viewDirection, tbnTr, TexLandColor5Sampler, SampTerrainParallaxSampler, 3, input.LandBlendWeights2.x);
+			uv = GetParallaxCoords(viewPosition.z, uvOriginal, mipLevel[4], viewDirection, tbnTr, TexLandColor5Sampler, SampTerrainParallaxSampler, 3, input.LandBlendWeights2.x, displacementScale);
 			terrainUVs[4] = uv;
 			if (perPassParallax[0].EnableShadows && parallaxShadowQuality > 0.0f)
 				sh0[4] = TexLandColor5Sampler.SampleLevel(SampTerrainParallaxSampler, uv, mipLevel[4]).w;
@@ -1301,7 +1329,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		if defined(CPM_AVAILABLE)
 		if (perPassParallax[0].EnableTerrainParallax) {
 			mipLevel[5] = GetMipLevel(uvOriginal, TexLandColor6Sampler);
-			uv = GetParallaxCoords(viewPosition.z, uvOriginal, mipLevel[5], viewDirection, tbnTr, TexLandColor6Sampler, SampTerrainParallaxSampler, 3, input.LandBlendWeights2.y);
+			uv = GetParallaxCoords(viewPosition.z, uvOriginal, mipLevel[5], viewDirection, tbnTr, TexLandColor6Sampler, SampTerrainParallaxSampler, 3, input.LandBlendWeights2.y, displacementScale);
 			terrainUVs[5] = uv;
 			if (perPassParallax[0].EnableShadows && parallaxShadowQuality > 0.0f)
 				sh0[5] = TexLandColor6Sampler.SampleLevel(SampTerrainParallaxSampler, uv, mipLevel[5]).w;
@@ -1348,6 +1376,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 	float numLights = min(7, NumLightNumShadowLight.x);
 	float numShadowLights = min(4, NumLightNumShadowLight.y);
+	
+#	if defined(TRUE_PBR) && !defined(MODELSPACENORMALS)
+	if (!frontFace) {
+		normal.xyz *= -1;
+	}
+#	endif
 
 #	if defined(MODELSPACENORMALS) && !defined(SKINNED)
 	float4 modelNormal = normal;
@@ -1459,30 +1493,59 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float4 rawRMAOS = TexRMAOSSampler.Sample(SampRMAOSSampler, diffuseUv);
 	roughness = PBRParams.x * rawRMAOS.x;
 	metallic = PBRParams.y * rawRMAOS.y;
-	ao = rawRMAOS.z;
 	f0 = PBRParams.z * rawRMAOS.w;
 	
 	f0 = lerp(f0, baseColor.xyz, metallic);
 	baseColor.xyz *= 1 - metallic;
 	
+	ao = AOMultiBounce(RGBToLuminanceAlternative(f0), rawRMAOS.z).y;
+	
+	float3 subsurfaceColor = SubsurfaceColor.xyz;
+	float subsurfaceOpacity = SubsurfaceColor.w;
+	[branch] if ((uint(PBRParams.w) & 2) != 0)
+	{
+		float4 sampledSubsurfaceProperties = TexRimSoftLightWorldMapOverlaySampler.Sample(SampRimSoftLightWorldMapOverlaySampler, uv);
+		subsurfaceColor *= sampledSubsurfaceProperties.xyz;
+		subsurfaceOpacity *= sampledSubsurfaceProperties.w;
+	}
+	
 	float3 specularColorPBR = 0;
+	float3 transmissionColor = 0;
 #	endif // TRUE_PBR
 
-	float3 dirLightColor = DirLightColor.xyz;
-#	if defined(TRUE_PBR)
-	//dirLightColor = sRGB2Lin(dirLightColor);
+	float3 screenSpaceNormal;
+	screenSpaceNormal.x = dot(input.ScreenNormalTransform0.xyz, normal.xyz);
+	screenSpaceNormal.y = dot(input.ScreenNormalTransform1.xyz, normal.xyz);
+	screenSpaceNormal.z = dot(input.ScreenNormalTransform2.xyz, normal.xyz);
+	screenSpaceNormal = normalize(screenSpaceNormal);
+
+	float3 worldSpaceNormal = normalize(mul(CameraViewInverse[eyeIndex], float4(screenSpaceNormal, 0)));
+	float3 normalizedDirLightDirectionWS = DirLightDirection;
+
+#	if (defined(SKINNED) || !defined(MODELSPACENORMALS))
+	float3 vertexNormal = tbnTr[2];
+	float3 worldSpaceVertexNormal = tbnWS[2];
+
+#		if (!defined(DRAW_IN_WORLDSPACE))
+	if (!input.WorldSpace)
+		normalizedDirLightDirectionWS = normalize(mul(input.World[eyeIndex], float4(normalizedDirLightDirectionWS, 0)));
+#		endif
 #	endif
+
+	float3 dirLightColor = DirLightColor.xyz;
 	float selfShadowFactor = 1.0f;
 
 	float3 nsDirLightColor = dirLightColor;
+	
+	float dirShadow = 1.f;
 
 	if ((shaderDescriptors[0].PixelShaderDescriptor & _DefShadow) && (shaderDescriptors[0].PixelShaderDescriptor & _ShadowDir))
-		dirLightColor *= shadowColor.xxx;
+		dirShadow *= shadowColor.xxx;
 
 #	if defined(SCREEN_SPACE_SHADOWS)
 	float dirLightSShadow = PrepassScreenSpaceShadows(input.WorldPosition.xyz);
 	dirLightSShadow = lerp(dirLightSShadow, 1.0, !frontFace * 0.2);
-	dirLightColor *= dirLightSShadow;
+	dirShadow *= dirLightSShadow;
 #	endif  // SCREEN_SPACE_SHADOWS
 
 #	if defined(CPM_AVAILABLE) && (defined(SKINNED) || !defined(MODELSPACENORMALS))
@@ -1501,16 +1564,21 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #		if defined(LANDSCAPE)
 	if (perPassParallax[0].EnableTerrainParallax && perPassParallax[0].EnableShadows)
-		dirLightColor *= GetParallaxSoftShadowMultiplierTerrain(input, terrainUVs, mipLevel, dirLightDirectionTS, sh0, dirLightIsLit * parallaxShadowQuality);
+		dirShadow *= GetParallaxSoftShadowMultiplierTerrain(input, terrainUVs, mipLevel, dirLightDirectionTS, sh0, dirLightIsLit * parallaxShadowQuality);
 #		elif defined(PARALLAX)
 	if (perPassParallax[0].EnableParallax && perPassParallax[0].EnableShadows)
-		dirLightColor *= GetParallaxSoftShadowMultiplier(uv, mipLevel, dirLightDirectionTS, sh0, TexParallaxSampler, SampParallaxSampler, 0, dirLightIsLit * parallaxShadowQuality);
+		dirShadow *= GetParallaxSoftShadowMultiplier(uv, mipLevel, dirLightDirectionTS, sh0, TexParallaxSampler, SampParallaxSampler, 0, dirLightIsLit * parallaxShadowQuality, displacementScale);
 #		elif defined(ENVMAP)
 	if (complexMaterialParallax && perPassParallax[0].EnableShadows)
-		dirLightColor *= GetParallaxSoftShadowMultiplier(uv, mipLevel, dirLightDirectionTS, sh0, TexEnvMaskSampler, SampEnvMaskSampler, 3, dirLightIsLit * parallaxShadowQuality);
+		dirShadow *= GetParallaxSoftShadowMultiplier(uv, mipLevel, dirLightDirectionTS, sh0, TexEnvMaskSampler, SampEnvMaskSampler, 3, dirLightIsLit * parallaxShadowQuality, displacementScale);
+#		elif defined(TRUE_PBR)
+	if (PBRParallax && perPassParallax[0].EnableShadows)
+		dirShadow *= GetParallaxSoftShadowMultiplier(uv, mipLevel, dirLightDirectionTS, sh0, TexParallaxSampler, SampParallaxSampler, 0, dirLightIsLit * parallaxShadowQuality, displacementScale);
 #		endif  // LANDSCAPE
 #	endif      // defined(CPM_AVAILABLE) && (defined (SKINNED) || !defined \
 				// (MODELSPACENORMALS))
+				
+	dirLightColor *= dirShadow;
 
 	float3 diffuseColor = 0.0.xxx;
 	float3 specularColor = 0.0.xxx;
@@ -1520,9 +1588,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #	if defined(TRUE_PBR)
 	{
-		float3 dirDiffuseColor, dirSpecularColor;
-		GetDirectLightInputPBR(dirDiffuseColor, dirSpecularColor, modelNormal.xyz, viewDirection, DirLightDirection, dirLightColor, roughness, f0);
+		float3 dirDiffuseColor, dirTransmissionColor, dirSpecularColor;
+		GetDirectLightInputPBR(dirDiffuseColor, dirTransmissionColor, dirSpecularColor, modelNormal.xyz, viewDirection, DirLightDirection, dirLightColor, roughness, f0, subsurfaceColor, subsurfaceOpacity, dirShadow, ao);
 		lightsDiffuseColor += dirDiffuseColor;
+		transmissionColor += dirTransmissionColor;
 		specularColorPBR += dirSpecularColor;
 	}
 #	else
@@ -1552,25 +1621,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	}
 
 	lightsDiffuseColor += dirDiffuseColor;
-#	endif
-
-	float3 screenSpaceNormal;
-	screenSpaceNormal.x = dot(input.ScreenNormalTransform0.xyz, normal.xyz);
-	screenSpaceNormal.y = dot(input.ScreenNormalTransform1.xyz, normal.xyz);
-	screenSpaceNormal.z = dot(input.ScreenNormalTransform2.xyz, normal.xyz);
-	screenSpaceNormal = normalize(screenSpaceNormal);
-
-	float3 worldSpaceNormal = normalize(mul(CameraViewInverse[eyeIndex], float4(screenSpaceNormal, 0)));
-	float3 normalizedDirLightDirectionWS = DirLightDirection;
-
-#	if (defined(SKINNED) || !defined(MODELSPACENORMALS))
-	float3 vertexNormal = tbnTr[2];
-	float3 worldSpaceVertexNormal = tbnWS[2];
-
-#		if (!defined(DRAW_IN_WORLDSPACE))
-	if (!input.WorldSpace)
-		normalizedDirLightDirectionWS = normalize(mul(input.World[eyeIndex], float4(normalizedDirLightDirectionWS, 0)));
-#		endif
 #	endif
 
 	float porosity = 1.0;
@@ -1685,9 +1735,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 				continue;
 			float intensityMultiplier = 1 - intensityFactor * intensityFactor;
 			float3 refLightColor = strictLightData[0].PointLightColor[lightIndex];
-#			if defined(TRUE_PBR)
-			//refLightColor = sRGB2Lin(refLightColor);
-#			endif
 			float3 lightColor = refLightColor * intensityMultiplier;
 #		else
 		[loop] for (uint lightIndex = 0; lightIndex < numLights; ++lightIndex)
@@ -1699,18 +1746,17 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 				continue;
 			float intensityMultiplier = 1 - intensityFactor * intensityFactor;
 			float3 refLightColor = PointLightColor[lightIndex].xyz;
-#			if defined(TRUE_PBR)
-			//refLightColor = sRGB2Lin(refLightColor);
-#			endif
 			float3 lightColor = refLightColor * intensityMultiplier;
 #		endif
 			float3 nsLightColor = lightColor;
+			
+			float lightShadow = 1.f;
 
 			float shadowComponent = 1.0;
 			if (shaderDescriptors[0].PixelShaderDescriptor & _DefShadow) {
 				if (lightIndex < numShadowLights) {
 					shadowComponent = shadowColor[ShadowLightMaskSelect[lightIndex]];
-					lightColor *= shadowComponent;
+					lightShadow *= shadowComponent;
 				}
 			}
 
@@ -1727,9 +1773,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 				float3 normalizedLightDirectionVS = WorldToView(normalizedLightDirectionWS, true, eyeIndex);
 #			if defined(SKINNED) || !defined(MODELSPACENORMALS)
 				float shadowIntensityFactor = saturate(dot(vertexNormal, normalizedLightDirection.xyz) * PI);
-				lightColor *= lerp(lerp(1.0, ContactShadows(viewPosition, screenUV, screenNoise, normalizedLightDirectionVS, 1.0, 0.0, eyeIndex), shadowIntensityFactor), 1.0, !frontFace * 0.2);
+				lightShadow *= lerp(lerp(1.0, ContactShadows(viewPosition, screenUV, screenNoise, normalizedLightDirectionVS, 1.0, 0.0, eyeIndex), shadowIntensityFactor), 1.0, !frontFace * 0.2);
 #			else
-				lightColor *= lerp(ContactShadows(viewPosition, screenUV, screenNoise, normalizedLightDirectionVS, 1.0, 0.0, eyeIndex), 1.0, !frontFace * 0.2);
+				lightShadow *= lerp(ContactShadows(viewPosition, screenUV, screenNoise, normalizedLightDirectionVS, 1.0, 0.0, eyeIndex), 1.0, !frontFace * 0.2);
 #			endif
 			}
 #		endif
@@ -1745,30 +1791,36 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #			if defined(PARALLAX)
 				if (perPassParallax[0].EnableParallax)
-					lightColor *= GetParallaxSoftShadowMultiplier(uv, mipLevel, lightDirectionTS, sh0, TexParallaxSampler, SampParallaxSampler, 0, lightIsLit * parallaxShadowQuality);
+					lightShadow *= GetParallaxSoftShadowMultiplier(uv, mipLevel, lightDirectionTS, sh0, TexParallaxSampler, SampParallaxSampler, 0, lightIsLit * parallaxShadowQuality, displacementScale);
 #			elif defined(LANDSCAPE)
 				if (perPassParallax[0].EnableTerrainParallax)
-					lightColor *= GetParallaxSoftShadowMultiplierTerrain(input, terrainUVs, mipLevel, lightDirectionTS, sh0, lightIsLit * parallaxShadowQuality);
+					lightShadow *= GetParallaxSoftShadowMultiplierTerrain(input, terrainUVs, mipLevel, lightDirectionTS, sh0, lightIsLit * parallaxShadowQuality);
 #			elif defined(ENVMAP)
 				if (complexMaterialParallax)
-					lightColor *= GetParallaxSoftShadowMultiplier(uv, mipLevel, lightDirectionTS, sh0, TexEnvMaskSampler, SampEnvMaskSampler, 3, lightIsLit * parallaxShadowQuality);
+					lightShadow *= GetParallaxSoftShadowMultiplier(uv, mipLevel, lightDirectionTS, sh0, TexEnvMaskSampler, SampEnvMaskSampler, 3, lightIsLit * parallaxShadowQuality, displacementScale);
+#			elif defined(TRUE_PBR)
+				if (PBRParallax)
+					lightShadow *= GetParallaxSoftShadowMultiplier(uv, mipLevel, lightDirectionTS, sh0, TexParallaxSampler, SampParallaxSampler, 0, lightIsLit * parallaxShadowQuality, displacementScale);
 #			endif
 			}
 #		endif
 
+		lightColor *= lightShadow;
+
 #		if defined(TRUE_PBR)
 		{
-			float3 pointDiffuseColor, pointSpecularColor;
-			GetDirectLightInputPBR(pointDiffuseColor, pointSpecularColor, modelNormal.xyz, viewDirection, normalizedLightDirection, lightColor, roughness, f0);
+			float3 pointDiffuseColor, pointTransmissionColor, pointSpecularColor;
+			GetDirectLightInputPBR(pointDiffuseColor, pointTransmissionColor, pointSpecularColor, modelNormal.xyz, viewDirection, normalizedLightDirection, lightColor, roughness, f0, subsurfaceColor, subsurfaceOpacity, lightShadow, ao);
 			lightsDiffuseColor += pointDiffuseColor;
+			transmissionColor += pointTransmissionColor;
 			specularColorPBR += pointSpecularColor;
 		}
 #		else
-			float lightAngle = dot(modelNormal.xyz, normalizedLightDirection.xyz);
+			float lightAngle = dot(modelNormal.xyz, normalizedLightDirection);
 			float3 lightDiffuseColor = lightColor * saturate(lightAngle.xxx);
 
 #			if defined(SOFT_LIGHTING)
-			lightDiffuseColor += nsLightColor * GetSoftLightMultiplier(dot(modelNormal.xyz, lightDirection.xyz)) * rimSoftLightColor.xyz;
+			lightDiffuseColor += nsLightColor * GetSoftLightMultiplier(dot(modelNormal.xyz, normalizedLightDirection)) * rimSoftLightColor.xyz;
 #			endif  // SOFT_LIGHTING
 
 #			if defined(RIM_LIGHTING)
@@ -1823,12 +1875,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 				float intensityMultiplier = 1 - intensityFactor * intensityFactor;
 				float3 refLightColor = light.color.xyz;
-#			if defined(TRUE_PBR)
-				//refLightColor = sRGB2Lin(refLightColor);
-#			endif
 				float3 lightColor = refLightColor * intensityMultiplier;
 				float3 nsLightColor = lightColor;
 				float3 normalizedLightDirection = normalize(lightDirection);
+				
+				float lightShadow = 1.f;
 
 				if (!FrameParams.z && FrameParams.y) {
 					float3 normalizedLightDirectionVS = WorldToView(normalizedLightDirection, true, eyeIndex);
@@ -1836,13 +1887,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 						float radius = light.firstPersonShadow ? light.radius : 0.0;
 						float contactShadow = ContactShadows(viewPosition, screenUV, screenNoise, normalizedLightDirectionVS, shadowQualityScale, radius, eyeIndex);
 						if (light.firstPersonShadow) {
-							lightColor *= contactShadow;
+							lightShadow *= contactShadow;
 						} else {
 #			if defined(SKINNED) || !defined(MODELSPACENORMALS)
 							float shadowIntensityFactor = saturate(dot(worldSpaceVertexNormal, normalizedLightDirection.xyz) * PI);
-							lightColor *= lerp(lerp(1.0, contactShadow, shadowIntensityFactor), 1.0, !frontFace * 0.2);
+							lightShadow *= lerp(lerp(1.0, contactShadow, shadowIntensityFactor), 1.0, !frontFace * 0.2);
 #			else
-							lightColor *= lerp(contactShadow, 1.0, !frontFace * 0.2);
+							lightShadow *= lerp(contactShadow, 1.0, !frontFace * 0.2);
 #			endif
 						}
 					}
@@ -1854,34 +1905,40 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #				if defined(PARALLAX)
 					if (perPassParallax[0].EnableParallax)
-						lightColor *= GetParallaxSoftShadowMultiplier(uv, mipLevel, lightDirectionTS, sh0, TexParallaxSampler, SampParallaxSampler, 0, parallaxShadowQuality);
+						lightShadow *= GetParallaxSoftShadowMultiplier(uv, mipLevel, lightDirectionTS, sh0, TexParallaxSampler, SampParallaxSampler, 0, parallaxShadowQuality, displacementScale);
 #				elif defined(LANDSCAPE)
 					if (perPassParallax[0].EnableTerrainParallax)
-						lightColor *= GetParallaxSoftShadowMultiplierTerrain(input, terrainUVs, mipLevel, lightDirectionTS, sh0, parallaxShadowQuality);
+						lightShadow *= GetParallaxSoftShadowMultiplierTerrain(input, terrainUVs, mipLevel, lightDirectionTS, sh0, parallaxShadowQuality);
 #				elif defined(ENVMAP)
 					if (complexMaterialParallax)
-						lightColor *= GetParallaxSoftShadowMultiplier(uv, mipLevel, lightDirectionTS, sh0, TexEnvMaskSampler, SampEnvMaskSampler, 3, parallaxShadowQuality);
+						lightShadow *= GetParallaxSoftShadowMultiplier(uv, mipLevel, lightDirectionTS, sh0, TexEnvMaskSampler, SampEnvMaskSampler, 3, parallaxShadowQuality, displacementScale);
+#				elif defined(TRUE_PBR)
+					if (PBRParallax)
+						lightShadow *= GetParallaxSoftShadowMultiplier(uv, mipLevel, lightDirectionTS, sh0, TexParallaxSampler, SampParallaxSampler, 0, parallaxShadowQuality, displacementScale);
 #				endif
 				}
 #			endif
 
+			lightColor *= lightShadow;
+
 #			if defined(TRUE_PBR)
 				{
-					float3 pointDiffuseColor, pointSpecularColor;
-					GetDirectLightInputPBR(pointDiffuseColor, pointSpecularColor, modelNormal.xyz, viewDirection, normalizedLightDirection, lightColor, roughness, f0);
+					float3 pointDiffuseColor, pointTransmissionColor, pointSpecularColor;
+					GetDirectLightInputPBR(pointDiffuseColor, pointTransmissionColor, pointSpecularColor, worldSpaceNormal.xyz, worldSpaceViewDirection, normalizedLightDirection, lightColor, roughness, f0, subsurfaceColor, subsurfaceOpacity, lightShadow, ao);
 					lightsDiffuseColor += pointDiffuseColor;
+					transmissionColor += pointTransmissionColor;
 					specularColorPBR += pointSpecularColor;
 				}
 #			else
-				float lightAngle = dot(worldSpaceNormal.xyz, normalizedLightDirection.xyz);
+				float lightAngle = dot(worldSpaceNormal.xyz, normalizedLightDirection);
 				float3 lightDiffuseColor = lightColor * saturate(lightAngle.xxx);
 
 #				if defined(SOFT_LIGHTING)
-				lightDiffuseColor += nsLightColor * GetSoftLightMultiplier(dot(worldSpaceNormal.xyz, lightDirection.xyz)) * rimSoftLightColor.xyz;
+				lightDiffuseColor += nsLightColor * GetSoftLightMultiplier(dot(worldSpaceNormal.xyz, normalizedLightDirection)) * rimSoftLightColor.xyz;
 #				endif
 
 #				if defined(RIM_LIGHTING)
-				lightDiffuseColor += nsLightColor * GetRimLightMultiplier(normalizedLightDirection, viewDirection, worldSpaceNormal.xyz) * rimSoftLightColor.xyz;
+				lightDiffuseColor += nsLightColor * GetRimLightMultiplier(normalizedLightDirection, worldSpaceViewDirection, worldSpaceNormal.xyz) * rimSoftLightColor.xyz;
 #				endif
 
 #				if defined(BACK_LIGHTING)
@@ -1889,7 +1946,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #				endif
 	
 #				if defined(SPECULAR) || (defined(SPARKLE) && !defined(SNOW))
-				lightsSpecularColor += GetLightSpecularInput(input, normalizedLightDirection, viewDirection, worldSpaceNormal.xyz, lightColor, shininess, uv);
+				lightsSpecularColor += GetLightSpecularInput(input, normalizedLightDirection, worldSpaceViewDirection, worldSpaceNormal.xyz, lightColor, shininess, uv);
 #				endif
 				lightsDiffuseColor += lightDiffuseColor;
 #				endif
@@ -1962,7 +2019,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 	float3 emitColor = EmitColor;
 #	if !defined(LANDSCAPE)
-	if ((0x3F & (shaderDescriptors[0].PixelShaderDescriptor >> 24)) == _Glowmap || (uint(PBRParams.w) & 0x1 != 0)) {
+	[branch] if ((0x3F & (shaderDescriptors[0].PixelShaderDescriptor >> 24)) == _Glowmap || (uint(PBRParams.w) & 0x1 != 0)) {
 		float3 glowColor = TexGlowSampler.Sample(SampGlowSampler, uv).xyz;
 		emitColor *= glowColor;
 	}
@@ -1970,13 +2027,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	
 #	if !defined(TRUE_PBR)
 	diffuseColor += emitColor.xyz;
+	
+	float3 directionalAmbientColor = mul(DirectionalAmbient, modelNormal);
+	diffuseColor += directionalAmbientColor;
 #	endif
 
-	float3 directionalAmbientColor = mul(DirectionalAmbient, modelNormal);
-#	if defined(TRUE_PBR)
-	//directionalAmbientColor = sRGB2Lin(directionalAmbientColor);
-#	endif
-	diffuseColor += directionalAmbientColor;
 
 #	if defined(WETNESS_EFFECTS)
 #		if !(defined(FACEGEN) || defined(FACEGEN_RGB_TINT) || defined(EYE)) || defined(TREE_ANIM)
@@ -1995,7 +2050,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	color.xyz += diffuseColor * baseColor.xyz;
 	
 #	if defined(TRUE_PBR)
+	float3 diffuseIrradiance, specularIrradiance;
+	GetAmbientLightInputPBR(diffuseIrradiance, specularIrradiance, worldSpaceNormal.xyz, worldSpaceViewDirection, baseColor.xyz, roughness, f0, subsurfaceColor, ao);
+	color.xyz += diffuseIrradiance * ao;
+	specularColorPBR += specularIrradiance * ao;
+	
 	color.xyz += emitColor.xyz;
+	//color.xyz += transmissionColor;
 #	endif
 
 #	if defined(HAIR)
@@ -2083,9 +2144,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	endif
 	
 #	if defined(TRUE_PBR)
-	specularColorPBR += GetPBRAmbientSpecular(worldSpaceNormal, worldSpaceViewDirection, roughness, f0);
 	color.xyz += specularColorPBR;
-	color.xyz *= ao;
+	//color.xyz *= ao;
 #	endif
 
 #	if defined(SPECULAR) || defined(SPARKLE)
@@ -2102,7 +2162,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	endif
 
 #	if defined(ENVMAP) && defined(TESTCUBEMAP)
-	color.xyz = specularTexture.SampleLevel(SampEnvSampler, envSamplingPoint, 0).xyz;
+	//color.xyz = specularTexture.SampleLevel(SampEnvSampler, envSamplingPoint, 0).xyz;
+#	endif
+
+#	if defined(TRUE_PBR)
+	//color.xyz = 0.5 * worldSpaceViewDirection.xyz + 0.5;
 #	endif
 
 #	if defined(LANDSCAPE) && !defined(LOD_LAND_BLEND)

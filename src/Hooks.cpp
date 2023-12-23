@@ -323,6 +323,22 @@ namespace Hooks
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
+	struct BSLightingShaderProperty_LoadBinary
+	{
+		static void thunk(RE::BSLightingShaderProperty* property, RE::NiStream& stream)
+		{
+			using enum RE::BSShaderProperty::EShaderPropertyFlag;
+
+			func(property, stream);
+
+			if (property->material->GetFeature() == BSLightingShaderMaterialPBR::FEATURE)
+			{
+				property->flags.reset(kGlowMap, kEnvMap, kSpecular);
+			}
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
 	struct BSLightingShaderProperty_GetRenderPasses
 	{
 		static RE::BSShaderProperty::RenderPassArray* thunk(RE::BSLightingShaderProperty* property, RE::BSGeometry* geometry, std::uint32_t renderFlags, RE::BSShaderAccumulator* accumulator)
@@ -342,17 +358,18 @@ namespace Hooks
 					constexpr uint32_t LightingTechniqueStart = 0x4800002D;
 					auto lightingTechnique = currentPass->passEnum - LightingTechniqueStart;
 					auto lightingFlags = lightingTechnique & ~(~0u << 24);
-					auto lightingType = (lightingTechnique >> 24) & 0x3F;
+					auto lightingType = static_cast<SIE::ShaderCache::LightingShaderTechniques>((lightingTechnique >> 24) & 0x3F);
 					lightingFlags &= ~0b111000u;
 					if (isPbr) {
 						lightingFlags |= static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::TruePbr);
 
-						if (static_cast<SIE::ShaderCache::LightingShaderTechniques>(lightingType) == SIE::ShaderCache::LightingShaderTechniques::Glowmap)
+						/*if (lightingType == SIE::ShaderCache::LightingShaderTechniques::Glowmap || 
+							lightingType == SIE::ShaderCache::LightingShaderTechniques::Envmap)
 						{
-							lightingType = 0;
-						}
+							lightingType = SIE::ShaderCache::LightingShaderTechniques::None;
+						}*/
 					}
-					lightingTechnique = (lightingType << 24) | lightingFlags;
+					lightingTechnique = (static_cast<uint32_t>(lightingType) << 24) | lightingFlags;
 					currentPass->passEnum = lightingTechnique + LightingTechniqueStart;
 				}
 				currentPass = currentPass->next;
@@ -380,9 +397,16 @@ namespace Hooks
 				shadowState->SetPSTextureAddressMode(1, static_cast<RE::BSGraphics::TextureAddressMode>(pbrMaterial->textureClampMode));
 				shadowState->SetPSTextureFilterMode(1, RE::BSGraphics::TextureFilterMode::kAnisotropic);
 
-				shadowState->SetPSTexture(3, pbrMaterial->rmaosTexture->rendererTexture);
-				shadowState->SetPSTextureAddressMode(3, static_cast<RE::BSGraphics::TextureAddressMode>(pbrMaterial->textureClampMode));
-				shadowState->SetPSTextureFilterMode(3, RE::BSGraphics::TextureFilterMode::kAnisotropic);
+				shadowState->SetPSTexture(5, pbrMaterial->rmaosTexture->rendererTexture);
+				shadowState->SetPSTextureAddressMode(5, static_cast<RE::BSGraphics::TextureAddressMode>(pbrMaterial->textureClampMode));
+				shadowState->SetPSTextureFilterMode(5, RE::BSGraphics::TextureFilterMode::kAnisotropic);
+
+				stl::enumeration<PBRShaderFlags> shaderFlags;
+				if (pbrMaterial->pbrFlags.any(PBRFlags::TwoSidedFoliage)) {
+					shaderFlags.set(PBRShaderFlags::TwoSidedFoliage);
+				} else if (pbrMaterial->pbrFlags.any(PBRFlags::Subsurface)) {
+					shaderFlags.set(PBRShaderFlags::Subsurface);
+				}
 
 				const bool hasEmissive = pbrMaterial->emissiveTexture != nullptr && pbrMaterial->emissiveTexture != RE::BSGraphics::State::GetSingleton()->defaultTextureBlack;
 				if (hasEmissive)
@@ -390,6 +414,26 @@ namespace Hooks
 					shadowState->SetPSTexture(6, pbrMaterial->emissiveTexture->rendererTexture);
 					shadowState->SetPSTextureAddressMode(6, static_cast<RE::BSGraphics::TextureAddressMode>(pbrMaterial->textureClampMode));
 					shadowState->SetPSTextureFilterMode(6, RE::BSGraphics::TextureFilterMode::kAnisotropic);
+
+					shaderFlags.set(PBRShaderFlags::HasEmissive);
+				}
+
+				const bool hasDisplacement = pbrMaterial->displacementTexture != nullptr && pbrMaterial->displacementTexture != RE::BSGraphics::State::GetSingleton()->defaultTextureBlack;
+				if (hasDisplacement) {
+					shadowState->SetPSTexture(3, pbrMaterial->displacementTexture->rendererTexture);
+					shadowState->SetPSTextureAddressMode(3, static_cast<RE::BSGraphics::TextureAddressMode>(pbrMaterial->textureClampMode));
+					shadowState->SetPSTextureFilterMode(3, RE::BSGraphics::TextureFilterMode::kAnisotropic);
+
+					shaderFlags.set(PBRShaderFlags::HasDisplacement);
+				}
+
+				const bool hasSubsurface = pbrMaterial->subsurfaceTexture != nullptr && pbrMaterial->subsurfaceTexture != RE::BSGraphics::State::GetSingleton()->defaultTextureWhite;
+				if (hasSubsurface) {
+					shadowState->SetPSTexture(12, pbrMaterial->subsurfaceTexture->rendererTexture);
+					shadowState->SetPSTextureAddressMode(12, static_cast<RE::BSGraphics::TextureAddressMode>(pbrMaterial->textureClampMode));
+					shadowState->SetPSTextureFilterMode(12, RE::BSGraphics::TextureFilterMode::kAnisotropic);
+
+					shaderFlags.set(PBRShaderFlags::HasSubsurface);
 				}
 
 				RE::BSGraphics::Renderer::PrepareVSConstantGroup(RE::BSGraphics::ConstantGroupLevel::PerMaterial);
@@ -411,8 +455,18 @@ namespace Hooks
 					PBRParams[0] = pbrMaterial->roughnessScale;
 					PBRParams[1] = pbrMaterial->metallicScale;
 					PBRParams[2] = pbrMaterial->specularLevel;
-					PBRParams[3] = hasEmissive;
+					PBRParams[3] = static_cast<float>(shaderFlags.underlying());
 					shadowState->SetPSConstant(PBRParams, RE::BSGraphics::ConstantGroupLevel::PerMaterial, 36);
+				}
+
+				{
+					shadowState->SetPSConstant(pbrMaterial->subsurfaceColor, RE::BSGraphics::ConstantGroupLevel::PerMaterial, 37);
+				}
+
+				{
+					std::array<float, 1> PBRParams1;
+					PBRParams1[0] = pbrMaterial->displacementScale;
+					shadowState->SetPSConstant(PBRParams1, RE::BSGraphics::ConstantGroupLevel::PerMaterial, 38);
 				}
 
 				RE::BSGraphics::Renderer::FlushVSConstantGroup(RE::BSGraphics::ConstantGroupLevel::PerMaterial);
