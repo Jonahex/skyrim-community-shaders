@@ -502,7 +502,7 @@ namespace Hooks
 					texCoordOffsetScale[0] = pbrMaterial->texCoordOffset[bufferIndex].x;
 					texCoordOffsetScale[1] = pbrMaterial->texCoordOffset[bufferIndex].y;
 					texCoordOffsetScale[2] = pbrMaterial->texCoordScale[bufferIndex].x;
-					texCoordOffsetScale[3] = pbrMaterial->texCoordScale[bufferIndex].x;
+					texCoordOffsetScale[3] = pbrMaterial->texCoordScale[bufferIndex].y;
 					shadowState->SetVSConstant(texCoordOffsetScale, RE::BSGraphics::ConstantGroupLevel::PerMaterial, 11);
 				}
 

@@ -21,6 +21,13 @@ public:
 
 	bool renderedScreenCamera = false;
 
+	struct alignas(16) PerPass
+	{
+		float3 averageColor;
+		float pad;
+	};
+	std::unique_ptr<Buffer> perPass;
+
 	// Specular irradiance
 
 	ID3D11SamplerState* computeSampler = nullptr;
@@ -55,6 +62,8 @@ public:
 
 	ID3D11ComputeShader* inferCubemapCS = nullptr;
 	Texture2D* envCaptureTexture = nullptr;
+
+	ID3D11ComputeShader* averageColorCS = nullptr;
 
 	bool activeReflections = false;
 
@@ -101,6 +110,7 @@ public:
 	ID3D11ComputeShader* GetComputeShaderUpdate();
 	ID3D11ComputeShader* GetComputeShaderInferrence();
 	ID3D11ComputeShader* GetComputeShaderSpecularIrradiance();
+	ID3D11ComputeShader* GetComputeShaderAverageColor();
 
 	void UpdateCubemapCapture();
 

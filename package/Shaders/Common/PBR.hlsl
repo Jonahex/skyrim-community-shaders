@@ -140,6 +140,10 @@ float3 ExtinctionToTransmittance(float3 extinction, float thicknessMeters)
 
 void GetDirectLightInputPBR(out float3 diffuse, out float3 transmission, out float3 specular, float3 N, float3 V, float3 L, float3 lightColor, float roughness, float3 specularColor, float3 subsurfaceColor, float subsurfaceOpacity, float shadow, float ao)
 {
+	diffuse = 0;
+	transmission = 0;
+	specular = 0;
+	
 	float3 H = normalize(V + L);
 
 	float NdotL = dot(N, L);
@@ -154,19 +158,19 @@ void GetDirectLightInputPBR(out float3 diffuse, out float3 transmission, out flo
 	float satNdotH = saturate(NdotH);
 	float satVdotH = saturate(VdotH);
 
-	//diffuse = PI * GetDiffuseDirectLightMultiplierLambert() * lightColor * satNdotL;
-	//diffuse = PI * GetDiffuseDirectLightMultiplierBurley(roughness, satNdotV, satNdotL, satVdotH) * lightColor * satNdotL;
-	//diffuse = PI * GetDiffuseDirectLightMultiplierOrenNayar(roughness, satNdotV, satNdotL, satVdotL) * lightColor * satNdotL;
-	//diffuse = PI * GetDiffuseDirectLightMultiplierGotanda(roughness, satNdotV, satNdotL, satVdotL) * lightColor * satNdotL;
-	diffuse = PI * GetDiffuseDirectLightMultiplierChan(roughness, saturate(NdotV), satNdotL, satVdotH, satNdotH) * lightColor * satNdotL;
-	specular = PI * GetSpecularDirectLightMultiplierMicrofacet(roughness, specularColor, satNdotL, satNdotV, satNdotH, satVdotH) * lightColor * satNdotL;
+	//diffuse += PI * GetDiffuseDirectLightMultiplierLambert() * lightColor * satNdotL;
+	//diffuse += PI * GetDiffuseDirectLightMultiplierBurley(roughness, satNdotV, satNdotL, satVdotH) * lightColor * satNdotL;
+	//diffuse += PI * GetDiffuseDirectLightMultiplierOrenNayar(roughness, satNdotV, satNdotL, satVdotL) * lightColor * satNdotL;
+	//diffuse += PI * GetDiffuseDirectLightMultiplierGotanda(roughness, satNdotV, satNdotL, satVdotL) * lightColor * satNdotL;
+	diffuse += PI * GetDiffuseDirectLightMultiplierChan(roughness, saturate(NdotV), satNdotL, satVdotH, satNdotH) * lightColor * satNdotL;
+	specular += PI * GetSpecularDirectLightMultiplierMicrofacet(roughness, specularColor, satNdotL, satNdotV, satNdotH, satVdotH) * lightColor * satNdotL;
 	
+	// Energy conservation
 	float3 W, E;
 	ComputeGGXSpecularEnergyTerms(W, E, roughness, satNdotV, specularColor);
 	diffuse *= 1 - RGBToLuminanceAlternative(E);
 	specular *= W;
 	
-	transmission = 0;
 	[branch] if ((PBRFlags & 4) != 0) // Two-sided foliage
 	{
 		float wrap = 0.5;
@@ -189,72 +193,111 @@ void GetDirectLightInputPBR(out float3 diffuse, out float3 transmission, out flo
 	}
 }
 
-float ComputeReflectionCaptureMipFromRoughness(float roughness, float cubemapMaxMip)
+float ComputeCubemapMipFromRoughness(float roughness, float cubemapMaxMip)
 {
-	const float RoughestMip = 1;
-	const float RoughnessMipScale = 1.2;
+	const float RoughestMip = 3;
+	const float RoughnessMipScale = 1.15;
 	// Heuristic that maps roughness to mip level
 	// This is done in a way such that a certain mip level will always have the same roughness, regardless of how many mips are in the texture
 	// Using more mips in the cubemap just allows sharper reflections to be supported
-	float LevelFrom1x1 = RoughestMip - RoughnessMipScale * log2(max(roughness, 0.001));
+	float LevelFrom1x1 = RoughestMip - RoughnessMipScale * log2(roughness);
 	return cubemapMaxMip - 1 - LevelFrom1x1;
+}
+
+// [ Lazarov 2013, "Getting More Physical in Call of Duty: Black Ops II" ]
+float2 GetEnvBRDFApproxLazarov(float roughness, float NdotV)
+{
+	const float4 c0 = { -1, -0.0275, -0.572, 0.022 };
+	const float4 c1 = { 1, 0.0425, 1.04, -0.04 };
+	float4 r = roughness * c0 + c1;
+	float a004 = min(r.x * r.x, exp2(-9.28 * NdotV)) * r.x + r.y;
+	float2 AB = float2(-1.04, 1.04) * a004 + r.zw;
+	return AB;
+}
+
+float3 GetOffSpecularPeakReflectionDirection(float3 N, float3 R, float roughness)
+{
+	float a = roughness * roughness;
+	return lerp(N, R, (1 - a) * (sqrt(1 - a) + a ));	
 }
 
 void GetAmbientLightInputPBR(out float3 diffuse, out float3 specular, float3 N, float3 V, float3 diffuseColor, float roughness, float3 specularColor, float3 subsurfaceColor, float ao)
 {
+	diffuse = 0;
+	specular = 0;
+
 	float NdotV = saturate(dot(N, V));
-	float3 R0 = normalize(reflect(-V, N));
+	float3 R = normalize(reflect(-V, N));
+	R = GetOffSpecularPeakReflectionDirection(N, R, roughness);
 	
-	// Point lobe in off-specular peak direction
-	float a = roughness * roughness;
-	float3 R = lerp(N, R0, (1 - a) * (sqrt(1 - a) + a));
+	float weatherAmbientColor = float3(DirectionalAmbient[0].w, DirectionalAmbient[1].w, DirectionalAmbient[2].w);
+	float weatherAmbientLuminance = RGBToLuminanceAlternative(weatherAmbientColor);
 	
-    //R = lerp(N, R, saturate(1.35 * (1.0 - roughness)));
-    //R = R + saturate(-dot(polygonN, R)) * polygonN; // clip light from neagative subspace of polygon
+	float3 directionalAmbientDiffuseColor = mul(DirectionalAmbient, float4(N, 1.f));
+	float3 directionalAmbientSpecularColor = mul(DirectionalAmbient, float4(R, 1.f));
 
 	float3 diffuseIrradiance = 0;
 	float3 specularIrradiance = 0;
 
 #	if defined(DYNAMIC_CUBEMAPS)
-	uint levelCount = 0, width = 0, height = 0;
-	specularTexture.GetDimensions(0, width, height, levelCount);
+	uint width = 0, height = 0;
+	specularTexture.GetDimensions(width, height);
+	uint levelCount = log2(width) + 1;
 	float diffuseLevel = levelCount - 4;
-	float specularLevel = ComputeReflectionCaptureMipFromRoughness(roughness, levelCount);
-	diffuseIrradiance = specularTexture.SampleLevel(SampColorSampler, N, diffuseLevel).rgb;
-	specularIrradiance = specularTexture.SampleLevel(SampColorSampler, R, specularLevel).rgb;
+	float specularLevel = ComputeCubemapMipFromRoughness(roughness, levelCount);
+	
+	//float3 averageColor = 0;
+	//averageColor += sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, float3(1, 0, 0), levelCount - 1).xyz);
+	//averageColor += sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, float3(-1, 0, 0), levelCount - 1).xyz);
+	//averageColor += sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, float3(0, 1, 0), levelCount - 1).xyz);
+	//averageColor += sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, float3(0, -1, 0), levelCount - 1).xyz);
+	//averageColor += sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, float3(0, 0, 1), levelCount - 1).xyz);
+	//averageColor += sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, float3(0, 0, -1), levelCount - 1).xyz);
+	//averageColor /= 6;
+	float3 averageColor = perPassDynamicCubemaps[0].AverageColor;
+	float averageLuminance = RGBToLuminanceAlternative(averageColor);
+	
+	diffuseIrradiance += sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, N, diffuseLevel).xyz);
+	specularIrradiance += sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, R, specularLevel).xyz);
+	
+	diffuseIrradiance *= weatherAmbientColor / averageColor * 0.5;
+	specularIrradiance *= weatherAmbientColor / averageColor * 0.5;
+#	else
+	diffuseIrradiance += directionalAmbientDiffuseColor * 0.5;
+	specularIrradiance += directionalAmbientSpecularColor * 0.5;
 #	endif
-
-	diffuseIrradiance = sRGB2Lin(diffuseIrradiance);
-	specularIrradiance = sRGB2Lin(specularIrradiance);
-
+	
 	// Split-sum approximation factors for Cook-Torrance specular BRDF.
 #	if defined(DYNAMIC_CUBEMAPS)
 	float2 specularBRDF = specularBRDF_LUT.Sample(LinearSampler, float2(NdotV, roughness)).xy;
 #	else
-	float2 specularBRDF = EnvBRDFApprox(specularColor, roughness, NdotV);
+	float2 specularBRDF = GetEnvBRDFApproxLazarov(roughness, NdotV);
 #	endif
 
-	diffuse = PI * diffuseIrradiance * diffuseColor;
-	specular = PI * specularIrradiance * (specularColor * specularBRDF.x + saturate(50.0 * specularColor.g) * specularBRDF.y);
+	diffuse += diffuseIrradiance * diffuseColor;
+	specular += specularIrradiance * (specularColor * specularBRDF.x + saturate(50.0 * specularColor.g) * specularBRDF.y);
 
 	// Subsurface
 	[branch] if((PBRFlags & 8) != 0) // Subsurface
 	{
 		float dependentSplit = 0.5f;
-		diffuse += PI * diffuseIrradiance * subsurfaceColor * dependentSplit;
+		diffuse += diffuseIrradiance * subsurfaceColor * dependentSplit;
+		
+		float3 directionalAmbientSubsurfaceSpecularColor = mul(DirectionalAmbient, float4(-V, 1.f));
 		
 		float3 subsurfaceSpecularIrradiance = 0.f;
+	
 #	if defined(DYNAMIC_CUBEMAPS)
 		float subsurfaceSpecularLevel = diffuseLevel - 2.5f;
-		subsurfaceSpecularIrradiance = specularTexture.SampleLevel(SampColorSampler, -V, diffuseLevel - 2.5f).rgb;
+		subsurfaceSpecularIrradiance += specularTexture.SampleLevel(SampColorSampler, -V, diffuseLevel - 2.5f).xyz;
+		
+		subsurfaceSpecularIrradiance *= weatherAmbientColor / averageColor * 0.5;
+#	else
+		subsurfaceSpecularIrradiance += directionalAmbientSubsurfaceSpecularColor * 0.5;
 #	endif
-		specular += PI * subsurfaceSpecularIrradiance * subsurfaceColor * (ao * (1.0f - dependentSplit));
+		specular += subsurfaceSpecularIrradiance * subsurfaceColor * (ao * (1.0f - dependentSplit));
 	}
 	
-	// Roughness dependent fresnel
-	// https://www.jcgt.org/published/0008/01/03/paper.pdf
-	//float3 Fr = max(1 - roughness, specularColor) - specularColor;
-	//float3 S = specularColor + Fr * pow(1.0 - NdotV, 5.0);
-	//
-	//specular = PI * specularIrradiance * (S * specularBRDF.x + specularBRDF.y);
+	diffuse *= ao;
+	specular *= ao;
 }

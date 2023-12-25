@@ -1491,9 +1491,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float3 f0 = 0.04;
 	
 	float4 rawRMAOS = TexRMAOSSampler.Sample(SampRMAOSSampler, diffuseUv);
-	roughness = PBRParams1.x * rawRMAOS.x;
+	roughness = saturate(PBRParams1.x * rawRMAOS.x);
 	metallic = rawRMAOS.y;
-	f0 = PBRParams1.z * rawRMAOS.w;
+	f0 = saturate(PBRParams1.z * rawRMAOS.w);
 	
 	f0 = lerp(f0, baseColor.xyz, metallic);
 	baseColor.xyz *= 1 - metallic;
@@ -2052,8 +2052,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	if defined(TRUE_PBR)
 	float3 diffuseIrradiance, specularIrradiance;
 	GetAmbientLightInputPBR(diffuseIrradiance, specularIrradiance, worldSpaceNormal.xyz, worldSpaceViewDirection, baseColor.xyz, roughness, f0, subsurfaceColor, ao);
-	color.xyz += diffuseIrradiance * ao;
-	specularColorPBR += specularIrradiance * ao;
+	color.xyz += diffuseIrradiance;
+	specularColorPBR += specularIrradiance;
 	
 	color.xyz += emitColor.xyz;
 	color.xyz += transmissionColor;

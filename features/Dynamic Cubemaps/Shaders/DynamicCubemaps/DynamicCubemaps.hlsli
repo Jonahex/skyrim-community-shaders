@@ -1,5 +1,8 @@
+#include "DynamicCubemaps/Common.hlsli"
+
 TextureCube<float4> specularTexture : register(t64);
 Texture2D<float4> specularBRDF_LUT : register(t65);
+StructuredBuffer<PerPassDynamicCubemaps> perPassDynamicCubemaps : register(t66);
 
 float3 GetDynamicCubemap(float3 N, float3 V, float roughness, float3 F0)
 {

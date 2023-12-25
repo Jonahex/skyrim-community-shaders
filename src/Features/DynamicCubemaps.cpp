@@ -1,4 +1,6 @@
 #include "DynamicCubemaps.h"
+
+#include <ShaderCache.h>
 #include <Util.h>
 
 constexpr auto MIPLEVELS = 10;
@@ -145,6 +147,15 @@ ID3D11ComputeShader* DynamicCubemaps::GetComputeShaderSpecularIrradiance()
 	return specularIrradianceCS;
 }
 
+ID3D11ComputeShader* DynamicCubemaps::GetComputeShaderAverageColor()
+{
+	if (!averageColorCS) {
+		logger::debug("Compiling AverageColorCS");
+		averageColorCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\DynamicCubemaps\\AverageColorCS.hlsl", {}, "cs_5_0");
+	}
+	return averageColorCS;
+}
+
 void DynamicCubemaps::UpdateCubemapCapture()
 {
 	auto renderer = RE::BSGraphics::Renderer::GetSingleton();
@@ -192,11 +203,20 @@ void DynamicCubemaps::UpdateCubemapCapture()
 	context->CSSetShader(GetComputeShaderInferrence(), nullptr, 0);
 	context->Dispatch((uint32_t)std::ceil(envCaptureTexture->desc.Width / 32.0f), (uint32_t)std::ceil(envCaptureTexture->desc.Height / 32.0f), 6);
 
-	srvs[0] = nullptr;
+	uav = perPass->uav.get();
+	context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
+
+	srvs[0] = cubemap.SRV;
 	context->CSSetShaderResources(0, 1, srvs);
+
+	context->CSSetShader(GetComputeShaderAverageColor(), nullptr, 0);
+	context->Dispatch(1, 1, 1);
 
 	uav = nullptr;
 	context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
+
+	srvs[0] = nullptr;
+	context->CSSetShaderResources(0, 1, srvs);
 
 	buffers[0] = nullptr;
 	buffers[1] = nullptr;
@@ -223,10 +243,11 @@ void DynamicCubemaps::UpdateCubemap()
 	auto context = renderer->GetRuntimeData().context;
 
 	{
-		ID3D11ShaderResourceView* views[2]{};
+		ID3D11ShaderResourceView* views[3]{};
 		views[0] = nullptr;
 		views[1] = nullptr;
-		context->PSSetShaderResources(64, 2, views);
+		views[2] = nullptr;
+		context->PSSetShaderResources(64, 3, views);
 	}
 
 	{
@@ -267,6 +288,19 @@ void DynamicCubemaps::UpdateCubemap()
 				context->Dispatch(numGroups, numGroups, 6);
 			}
 		}
+
+		{
+			auto srv = cubemap.SRV;
+			context->CSSetShaderResources(0, 1, &srv);
+
+			auto uav = perPass->uav.get();
+			context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
+
+			context->CSSetSamplers(0, 1, &computeSampler);
+
+			context->CSSetShader(GetComputeShaderAverageColor(), nullptr, 0);
+			context->Dispatch(1, 1, 1);
+		}
 	}
 
 	ID3D11ShaderResourceView* nullSRV = { nullptr };
@@ -281,7 +315,7 @@ void DynamicCubemaps::UpdateCubemap()
 	context->CSSetUnorderedAccessViews(0, 1, &nullUAV, nullptr);
 }
 
-void DynamicCubemaps::Draw(const RE::BSShader* shader, const uint32_t)
+void DynamicCubemaps::Draw(const RE::BSShader* shader, const uint32_t descriptor)
 {
 	auto context = RE::BSGraphics::Renderer::GetSingleton()->GetRuntimeData().context;
 
@@ -299,6 +333,11 @@ void DynamicCubemaps::Draw(const RE::BSShader* shader, const uint32_t)
 			views[0] = envTexture->srv.get();
 			views[1] = spBRDFLUT->srv.get();
 			context->PSSetShaderResources(64, 2, views);
+		}
+		if ((descriptor & static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::TruePbr)) != 0)
+		{
+			auto srv = perPass->srv.get();
+			context->PSSetShaderResources(66, 1, &srv);
 		}
 	}
 }
@@ -445,6 +484,33 @@ void DynamicCubemaps::SetupResources()
 			uavDesc.Texture2DArray.MipSlice = level;
 			DX::ThrowIfFailed(device->CreateUnorderedAccessView(envTexture->resource.get(), &uavDesc, uavArray[level - 1].put()));
 		}
+	}
+
+	{
+		D3D11_BUFFER_DESC sbDesc{};
+		sbDesc.Usage = D3D11_USAGE_DEFAULT;
+		sbDesc.CPUAccessFlags = 0;
+		sbDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+		sbDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
+		sbDesc.StructureByteStride = sizeof(PerPass);
+		sbDesc.ByteWidth = sizeof(PerPass);
+		perPass = std::make_unique<Buffer>(sbDesc);
+
+		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
+		srvDesc.Format = DXGI_FORMAT_UNKNOWN;
+		srvDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
+		srvDesc.Buffer.FirstElement = 0;
+		srvDesc.Buffer.NumElements = 1;
+
+		D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc{};
+		uavDesc.Format = DXGI_FORMAT_UNKNOWN;
+		uavDesc.ViewDimension = D3D11_UAV_DIMENSION_BUFFER;
+		uavDesc.Buffer.FirstElement = 0;
+		uavDesc.Buffer.NumElements = 1;
+		uavDesc.Buffer.Flags = 0;
+
+		perPass->CreateSRV(srvDesc);
+		perPass->CreateUAV(uavDesc);
 	}
 }
 
