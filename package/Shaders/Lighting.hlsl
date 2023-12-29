@@ -5,10 +5,6 @@
 
 #define PI 3.1415927
 
-#if defined (TRUE_PBR)
-#undef ENVMAP
-#endif
-
 struct LightingData
 {
 	float WaterHeight[25];
@@ -499,6 +495,12 @@ SamplerState SampColorSampler : register(s0);
 #		define SampLandNormal4Sampler SampColorSampler
 #		define SampLandNormal5Sampler SampColorSampler
 #		define SampLandNormal6Sampler SampColorSampler
+#		define SampRMAOSSampler SampColorSampler
+#		define SampLandRMAOS2Sampler SampColorSampler
+#		define SampLandRMAOS3Sampler SampColorSampler
+#		define SampLandRMAOS4Sampler SampColorSampler
+#		define SampLandRMAOS5Sampler SampColorSampler
+#		define SampLandRMAOS6Sampler SampColorSampler
 
 #	else
 
@@ -573,6 +575,17 @@ Texture2D<float4> TexLandNormal3Sampler : register(t9);
 Texture2D<float4> TexLandNormal4Sampler : register(t10);
 Texture2D<float4> TexLandNormal5Sampler : register(t11);
 Texture2D<float4> TexLandNormal6Sampler : register(t12);
+
+#		if defined(TRUE_PBR)
+
+Texture2D<float4> TexRMAOSSampler : register(t23);
+Texture2D<float4> TexLandRMAOS2Sampler : register(t24);
+Texture2D<float4> TexLandRMAOS3Sampler : register(t25);
+Texture2D<float4> TexLandRMAOS4Sampler : register(t26);
+Texture2D<float4> TexLandRMAOS5Sampler : register(t27);
+Texture2D<float4> TexLandRMAOS6Sampler : register(t28);
+
+#		endif
 
 #	else
 
@@ -659,8 +672,10 @@ cbuffer PerMaterial : register(b1)
 	// VR is [9] instead of [15]
 	
 	uint PBRFlags : packoffset(c15.x);
-	float3 PBRParams1 : packoffset(c15.y);
+	float3 PBRParams1 : packoffset(c15.y); // for non-land : roughness scale, displacement scale, specular level
 	float4 PBRParams2 : packoffset(c16);
+	float4 PBRParams3 : packoffset(c17);
+	float4 PBRParams4 : packoffset(c18);
 };
 
 cbuffer PerGeometry : register(b2)
@@ -1098,7 +1113,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	}
 #		endif  // ENVMAP
 
-#		if defined(TRUE_PBR)
+#		if defined(TRUE_PBR) && !defined(LANDSCAPE)
 	bool PBRParallax = false;
 	[branch] if ((PBRFlags & 16) != 0) {
 		PBRParallax = true;
@@ -1161,12 +1176,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float4 normal = 0;
 	float4 glossiness = 0;
 
+	float4 rawRMAOS = 0;
+	float roughnessScale = 1;
+	float specularLevel = 0.04;
+	
 #	if defined(LANDSCAPE)
 	if (input.LandBlendWeights1.x > 0.0) {
 #	endif  // LANDSCAPE
 
 		float4 rawBaseColor = TexColorSampler.Sample(SampColorSampler, diffuseUv);
-
 		baseColor = rawBaseColor;
 
 		float landSnowMask1 = GetLandSnowMaskValue(baseColor.w);
@@ -1204,10 +1222,37 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		normal.xyz = GetWorldMapNormal(input, normal.xyz, rawBaseColor.xyz);
 #	endif  // WORLD_MAP
 
+#	if defined(TRUE_PBR)
+#	if defined(LODLANDNOISE)
+	rawRMAOS = float4(1, 0, 1, 1);
+	roughnessScale = 1;
+	specularLevel = 0.04;
+#	elif defined(LANDSCAPE)
+	[branch] if ((PBRFlags & 1) != 0)
+	{
+		rawRMAOS = TexRMAOSSampler.Sample(SampRMAOSSampler, diffuseUv);
+	}
+	else
+	{
+		rawRMAOS = float4(1 - glossiness.x, 0, 1, 1);
+	}
+	roughnessScale = 1;
+	specularLevel = 0.04;
+#	else
+	rawRMAOS = TexRMAOSSampler.Sample(SampRMAOSSampler, diffuseUv);
+	roughnessScale = PBRParams1.x;
+	specularLevel = PBRParams1.z;
+#	endif
+#	endif
+
 #	if defined(LANDSCAPE)
 		baseColor *= input.LandBlendWeights1.x;
 		normal *= input.LandBlendWeights1.x;
 		glossiness *= input.LandBlendWeights1.x;
+
+#		if defined(TRUE_PBR)
+		rawRMAOS *= input.LandBlendWeights1.x;
+#		endif
 	}
 
 #	endif  // LANDSCAPE
@@ -1257,6 +1302,17 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		if defined(SNOW)
 		landSnowMask += LandscapeTexture1to4IsSnow.y * input.LandBlendWeights1.y * landSnowMask2;
 #		endif  // SNOW
+
+#		if defined(TRUE_PBR)
+		[branch] if ((PBRFlags & 2) != 0)
+		{
+			rawRMAOS += input.LandBlendWeights1.y * TexLandRMAOS2Sampler.Sample(SampLandRMAOS2Sampler, uv);
+		}
+		else
+		{
+			rawRMAOS += input.LandBlendWeights1.y * float4(1 - landNormal2.w, 0, 1, 1);
+		}
+#		endif
 	}
 
 	if (input.LandBlendWeights1.z > 0.0) {
@@ -1279,6 +1335,17 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		if defined(SNOW)
 		landSnowMask += LandscapeTexture1to4IsSnow.z * input.LandBlendWeights1.z * landSnowMask3;
 #		endif  // SNOW
+
+#		if defined(TRUE_PBR)
+		[branch] if ((PBRFlags & 4) != 0)
+		{
+			rawRMAOS += input.LandBlendWeights1.z * TexLandRMAOS3Sampler.Sample(SampLandRMAOS3Sampler, uv);
+		}
+		else
+		{
+			rawRMAOS += input.LandBlendWeights1.z * float4(1 - landNormal3.w, 0, 1, 1);
+		}
+#		endif
 	}
 
 	if (input.LandBlendWeights1.w > 0.0) {
@@ -1301,6 +1368,17 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		if defined(SNOW)
 		landSnowMask += LandscapeTexture1to4IsSnow.w * input.LandBlendWeights1.w * landSnowMask4;
 #		endif  // SNOW
+
+#		if defined(TRUE_PBR)
+		[branch] if ((PBRFlags & 8) != 0)
+		{
+			rawRMAOS += input.LandBlendWeights1.w * TexLandRMAOS4Sampler.Sample(SampLandRMAOS4Sampler, uv);
+		}
+		else
+		{
+			rawRMAOS += input.LandBlendWeights1.w * float4(1 - landNormal4.w, 0, 1, 1);
+		}
+#		endif
 	}
 
 	if (input.LandBlendWeights2.x > 0.0) {
@@ -1323,6 +1401,17 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		if defined(SNOW)
 		landSnowMask += LandscapeTexture5to6IsSnow.x * input.LandBlendWeights2.x * landSnowMask5;
 #		endif  // SNOW
+
+#		if defined(TRUE_PBR)
+		[branch] if ((PBRFlags & 16) != 0)
+		{
+			rawRMAOS += input.LandBlendWeights2.x * TexLandRMAOS5Sampler.Sample(SampLandRMAOS5Sampler, uv);
+		}
+		else
+		{
+			rawRMAOS += input.LandBlendWeights2.x * float4(1 - landNormal5.w, 0, 1, 1);
+		}
+#		endif
 	}
 
 	if (input.LandBlendWeights2.y > 0.0) {
@@ -1345,6 +1434,17 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		if defined(SNOW)
 		landSnowMask += LandscapeTexture5to6IsSnow.y * input.LandBlendWeights2.y * landSnowMask6;
 #		endif  // SNOW
+
+#		if defined(TRUE_PBR)
+		[branch] if ((PBRFlags & 32) != 0)
+		{
+			rawRMAOS += input.LandBlendWeights2.y * TexLandRMAOS6Sampler.Sample(SampLandRMAOS6Sampler, uv);
+		}
+		else
+		{
+			rawRMAOS += input.LandBlendWeights2.y * float4(1 - landNormal6.w, 0, 1, 1);
+		}
+#		endif
 	}
 
 #		if defined(LOD_LAND_BLEND)
@@ -1354,9 +1454,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float lodBlendMul1 = GetLodLandBlendMultiplier(lodBlendTmp, lodBlendMask);
 	float lodBlendMul2 = LODTexParams.z * input.LandBlendWeights2.w;
 	baseColor.w = 0;
-	baseColor = lodBlendMul2.xxxx * (lodBlendColor * lodBlendMul1.xxxx - baseColor) + baseColor;
-	normal.xyz = lodBlendMul2.xxx * (float3(0, 0, 1) - normal.xyz) + normal.xyz;
-	glossiness += lodBlendMul2 * -glossiness;
+	baseColor = lerp(baseColor, lodBlendColor * lodBlendMul1, lodBlendMul2);
+	normal.xyz = lerp(normal.xyz, float3(0, 0, 1), lodBlendMul2);
+	glossiness = lerp(glossiness, 0, lodBlendMul2);
+#			if defined(TRUE_PBR)
+	rawRMAOS = lerp(rawRMAOS, float4(1, 0, 1, 1), lodBlendMul2);
+#			endif
 #		endif  // LOD_LAND_BLEND
 
 #		if defined(SNOW)
@@ -1489,25 +1592,29 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float metallic = 0;
 	float ao = 1;
 	float3 f0 = 0.04;
+	float3 subsurfaceColor = 0;
+	float subsurfaceOpacity = 1;
 	
-	float4 rawRMAOS = TexRMAOSSampler.Sample(SampRMAOSSampler, diffuseUv);
-	roughness = saturate(PBRParams1.x * rawRMAOS.x);
+	roughness = saturate(roughnessScale * rawRMAOS.x);
 	metallic = rawRMAOS.y;
-	f0 = saturate(PBRParams1.z * rawRMAOS.w);
+	f0 = saturate(specularLevel * rawRMAOS.w);
 	
+	float3 pbrDiffuseColor = baseColor.xyz;
 	f0 = lerp(f0, baseColor.xyz, metallic);
 	baseColor.xyz *= 1 - metallic;
 	
 	ao = AOMultiBounce(RGBToLuminanceAlternative(f0), rawRMAOS.z).y;
 	
-	float3 subsurfaceColor = PBRParams2.xyz;
-	float subsurfaceOpacity = PBRParams2.w;
+#		if !defined(LANDSCAPE)
+	subsurfaceColor = PBRParams2.xyz;
+	subsurfaceOpacity = PBRParams2.w;
 	[branch] if ((PBRFlags & 2) != 0)
 	{
 		float4 sampledSubsurfaceProperties = TexRimSoftLightWorldMapOverlaySampler.Sample(SampRimSoftLightWorldMapOverlaySampler, uv);
 		subsurfaceColor *= sampledSubsurfaceProperties.xyz;
 		subsurfaceOpacity *= sampledSubsurfaceProperties.w;
 	}
+#		endif
 	
 	float3 specularColorPBR = 0;
 	float3 transmissionColor = 0;
@@ -2166,7 +2273,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	endif
 
 #	if defined(TRUE_PBR)
-	//color.xyz = 0.5 * input.ViewVector.xyz + 0.5;
+	//color.xyz = 5 * directionalAmbientColor.xyz;//0.5 * input.ViewVector.xyz + 0.5;
 #	endif
 
 #	if defined(LANDSCAPE) && !defined(LOD_LAND_BLEND)

@@ -171,6 +171,7 @@ void GetDirectLightInputPBR(out float3 diffuse, out float3 transmission, out flo
 	diffuse *= 1 - RGBToLuminanceAlternative(E);
 	specular *= W;
 	
+#if !defined(LANDSCAPE)
 	[branch] if ((PBRFlags & 4) != 0) // Two-sided foliage
 	{
 		float wrap = 0.5;
@@ -191,6 +192,7 @@ void GetDirectLightInputPBR(out float3 diffuse, out float3 transmission, out flo
 
 		transmission += PI * lerp(backScatter, 1, scatter) * lerp(transmittedColor, subsurfaceColor, shadow) * lightColor;
 	}
+#	endif
 }
 
 float ComputeCubemapMipFromRoughness(float roughness, float cubemapMaxMip)
@@ -254,7 +256,7 @@ void GetAmbientLightInputPBR(out float3 diffuse, out float3 specular, float3 N, 
 	//averageColor += sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, float3(0, 0, 1), levelCount - 1).xyz);
 	//averageColor += sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, float3(0, 0, -1), levelCount - 1).xyz);
 	//averageColor /= 6;
-	float3 averageColor = perPassDynamicCubemaps[0].AverageColor;
+	float3 averageColor = max(perPassDynamicCubemaps[0].AverageColor, 1e-5);
 	float averageLuminance = RGBToLuminanceAlternative(averageColor);
 	
 	diffuseIrradiance += sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, N, diffuseLevel).xyz);
@@ -262,6 +264,9 @@ void GetAmbientLightInputPBR(out float3 diffuse, out float3 specular, float3 N, 
 	
 	diffuseIrradiance *= weatherAmbientColor / averageColor * 0.5;
 	specularIrradiance *= weatherAmbientColor / averageColor * 0.5;
+	
+	//diffuseIrradiance *= weatherAmbientLuminance / averageLuminance * 0.5;
+	//specularIrradiance *= weatherAmbientLuminance / averageLuminance * 0.5;
 #	else
 	diffuseIrradiance += directionalAmbientDiffuseColor * 0.5;
 	specularIrradiance += directionalAmbientSpecularColor * 0.5;
@@ -278,6 +283,7 @@ void GetAmbientLightInputPBR(out float3 diffuse, out float3 specular, float3 N, 
 	specular += specularIrradiance * (specularColor * specularBRDF.x + saturate(50.0 * specularColor.g) * specularBRDF.y);
 
 	// Subsurface
+#if !defined(LANDSCAPE)
 	[branch] if((PBRFlags & 8) != 0) // Subsurface
 	{
 		float dependentSplit = 0.5f;
@@ -292,11 +298,14 @@ void GetAmbientLightInputPBR(out float3 diffuse, out float3 specular, float3 N, 
 		subsurfaceSpecularIrradiance += specularTexture.SampleLevel(SampColorSampler, -V, diffuseLevel - 2.5f).xyz;
 		
 		subsurfaceSpecularIrradiance *= weatherAmbientColor / averageColor * 0.5;
+		
+		//subsurfaceSpecularIrradiance *= weatherAmbientLuminance / averageLuminance * 0.5;
 #	else
 		subsurfaceSpecularIrradiance += directionalAmbientSubsurfaceSpecularColor * 0.5;
 #	endif
 		specular += subsurfaceSpecularIrradiance * subsurfaceColor * (ao * (1.0f - dependentSplit));
 	}
+#	endif
 	
 	diffuse *= ao;
 	specular *= ao;

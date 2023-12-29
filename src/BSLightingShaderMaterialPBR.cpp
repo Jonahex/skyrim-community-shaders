@@ -63,7 +63,8 @@ std::uint32_t BSLightingShaderMaterialPBR::ComputeCRC32(uint32_t srcHash)
 
 RE::BSShaderMaterial::Feature BSLightingShaderMaterialPBR::GetFeature() const
 {
-	return FEATURE;
+	return RE::BSShaderMaterial::Feature::kDefault;
+	//return FEATURE;
 }
 
 void BSLightingShaderMaterialPBR::OnLoadTextureSet(std::uint64_t arg1, RE::BSTextureSet* inTextureSet)
