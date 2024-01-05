@@ -547,6 +547,18 @@ namespace Hooks
 					}
 
 					{
+						constexpr size_t PBRParamsStartIndex = 37;
+
+						for (uint32_t textureIndex = 0; textureIndex < BSLightingShaderMaterialPBRLandscape::NumTiles; ++textureIndex) {
+							std::array<float, 3> PBRParams;
+							PBRParams[0] = pbrMaterial->roughnessScales[textureIndex];
+							PBRParams[1] = pbrMaterial->displacementScales[textureIndex];
+							PBRParams[2] = pbrMaterial->specularLevels[textureIndex];
+							shadowState->SetPSConstant(PBRParams, RE::BSGraphics::ConstantGroupLevel::PerMaterial, PBRParamsStartIndex + textureIndex);
+						}
+					}
+
+					{
 						std::array<float, 4> lodTexParams;
 						lodTexParams[0] = pbrMaterial->terrainTexOffsetX;
 						lodTexParams[1] = pbrMaterial->terrainTexOffsetY;
@@ -643,7 +655,7 @@ namespace Hooks
 						PBRParams2[1] = pbrMaterial->GetSubsurfaceColor().green;
 						PBRParams2[2] = pbrMaterial->GetSubsurfaceColor().blue;
 						PBRParams2[3] = pbrMaterial->GetSubsurfaceOpacity();
-						shadowState->SetPSConstant(PBRParams2, RE::BSGraphics::ConstantGroupLevel::PerMaterial, 38);
+						shadowState->SetPSConstant(PBRParams2, RE::BSGraphics::ConstantGroupLevel::PerMaterial, 43);
 					}
 				}
 
@@ -749,6 +761,18 @@ namespace Hooks
 
 		if (isPbr) {
 			textureSet->SetTexture(BSLightingShaderMaterialPBRLandscape::RmaosTexture, material.landscapeRMAOSTextures[textureIndex]);
+			if (textureSet->decalData != nullptr)
+			{
+				material.displacementScales[textureIndex] = textureSet->decalData->data.parallaxScale;
+				material.roughnessScales[textureIndex] = textureSet->decalData->data.shininess;
+				material.specularLevels[textureIndex] = textureSet->decalData->data.decalMinWidth;
+			}
+			else
+			{
+				material.displacementScales[textureIndex] = 1.f;
+				material.roughnessScales[textureIndex] = 1.f;
+				material.specularLevels[textureIndex] = 0.04f;
+			}
 		}
 		material.isPbr[textureIndex] = isPbr;
 

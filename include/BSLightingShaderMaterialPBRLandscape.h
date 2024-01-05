@@ -31,8 +31,11 @@ public:
 	RE::NiPointer<RE::NiSourceTexture> terrainOverlayTexture;
 	RE::NiPointer<RE::NiSourceTexture> terrainNoiseTexture;
 	RE::NiColorA landBlendParams;
-	RE::NiPointer<RE::NiSourceTexture> landscapeRMAOSTextures[NumTiles];
+	std::array<RE::NiPointer<RE::NiSourceTexture>, NumTiles> landscapeRMAOSTextures;
 	std::array<bool, NumTiles> isPbr;
+	std::array<float, NumTiles> roughnessScales;
+	std::array<float, NumTiles> displacementScales;
+	std::array<float, NumTiles> specularLevels;
 	float terrainTexOffsetX = 0.f;
 	float terrainTexOffsetY = 0.f;
 	float terrainTexFade = 0.f;

@@ -3,6 +3,9 @@
 BSLightingShaderMaterialPBRLandscape::BSLightingShaderMaterialPBRLandscape()
 {
 	std::fill(isPbr.begin(), isPbr.end(), false);
+	std::fill(roughnessScales.begin(), roughnessScales.end(), 1.f);
+	std::fill(displacementScales.begin(), displacementScales.end(), 1.f);
+	std::fill(specularLevels.begin(), specularLevels.end(), 0.04f);
 }
 
 BSLightingShaderMaterialPBRLandscape::~BSLightingShaderMaterialPBRLandscape()
@@ -35,6 +38,10 @@ void BSLightingShaderMaterialPBRLandscape::CopyMembers(RE::BSShaderMaterial* tha
 	pbrThat->terrainOverlayTexture = terrainOverlayTexture;
 	pbrThat->terrainNoiseTexture = terrainNoiseTexture;
 	pbrThat->landBlendParams = landBlendParams;
+	pbrThat->isPbr = isPbr;
+	pbrThat->roughnessScales = roughnessScales;
+	pbrThat->displacementScales = displacementScales;
+	pbrThat->specularLevels = specularLevels;
 	pbrThat->terrainTexOffsetX = terrainTexOffsetX;
 	pbrThat->terrainTexOffsetY = terrainTexOffsetY;
 	pbrThat->terrainTexFade = terrainTexFade;

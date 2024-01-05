@@ -663,19 +663,29 @@ cbuffer PerMaterial : register(b1)
 	float4 MultiLayerParallaxData : packoffset(c6);  // Layer thickness in x, refraction scale in y, uv scale in zw
 	float4 LightingEffectParams : packoffset(c7);    // fSubSurfaceLightRolloff in x, fRimLightPower in y
 	float4 IBLParams : packoffset(c8);
+	
+#	if !defined(TRUE_PBR)
 	float4 LandscapeTexture1to4IsSnow : packoffset(c9);
 	float4 LandscapeTexture5to6IsSnow : packoffset(c10);  // bEnableSnowMask in z, inverse iLandscapeMultiNormalTilingFactor in w
 	float4 LandscapeTexture1to4IsSpecPower : packoffset(c11);
 	float4 LandscapeTexture5to6IsSpecPower : packoffset(c12);
 	float4 SnowRimLightParameters : packoffset(c13);  // fSnowRimLightIntensity in x, fSnowGeometrySpecPower in y, fSnowNormalSpecPower in z, bEnableSnowRimLighting in w
+#	endif
+
+#	if defined(TRUE_PBR) && defined(LANDSCAPE)
+	float3 LandscapeTexture2PBRParams : packoffset(c9);
+	float3 LandscapeTexture3PBRParams : packoffset(c10);
+	float3 LandscapeTexture4PBRParams : packoffset(c11);
+	float3 LandscapeTexture5PBRParams : packoffset(c12);
+	float3 LandscapeTexture6PBRParams : packoffset(c13);
+#	endif
+	
 	float4 CharacterLightParams : packoffset(c14);
 	// VR is [9] instead of [15]
 	
 	uint PBRFlags : packoffset(c15.x);
-	float3 PBRParams1 : packoffset(c15.y); // for non-land : roughness scale, displacement scale, specular level
-	float4 PBRParams2 : packoffset(c16);
-	float4 PBRParams3 : packoffset(c17);
-	float4 PBRParams4 : packoffset(c18);
+	float3 PBRParams1 : packoffset(c15.y); // roughness scale, displacement scale, specular level
+	float4 PBRParams2 : packoffset(c16); // subsurface color, subsurface opacity
 };
 
 cbuffer PerGeometry : register(b2)
@@ -821,13 +831,17 @@ float GetLodLandBlendMultiplier(float parameter, float mask)
 
 float GetLandSnowMaskValue(float alpha)
 {
+#	if !defined(TRUE_PBR)
 	return alpha * LandscapeTexture5to6IsSnow.z + (1 + -LandscapeTexture5to6IsSnow.z);
+#	else
+	return 0;
+#	endif
 }
 
 float3 GetLandNormal(float landSnowMask, float3 normal, float2 uv, SamplerState sampNormal, Texture2D<float4> texNormal)
 {
 	float3 landNormal = TransformNormal(normal);
-#	if defined(SNOW)
+#	if defined(SNOW) && !defined(TRUE_PBR)
 	if (landSnowMask > 1e-5 && LandscapeTexture5to6IsSnow.w != 1.0) {
 		float3 snowNormal =
 			float3(-1, -1, 1) *
@@ -844,7 +858,7 @@ float3 GetLandNormal(float landSnowMask, float3 normal, float2 uv, SamplerState 
 #	endif
 }
 
-#	if defined(SNOW)
+#	if defined(SNOW) && !defined(TRUE_PBR)
 float3 GetSnowSpecularColor(PS_INPUT input, float3 modelNormal, float3 viewDirection)
 {
 	if (SnowRimLightParameters.w > 1e-5) {
@@ -1046,7 +1060,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #	endif  // defined (SKINNED) || !defined (MODELSPACENORMALS)
 
-#	if defined(LANDSCAPE)
+#	if defined(LANDSCAPE) && !defined(TRUE_PBR)
 	float shininess = dot(input.LandBlendWeights1, LandscapeTexture1to4IsSpecPower) + input.LandBlendWeights2.x * LandscapeTexture5to6IsSpecPower.x + input.LandBlendWeights2.y * LandscapeTexture5to6IsSpecPower.y;
 #	else
 	float shininess = SpecularColor.w;
@@ -1154,7 +1168,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float2 terrainUVs[6];
 	if (perPassParallax[0].EnableTerrainParallax && input.LandBlendWeights1.x > 0.0) {
 		mipLevel[0] = GetMipLevel(uv, TexColorSampler);
-		uv = GetParallaxCoords(viewPosition.z, uv, mipLevel[0], viewDirection, tbnTr, TexColorSampler, SampTerrainParallaxSampler, 3, input.LandBlendWeights1.x, displacementScale);
+		
+		float displacementScale1 = displacementScale;
+#		if defined(TRUE_PBR)
+		displacementScale1 = PBRParams1.y;
+#		endif
+		
+		uv = GetParallaxCoords(viewPosition.z, uv, mipLevel[0], viewDirection, tbnTr, TexColorSampler, SampTerrainParallaxSampler, 3, input.LandBlendWeights1.x, displacementScale1);
 		terrainUVs[0] = uv;
 		if (perPassParallax[0].EnableShadows && parallaxShadowQuality > 0.0f)
 			sh0[0] = TexColorSampler.SampleLevel(SampTerrainParallaxSampler, uv, mipLevel[0]).w;
@@ -1177,8 +1197,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float4 glossiness = 0;
 
 	float4 rawRMAOS = 0;
-	float roughnessScale = 1;
-	float specularLevel = 0.04;
 	
 #	if defined(LANDSCAPE)
 	if (input.LandBlendWeights1.x > 0.0) {
@@ -1224,24 +1242,18 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #	if defined(TRUE_PBR)
 #	if defined(LODLANDNOISE)
-	rawRMAOS = float4(1, 0, 1, 1);
-	roughnessScale = 1;
-	specularLevel = 0.04;
+	rawRMAOS = float4(1, 0, 1, 0.04);
 #	elif defined(LANDSCAPE)
 	[branch] if ((PBRFlags & 1) != 0)
 	{
-		rawRMAOS = TexRMAOSSampler.Sample(SampRMAOSSampler, diffuseUv);
+		rawRMAOS = input.LandBlendWeights1.x * TexRMAOSSampler.Sample(SampRMAOSSampler, diffuseUv) * float4(PBRParams1.x, 1, 1, PBRParams1.z);
 	}
 	else
 	{
-		rawRMAOS = float4(1 - glossiness.x, 0, 1, 1);
+		rawRMAOS = input.LandBlendWeights1.x * float4(1 - glossiness.x, 0, 1, 0.04);
 	}
-	roughnessScale = 1;
-	specularLevel = 0.04;
 #	else
-	rawRMAOS = TexRMAOSSampler.Sample(SampRMAOSSampler, diffuseUv);
-	roughnessScale = PBRParams1.x;
-	specularLevel = PBRParams1.z;
+	rawRMAOS = TexRMAOSSampler.Sample(SampRMAOSSampler, diffuseUv) * float4(PBRParams1.x, 1, 1, PBRParams1.z);
 #	endif
 #	endif
 
@@ -1249,12 +1261,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		baseColor *= input.LandBlendWeights1.x;
 		normal *= input.LandBlendWeights1.x;
 		glossiness *= input.LandBlendWeights1.x;
-
-#		if defined(TRUE_PBR)
-		rawRMAOS *= input.LandBlendWeights1.x;
-#		endif
 	}
-
 #	endif  // LANDSCAPE
 
 #	if defined(CPM_AVAILABLE) && defined(ENVMAP)
@@ -1278,7 +1285,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #	if defined(LANDSCAPE)
 
-#		if defined(SNOW)
+#		if defined(SNOW) && !defined(TRUE_PBR)
 	float landSnowMask = LandscapeTexture1to4IsSnow.x * input.LandBlendWeights1.x;
 #		endif  // SNOW
 
@@ -1286,7 +1293,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		if defined(CPM_AVAILABLE)
 		if (perPassParallax[0].EnableTerrainParallax) {
 			mipLevel[1] = GetMipLevel(uvOriginal, TexLandColor2Sampler);
-			uv = GetParallaxCoords(viewPosition.z, uvOriginal, mipLevel[1], viewDirection, tbnTr, TexLandColor2Sampler, SampTerrainParallaxSampler, 3, input.LandBlendWeights1.y, displacementScale);
+		
+			float displacementScale2 = displacementScale;
+#			if defined(TRUE_PBR)
+			displacementScale2 = LandscapeTexture2PBRParams.y;
+#			endif
+
+			uv = GetParallaxCoords(viewPosition.z, uvOriginal, mipLevel[1], viewDirection, tbnTr, TexLandColor2Sampler, SampTerrainParallaxSampler, 3, input.LandBlendWeights1.y, displacementScale2);
 			terrainUVs[1] = uv;
 			if (perPassParallax[0].EnableShadows && parallaxShadowQuality > 0.0f)
 				sh0[1] = TexLandColor2Sampler.SampleLevel(SampTerrainParallaxSampler, uv, mipLevel[1]).w;
@@ -1299,14 +1312,14 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		landNormal2.xyz = GetLandNormal(landSnowMask2, landNormal2.xyz, uv, SampLandNormal2Sampler, TexLandNormal2Sampler);
 		normal.xyz += input.LandBlendWeights1.yyy * landNormal2.xyz;
 		glossiness += input.LandBlendWeights1.y * landNormal2.w;
-#		if defined(SNOW)
+#		if defined(SNOW) && !defined(TRUE_PBR)
 		landSnowMask += LandscapeTexture1to4IsSnow.y * input.LandBlendWeights1.y * landSnowMask2;
 #		endif  // SNOW
 
 #		if defined(TRUE_PBR)
 		[branch] if ((PBRFlags & 2) != 0)
 		{
-			rawRMAOS += input.LandBlendWeights1.y * TexLandRMAOS2Sampler.Sample(SampLandRMAOS2Sampler, uv);
+			rawRMAOS += input.LandBlendWeights1.y * TexLandRMAOS2Sampler.Sample(SampLandRMAOS2Sampler, uv) * float4(LandscapeTexture2PBRParams.x, 1, 1, LandscapeTexture2PBRParams.z);
 		}
 		else
 		{
@@ -1319,7 +1332,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		if defined(CPM_AVAILABLE)
 		if (perPassParallax[0].EnableTerrainParallax) {
 			mipLevel[2] = GetMipLevel(uvOriginal, TexLandColor3Sampler);
-			uv = GetParallaxCoords(viewPosition.z, uvOriginal, mipLevel[2], viewDirection, tbnTr, TexLandColor3Sampler, SampTerrainParallaxSampler, 3, input.LandBlendWeights1.z, displacementScale);
+		
+			float displacementScale3 = displacementScale;
+#			if defined(TRUE_PBR)
+			displacementScale3 = LandscapeTexture3PBRParams.y;
+#			endif
+
+			uv = GetParallaxCoords(viewPosition.z, uvOriginal, mipLevel[2], viewDirection, tbnTr, TexLandColor3Sampler, SampTerrainParallaxSampler, 3, input.LandBlendWeights1.z, displacementScale3);
 			terrainUVs[2] = uv;
 			if (perPassParallax[0].EnableShadows && parallaxShadowQuality > 0.0f)
 				sh0[2] = TexLandColor3Sampler.SampleLevel(SampTerrainParallaxSampler, uv, mipLevel[2]).w;
@@ -1332,14 +1351,14 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		landNormal3.xyz = GetLandNormal(landSnowMask3, landNormal3.xyz, uv, SampLandNormal3Sampler, TexLandNormal3Sampler);
 		normal.xyz += input.LandBlendWeights1.zzz * landNormal3.xyz;
 		glossiness += input.LandBlendWeights1.z * landNormal3.w;
-#		if defined(SNOW)
+#		if defined(SNOW) && !defined(TRUE_PBR)
 		landSnowMask += LandscapeTexture1to4IsSnow.z * input.LandBlendWeights1.z * landSnowMask3;
 #		endif  // SNOW
 
 #		if defined(TRUE_PBR)
 		[branch] if ((PBRFlags & 4) != 0)
 		{
-			rawRMAOS += input.LandBlendWeights1.z * TexLandRMAOS3Sampler.Sample(SampLandRMAOS3Sampler, uv);
+			rawRMAOS += input.LandBlendWeights1.z * TexLandRMAOS3Sampler.Sample(SampLandRMAOS3Sampler, uv) * float4(LandscapeTexture3PBRParams.x, 1, 1, LandscapeTexture3PBRParams.z);
 		}
 		else
 		{
@@ -1352,7 +1371,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		if defined(CPM_AVAILABLE)
 		if (perPassParallax[0].EnableTerrainParallax) {
 			mipLevel[3] = GetMipLevel(uvOriginal, TexLandColor4Sampler);
-			uv = GetParallaxCoords(viewPosition.z, uvOriginal, mipLevel[3], viewDirection, tbnTr, TexLandColor4Sampler, SampTerrainParallaxSampler, 3, input.LandBlendWeights1.w, displacementScale);
+		
+			float displacementScale4 = displacementScale;
+#			if defined(TRUE_PBR)
+			displacementScale4 = LandscapeTexture4PBRParams.y;
+#			endif
+
+			uv = GetParallaxCoords(viewPosition.z, uvOriginal, mipLevel[3], viewDirection, tbnTr, TexLandColor4Sampler, SampTerrainParallaxSampler, 3, input.LandBlendWeights1.w, displacementScale4);
 			terrainUVs[3] = uv;
 			if (perPassParallax[0].EnableShadows && parallaxShadowQuality > 0.0f)
 				sh0[3] = TexLandColor4Sampler.SampleLevel(SampTerrainParallaxSampler, uv, mipLevel[3]).w;
@@ -1365,14 +1390,14 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		landNormal4.xyz = GetLandNormal(landSnowMask4, landNormal4.xyz, uv, SampLandNormal4Sampler, TexLandNormal4Sampler);
 		normal.xyz += input.LandBlendWeights1.www * landNormal4.xyz;
 		glossiness += input.LandBlendWeights1.w * landNormal4.w;
-#		if defined(SNOW)
+#		if defined(SNOW) && !defined(TRUE_PBR)
 		landSnowMask += LandscapeTexture1to4IsSnow.w * input.LandBlendWeights1.w * landSnowMask4;
 #		endif  // SNOW
 
 #		if defined(TRUE_PBR)
 		[branch] if ((PBRFlags & 8) != 0)
 		{
-			rawRMAOS += input.LandBlendWeights1.w * TexLandRMAOS4Sampler.Sample(SampLandRMAOS4Sampler, uv);
+			rawRMAOS += input.LandBlendWeights1.w * TexLandRMAOS4Sampler.Sample(SampLandRMAOS4Sampler, uv) * float4(LandscapeTexture4PBRParams.x, 1, 1, LandscapeTexture4PBRParams.z);
 		}
 		else
 		{
@@ -1385,7 +1410,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		if defined(CPM_AVAILABLE)
 		if (perPassParallax[0].EnableTerrainParallax) {
 			mipLevel[4] = GetMipLevel(uvOriginal, TexLandColor5Sampler);
-			uv = GetParallaxCoords(viewPosition.z, uvOriginal, mipLevel[4], viewDirection, tbnTr, TexLandColor5Sampler, SampTerrainParallaxSampler, 3, input.LandBlendWeights2.x, displacementScale);
+		
+			float displacementScale5 = displacementScale;
+#			if defined(TRUE_PBR)
+			displacementScale5 = LandscapeTexture5PBRParams.y;
+#			endif
+
+			uv = GetParallaxCoords(viewPosition.z, uvOriginal, mipLevel[4], viewDirection, tbnTr, TexLandColor5Sampler, SampTerrainParallaxSampler, 3, input.LandBlendWeights2.x, displacementScale5);
 			terrainUVs[4] = uv;
 			if (perPassParallax[0].EnableShadows && parallaxShadowQuality > 0.0f)
 				sh0[4] = TexLandColor5Sampler.SampleLevel(SampTerrainParallaxSampler, uv, mipLevel[4]).w;
@@ -1398,14 +1429,14 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		landNormal5.xyz = GetLandNormal(landSnowMask5, landNormal5.xyz, uv, SampLandNormal5Sampler, TexLandNormal5Sampler);
 		normal.xyz += input.LandBlendWeights2.xxx * landNormal5.xyz;
 		glossiness += input.LandBlendWeights2.x * landNormal5.w;
-#		if defined(SNOW)
+#		if defined(SNOW) && !defined(TRUE_PBR)
 		landSnowMask += LandscapeTexture5to6IsSnow.x * input.LandBlendWeights2.x * landSnowMask5;
 #		endif  // SNOW
 
 #		if defined(TRUE_PBR)
 		[branch] if ((PBRFlags & 16) != 0)
 		{
-			rawRMAOS += input.LandBlendWeights2.x * TexLandRMAOS5Sampler.Sample(SampLandRMAOS5Sampler, uv);
+			rawRMAOS += input.LandBlendWeights2.x * TexLandRMAOS5Sampler.Sample(SampLandRMAOS5Sampler, uv) * float4(LandscapeTexture5PBRParams.x, 1, 1, LandscapeTexture5PBRParams.z);
 		}
 		else
 		{
@@ -1418,7 +1449,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		if defined(CPM_AVAILABLE)
 		if (perPassParallax[0].EnableTerrainParallax) {
 			mipLevel[5] = GetMipLevel(uvOriginal, TexLandColor6Sampler);
-			uv = GetParallaxCoords(viewPosition.z, uvOriginal, mipLevel[5], viewDirection, tbnTr, TexLandColor6Sampler, SampTerrainParallaxSampler, 3, input.LandBlendWeights2.y, displacementScale);
+		
+			float displacementScale6 = displacementScale;
+#			if defined(TRUE_PBR)
+			displacementScale6 = LandscapeTexture6PBRParams.y;
+#			endif
+
+			uv = GetParallaxCoords(viewPosition.z, uvOriginal, mipLevel[5], viewDirection, tbnTr, TexLandColor6Sampler, SampTerrainParallaxSampler, 3, input.LandBlendWeights2.y, displacementScale6);
 			terrainUVs[5] = uv;
 			if (perPassParallax[0].EnableShadows && parallaxShadowQuality > 0.0f)
 				sh0[5] = TexLandColor6Sampler.SampleLevel(SampTerrainParallaxSampler, uv, mipLevel[5]).w;
@@ -1431,14 +1468,14 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		landNormal6.xyz = GetLandNormal(landSnowMask6, landNormal6.xyz, uv, SampLandNormal6Sampler, TexLandNormal6Sampler);
 		normal.xyz += input.LandBlendWeights2.yyy * landNormal6.xyz;
 		glossiness += input.LandBlendWeights2.y * landNormal6.w;
-#		if defined(SNOW)
+#		if defined(SNOW) && !defined(TRUE_PBR)
 		landSnowMask += LandscapeTexture5to6IsSnow.y * input.LandBlendWeights2.y * landSnowMask6;
 #		endif  // SNOW
 
 #		if defined(TRUE_PBR)
 		[branch] if ((PBRFlags & 32) != 0)
 		{
-			rawRMAOS += input.LandBlendWeights2.y * TexLandRMAOS6Sampler.Sample(SampLandRMAOS6Sampler, uv);
+			rawRMAOS += input.LandBlendWeights2.y * TexLandRMAOS6Sampler.Sample(SampLandRMAOS6Sampler, uv) * float4(LandscapeTexture6PBRParams.x, 1, 1, LandscapeTexture6PBRParams.z);
 		}
 		else
 		{
@@ -1595,9 +1632,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float3 subsurfaceColor = 0;
 	float subsurfaceOpacity = 1;
 	
-	roughness = saturate(roughnessScale * rawRMAOS.x);
-	metallic = rawRMAOS.y;
-	f0 = saturate(specularLevel * rawRMAOS.w);
+	roughness = saturate(rawRMAOS.x);
+	metallic = saturate(rawRMAOS.y);
+	f0 = saturate(rawRMAOS.w);
 	
 	float3 pbrDiffuseColor = baseColor.xyz;
 	f0 = lerp(f0, baseColor.xyz, metallic);

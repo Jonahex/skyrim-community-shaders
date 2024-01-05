@@ -566,7 +566,12 @@ namespace SIE
 
 				{ "PBRFlags", 36 },
 				{ "PBRParams1", 37 },
-				{ "PBRParams2", 38 },
+				{ "LandscapeTexture2PBRParams", 38 },
+				{ "LandscapeTexture3PBRParams", 39 },
+				{ "LandscapeTexture4PBRParams", 40 },
+				{ "LandscapeTexture5PBRParams", 41 },
+				{ "LandscapeTexture6PBRParams", 42 },
+				{ "PBRParams2", 43 },
 			};
 
 			auto& bloodSplatterVS = result[static_cast<size_t>(RE::BSShader::Type::BloodSplatter)]
