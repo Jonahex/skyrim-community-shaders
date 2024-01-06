@@ -106,8 +106,9 @@ cbuffer PerFrame : register(
 	float SpecularStrength;
 	float SubsurfaceScatteringAmount;
 	bool EnableDirLightFix;
+	bool OverrideComplexGrassSettings;
 	float BasicGrassBrightness;
-	float pad[2];
+	float pad[1];
 }
 
 #ifdef VSHADER
@@ -430,7 +431,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		worldNormal = normalize(mul(normalColor, CalculateTBN(worldNormal, -input.WorldPosition, input.TexCoord.xy)));
 	}
 
-	if (!complex)
+	if (!complex || OverrideComplexGrassSettings)
 		baseColor.xyz *= BasicGrassBrightness;
 
 	float3 dirLightColor = DirLightColor.xyz;
@@ -472,18 +473,17 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		if defined(WETNESS_EFFECTS)
 	float waterSpecular = 0.0;
 
-	float3 puddleCoords = ((input.WorldPosition.xyz + CameraPosAdjust[0]) * 0.5 + 0.5) * lerp(0.03, 0.02, perPassWetnessEffects[0].Wetness);
-	float puddle = pow(saturate(FBM(puddleCoords, 3, 1.0) * 0.5 + 0.5), 1) * perPassWetnessEffects[0].Wetness;
+	float3 puddleCoords = ((input.WorldPosition.xyz + CameraPosAdjust[0]) * 0.5 + 0.5) * 0.01 * perPassWetnessEffects[0].PuddleRadius;
+	float3 puddle = FBM(puddleCoords, 3, 1.0) * 0.5 + 0.5;
+	puddle = lerp(0.2, 1.0, puddle);
+	puddle *= perPassWetnessEffects[0].Wetness * perPassWetnessEffects[0].MaxRainWetness;
+	puddle *= lerp(0.2, 1.0, saturate(worldNormal.z));
 
-	float waterGlossinessSpecular = saturate(worldNormal.z) * max(perPassWetnessEffects[0].Wetness * saturate(worldNormal.z) * 0.5, puddle);
+	float waterGlossinessSpecular = puddle;
+	float waterRoughnessSpecular = lerp(1.0, 0.1, saturate(waterGlossinessSpecular * (1.0 / perPassWetnessEffects[0].PuddleMinWetness)));
 
-	float waterRoughnessSpecular = 1.0 - waterGlossinessSpecular;
-	waterRoughnessSpecular = lerp(perPassWetnessEffects[0].MinRoughness, 1.0, waterRoughnessSpecular);
-
-	if (waterRoughnessSpecular < 1.0) {
-		waterSpecular += GetWetnessSpecular(worldNormal, DirLightDirection, viewDirection, dirLightColor, waterRoughnessSpecular);
-		waterSpecular += GetWetnessAmbientSpecular(worldNormal, viewDirection, 1.0 - waterGlossinessSpecular, 0.02);
-	}
+	if (waterRoughnessSpecular < 1.0)
+		waterSpecular += GetWetnessAmbientSpecular(worldNormal, viewDirection, waterRoughnessSpecular, 0.02);
 #		endif
 
 #		if defined(LIGHT_LIMIT_FIX)
