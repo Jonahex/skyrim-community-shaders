@@ -589,7 +589,7 @@ namespace Hooks
 						lodTexParams[3] = pbrMaterial->terrainTexFade;
 						shadowState->SetPSConstant(lodTexParams, RE::BSGraphics::ConstantGroupLevel::PerMaterial, 24);
 					}
-				} else if (lightingType == None) {
+				} else if (lightingType == None || lightingType == TreeAnim) {
 					auto* pbrMaterial = static_cast<const BSLightingShaderMaterialPBR*>(material);
 					shadowState->SetPSTexture(0, pbrMaterial->diffuseTexture->rendererTexture);
 					shadowState->SetPSTextureAddressMode(0, static_cast<RE::BSGraphics::TextureAddressMode>(pbrMaterial->textureClampMode));

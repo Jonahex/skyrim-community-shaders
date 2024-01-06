@@ -255,7 +255,7 @@ void GetAmbientLightInputPBR(out float3 diffuse, out float3 specular, float3 N, 
 	//averageColor += sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, float3(0, -1, 0), levelCount - 1).xyz);
 	//averageColor += sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, float3(0, 0, 1), levelCount - 1).xyz);
 	//averageColor += sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, float3(0, 0, -1), levelCount - 1).xyz);
-	//averageColor /= 6;
+	//averageColor = max(averageColor / 6, 1e-5);
 	float3 averageColor = max(perPassDynamicCubemaps[0].AverageColor, 1e-5);
 	float averageLuminance = RGBToLuminanceAlternative(averageColor);
 	
@@ -295,7 +295,7 @@ void GetAmbientLightInputPBR(out float3 diffuse, out float3 specular, float3 N, 
 	
 #	if defined(DYNAMIC_CUBEMAPS)
 		float subsurfaceSpecularLevel = diffuseLevel - 2.5f;
-		subsurfaceSpecularIrradiance += specularTexture.SampleLevel(SampColorSampler, -V, diffuseLevel - 2.5f).xyz;
+		subsurfaceSpecularIrradiance += sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, -V, diffuseLevel - 2.5f).xyz);
 		
 		subsurfaceSpecularIrradiance *= weatherAmbientColor / averageColor * 0.5;
 		

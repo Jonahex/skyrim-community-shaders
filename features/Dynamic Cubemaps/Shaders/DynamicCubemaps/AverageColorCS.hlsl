@@ -1,4 +1,5 @@
 #include "Common.hlsli"
+#include "../Common/Color.hlsl"
 
 TextureCube EnvInferredTexture : register(t0);
 
@@ -12,12 +13,12 @@ SamplerState LinearSampler : register(s0);
 	EnvInferredTexture.GetDimensions(0, width, height, levelCount);
 	
 	float3 averageColor = 0;
-	averageColor += EnvInferredTexture.SampleLevel(LinearSampler, float3(1, 0, 0), levelCount).xyz;
-	averageColor += EnvInferredTexture.SampleLevel(LinearSampler, float3(-1, 0, 0), levelCount).xyz;
-	averageColor += EnvInferredTexture.SampleLevel(LinearSampler, float3(0, 1, 0), levelCount).xyz;
-	averageColor += EnvInferredTexture.SampleLevel(LinearSampler, float3(0, -1, 0), levelCount).xyz;
-	averageColor += EnvInferredTexture.SampleLevel(LinearSampler, float3(0, 0, 1), levelCount).xyz;
-	averageColor += EnvInferredTexture.SampleLevel(LinearSampler, float3(0, 0, -1), levelCount).xyz;
+	averageColor += sRGB2Lin(EnvInferredTexture.SampleLevel(LinearSampler, float3(1, 0, 0), levelCount).xyz);
+	averageColor += sRGB2Lin(EnvInferredTexture.SampleLevel(LinearSampler, float3(-1, 0, 0), levelCount).xyz);
+	averageColor += sRGB2Lin(EnvInferredTexture.SampleLevel(LinearSampler, float3(0, 1, 0), levelCount).xyz);
+	averageColor += sRGB2Lin(EnvInferredTexture.SampleLevel(LinearSampler, float3(0, -1, 0), levelCount).xyz);
+	averageColor += sRGB2Lin(EnvInferredTexture.SampleLevel(LinearSampler, float3(0, 0, 1), levelCount).xyz);
+	averageColor += sRGB2Lin(EnvInferredTexture.SampleLevel(LinearSampler, float3(0, 0, -1), levelCount).xyz);
 	averageColor /= 6;
 	
 	AverageColor[0].AverageColor = averageColor;
