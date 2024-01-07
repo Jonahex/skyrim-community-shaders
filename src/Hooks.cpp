@@ -90,12 +90,125 @@ void hk_BSShader_LoadShaders(RE::BSShader* shader, std::uintptr_t stream);
 
 decltype(&hk_BSShader_LoadShaders) ptr_BSShader_LoadShaders;
 
+namespace Permutations
+{
+	template <typename RangeType>
+	std::unordered_set<uint32_t> GenerateFlagPermutations(const RangeType& flags, uint32_t constantFlags)
+	{
+		std::vector<uint32_t> flagValues;
+		std::ranges::transform(flags, std::back_inserter(flagValues), [](auto flag) { return static_cast<uint32_t>(flag); });
+		const uint32_t size = static_cast<uint32_t>(flagValues.size());
+
+		std::unordered_set<uint32_t> result;
+		for (uint32_t mask = 0; mask < (1u << size); ++mask) {
+			uint32_t flag = constantFlags;
+			for (size_t index = 0; index < size; ++index) {
+				if (mask & (1 << index)) {
+					flag |= flagValues[index];
+				}
+			}
+			result.insert(flag);
+		}
+
+		return result;
+	}
+
+	uint32_t GetLightingShaderDescriptor(SIE::ShaderCache::LightingShaderTechniques technique, uint32_t flags)
+	{
+		return ((static_cast<uint32_t>(technique) & 0x3F) << 24) | flags;
+	}
+
+	void AddLightingShaderDescriptors(SIE::ShaderCache::LightingShaderTechniques technique, const std::unordered_set<uint32_t>& flags, std::unordered_set<uint32_t>& result)
+	{
+		for (uint32_t flag : flags) {
+			result.insert(GetLightingShaderDescriptor(technique, flag));
+		}
+	}
+
+	std::unordered_set<uint32_t> GeneratePBRLightingVertexPermutations()
+	{
+		using enum SIE::ShaderCache::LightingShaderFlags;
+
+		constexpr std::array defaultFlags{ VC, Skinned, WorldMap };
+		constexpr std::array treeFlags{ VC, Skinned };
+		constexpr std::array landFlags{ VC };
+		constexpr std::array lodLandFlags{ VC, WorldMap };
+
+		constexpr uint32_t defaultConstantFlags = static_cast<uint32_t>(TruePbr);
+		constexpr uint32_t landNoiseConstantFlags = static_cast<uint32_t>(TruePbr) | static_cast<uint32_t>(ModelSpaceNormals);
+
+		const std::unordered_set<uint32_t> defaultFlagValues = GenerateFlagPermutations(defaultFlags, defaultConstantFlags);
+		const std::unordered_set<uint32_t> treeFlagValues = GenerateFlagPermutations(treeFlags, defaultConstantFlags);
+		const std::unordered_set<uint32_t> landFlagValues = GenerateFlagPermutations(landFlags, defaultConstantFlags);
+		const std::unordered_set<uint32_t> lodLandFlagValues = GenerateFlagPermutations(lodLandFlags, defaultConstantFlags);
+		const std::unordered_set<uint32_t> lodLandNoiseFlagValues = GenerateFlagPermutations(landFlags, landNoiseConstantFlags);
+
+		std::unordered_set<uint32_t> result;
+		AddLightingShaderDescriptors(SIE::ShaderCache::LightingShaderTechniques::None, defaultFlagValues, result);
+		AddLightingShaderDescriptors(SIE::ShaderCache::LightingShaderTechniques::TreeAnim, treeFlagValues, result);
+		AddLightingShaderDescriptors(SIE::ShaderCache::LightingShaderTechniques::MTLand, landFlagValues, result);
+		AddLightingShaderDescriptors(SIE::ShaderCache::LightingShaderTechniques::MTLandLODBlend, landFlagValues, result);
+		AddLightingShaderDescriptors(SIE::ShaderCache::LightingShaderTechniques::LODLand, lodLandFlagValues, result);
+		AddLightingShaderDescriptors(SIE::ShaderCache::LightingShaderTechniques::LODLandNoise, lodLandNoiseFlagValues, result);
+		return result;
+	}
+
+	std::unordered_set<uint32_t> GeneratePBRLightingPixelPermutations()
+	{
+		using enum SIE::ShaderCache::LightingShaderFlags;
+
+		constexpr std::array defaultFlags{ Skinned, DoAlphaTest, AdditionalAlphaMask };
+		constexpr std::array lodObjectsFlags{ WorldMap, DoAlphaTest, AdditionalAlphaMask };
+		constexpr std::array treeFlags{ Skinned, DoAlphaTest, AdditionalAlphaMask };
+		constexpr std::array lodLandFlags{ WorldMap };
+
+		constexpr uint32_t defaultConstantFlags = static_cast<uint32_t>(TruePbr) | static_cast<uint32_t>(VC);
+		constexpr uint32_t lodLandNoiseConstantFlags = static_cast<uint32_t>(TruePbr) | static_cast<uint32_t>(VC) | static_cast<uint32_t>(ModelSpaceNormals);
+
+		const std::unordered_set<uint32_t> defaultFlagValues = GenerateFlagPermutations(defaultFlags, defaultConstantFlags);
+		const std::unordered_set<uint32_t> lodObjectsFlagValues = GenerateFlagPermutations(lodObjectsFlags, defaultConstantFlags);
+		const std::unordered_set<uint32_t> treeFlagValues = GenerateFlagPermutations(treeFlags, defaultConstantFlags);
+		const std::unordered_set<uint32_t> landFlagValues = { defaultConstantFlags };
+		const std::unordered_set<uint32_t> lodLandFlagValues = GenerateFlagPermutations(lodLandFlags, defaultConstantFlags);
+		const std::unordered_set<uint32_t> lodLandNoiseFlagValues = GenerateFlagPermutations(lodLandFlags, lodLandNoiseConstantFlags);
+
+		std::unordered_set<uint32_t> result;
+		AddLightingShaderDescriptors(SIE::ShaderCache::LightingShaderTechniques::None, defaultFlagValues, result);
+		AddLightingShaderDescriptors(SIE::ShaderCache::LightingShaderTechniques::LODObjects, lodObjectsFlagValues, result);
+		AddLightingShaderDescriptors(SIE::ShaderCache::LightingShaderTechniques::LODObjectHD, lodObjectsFlagValues, result);
+		AddLightingShaderDescriptors(SIE::ShaderCache::LightingShaderTechniques::TreeAnim, treeFlagValues, result);
+		AddLightingShaderDescriptors(SIE::ShaderCache::LightingShaderTechniques::MTLand, landFlagValues, result);
+		AddLightingShaderDescriptors(SIE::ShaderCache::LightingShaderTechniques::MTLandLODBlend, landFlagValues, result);
+		AddLightingShaderDescriptors(SIE::ShaderCache::LightingShaderTechniques::LODLand, lodLandFlagValues, result);
+		AddLightingShaderDescriptors(SIE::ShaderCache::LightingShaderTechniques::LODLandNoise, lodLandNoiseFlagValues, result);
+		return result;
+	}
+}
+
 void hk_BSShader_LoadShaders(RE::BSShader* shader, std::uintptr_t stream)
 {
 	(ptr_BSShader_LoadShaders)(shader, stream);
 	auto& shaderCache = SIE::ShaderCache::Instance();
 
 	if (shaderCache.IsDiskCache() || shaderCache.IsDump()) {
+		if (shaderCache.IsDiskCache() && shader->shaderType == RE::BSShader::Type::Lighting) {
+			const auto vertexPermutations = Permutations::GeneratePBRLightingVertexPermutations();
+			for (auto descriptor : vertexPermutations) {
+				auto vertexShaderDesriptor = descriptor;
+				auto pixelShaderDescriptor = descriptor;
+				State::GetSingleton()->ModifyShaderLookup(*shader, vertexShaderDesriptor, pixelShaderDescriptor);
+				shaderCache.GetVertexShader(*shader, vertexShaderDesriptor);
+			}
+
+			const auto pixelPermutations = Permutations::GeneratePBRLightingPixelPermutations();
+			for (auto descriptor : pixelPermutations) {
+				auto vertexShaderDesriptor = descriptor;
+				auto pixelShaderDescriptor = descriptor;
+				State::GetSingleton()->ModifyShaderLookup(*shader, vertexShaderDesriptor, pixelShaderDescriptor);
+				shaderCache.GetPixelShader(*shader, pixelShaderDescriptor);
+			}
+		}
+
 		for (const auto& entry : shader->vertexShaders) {
 			if (entry->shader && shaderCache.IsDump()) {
 				auto& bytecode = GetShaderBytecode(entry->shader);
@@ -120,11 +233,11 @@ void hk_BSShader_LoadShaders(RE::BSShader* shader, std::uintptr_t stream)
 	BSShaderHooks::hk_LoadShaders((REX::BSShader*)shader, stream);
 };
 
-bool hk_BSShader_BeginTechnique(RE::BSShader* shader, int vertexDescriptor, int pixelDescriptor, bool skipPixelShader);
+bool hk_BSShader_BeginTechnique(RE::BSShader* shader, uint32_t vertexDescriptor, uint32_t pixelDescriptor, bool skipPixelShader);
 
 decltype(&hk_BSShader_BeginTechnique) ptr_BSShader_BeginTechnique;
 
-bool hk_BSShader_BeginTechnique(RE::BSShader* shader, int vertexDescriptor, int pixelDescriptor, bool skipPixelShader)
+bool hk_BSShader_BeginTechnique(RE::BSShader* shader, uint32_t vertexDescriptor, uint32_t pixelDescriptor, bool skipPixelShader)
 {
 	auto state = State::GetSingleton();
 	state->currentShader = shader;
@@ -137,6 +250,7 @@ bool hk_BSShader_BeginTechnique(RE::BSShader* shader, int vertexDescriptor, int 
 	}
 
 	auto& shaderCache = SIE::ShaderCache::Instance();
+	State::GetSingleton()->ModifyShaderLookup(*shader, vertexDescriptor, pixelDescriptor);
 	RE::BSGraphics::VertexShader* vertexShader = shaderCache.GetVertexShader(*shader, vertexDescriptor);
 	RE::BSGraphics::PixelShader* pixelShader = shaderCache.GetPixelShader(*shader, pixelDescriptor);
 	if (vertexShader == nullptr || pixelShader == nullptr) {
@@ -427,7 +541,7 @@ namespace Hooks
 				} else if (property->flags.any(kRimLighting)) {
 					pbrMaterial->pbrFlags.set(PBRFlags::Subsurface);
 				}
-				property->flags.reset(kSpecular, kGlowMap, kEnvMap, kSoftLighting, kRimLighting, kBackLighting);
+				property->flags.reset(kSpecular, kGlowMap, kEnvMap, kSoftLighting, kRimLighting, kBackLighting, kAnisotropicLighting);
 			}
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
@@ -866,7 +980,6 @@ namespace Hooks
 				shaderProperty->SetFlags(RE::BSShaderProperty::EShaderPropertyFlag8::kReceiveShadows, true);
 				shaderProperty->SetFlags(RE::BSShaderProperty::EShaderPropertyFlag8::kCastShadows, bDrawLandShadows);
 				shaderProperty->SetFlags(RE::BSShaderProperty::EShaderPropertyFlag8::kNoLODLandBlend, noLODLandBlend);
-				shaderProperty->SetFlags(RE::BSShaderProperty::EShaderPropertyFlag8::kSpecular, bLandSpecular);
 
 				//shaderProperty->AddExtraData("__PBR__", RE::NiExtraData::Create<RE::NiExtraData>());
 				shaderProperty->SetFlags(RE::BSShaderProperty::EShaderPropertyFlag8::kMenuScreen, true);
