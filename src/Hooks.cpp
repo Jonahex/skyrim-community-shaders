@@ -130,14 +130,17 @@ namespace Permutations
 		using enum SIE::ShaderCache::LightingShaderFlags;
 
 		constexpr std::array defaultFlags{ VC, Skinned, WorldMap };
+		constexpr std::array projectedUvFlags{ VC, WorldMap };
 		constexpr std::array treeFlags{ VC, Skinned };
 		constexpr std::array landFlags{ VC };
 		constexpr std::array lodLandFlags{ VC, WorldMap };
 
 		constexpr uint32_t defaultConstantFlags = static_cast<uint32_t>(TruePbr);
+		constexpr uint32_t projectedUvConstantFlags = static_cast<uint32_t>(TruePbr) | static_cast<uint32_t>(ProjectedUV);
 		constexpr uint32_t landNoiseConstantFlags = static_cast<uint32_t>(TruePbr) | static_cast<uint32_t>(ModelSpaceNormals);
 
 		const std::unordered_set<uint32_t> defaultFlagValues = GenerateFlagPermutations(defaultFlags, defaultConstantFlags);
+		const std::unordered_set<uint32_t> projectedUvFlagValues = GenerateFlagPermutations(projectedUvFlags, projectedUvConstantFlags);
 		const std::unordered_set<uint32_t> treeFlagValues = GenerateFlagPermutations(treeFlags, defaultConstantFlags);
 		const std::unordered_set<uint32_t> landFlagValues = GenerateFlagPermutations(landFlags, defaultConstantFlags);
 		const std::unordered_set<uint32_t> lodLandFlagValues = GenerateFlagPermutations(lodLandFlags, defaultConstantFlags);
@@ -145,6 +148,7 @@ namespace Permutations
 
 		std::unordered_set<uint32_t> result;
 		AddLightingShaderDescriptors(SIE::ShaderCache::LightingShaderTechniques::None, defaultFlagValues, result);
+		AddLightingShaderDescriptors(SIE::ShaderCache::LightingShaderTechniques::None, projectedUvFlagValues, result);
 		AddLightingShaderDescriptors(SIE::ShaderCache::LightingShaderTechniques::TreeAnim, treeFlagValues, result);
 		AddLightingShaderDescriptors(SIE::ShaderCache::LightingShaderTechniques::MTLand, landFlagValues, result);
 		AddLightingShaderDescriptors(SIE::ShaderCache::LightingShaderTechniques::MTLandLODBlend, landFlagValues, result);
@@ -158,14 +162,17 @@ namespace Permutations
 		using enum SIE::ShaderCache::LightingShaderFlags;
 
 		constexpr std::array defaultFlags{ Skinned, DoAlphaTest, AdditionalAlphaMask };
-		constexpr std::array lodObjectsFlags{ WorldMap, DoAlphaTest, AdditionalAlphaMask };
+		constexpr std::array projectedUvFlags{ DoAlphaTest, AdditionalAlphaMask, Snow, BaseObjectIsSnow };
+		constexpr std::array lodObjectsFlags{ WorldMap, DoAlphaTest, AdditionalAlphaMask, ProjectedUV };
 		constexpr std::array treeFlags{ Skinned, DoAlphaTest, AdditionalAlphaMask };
 		constexpr std::array lodLandFlags{ WorldMap };
 
 		constexpr uint32_t defaultConstantFlags = static_cast<uint32_t>(TruePbr) | static_cast<uint32_t>(VC);
+		constexpr uint32_t projectedUvConstantFlags = static_cast<uint32_t>(TruePbr) | static_cast<uint32_t>(VC) | static_cast<uint32_t>(ProjectedUV);
 		constexpr uint32_t lodLandNoiseConstantFlags = static_cast<uint32_t>(TruePbr) | static_cast<uint32_t>(VC) | static_cast<uint32_t>(ModelSpaceNormals);
 
 		const std::unordered_set<uint32_t> defaultFlagValues = GenerateFlagPermutations(defaultFlags, defaultConstantFlags);
+		const std::unordered_set<uint32_t> projectedUvFlagValues = GenerateFlagPermutations(projectedUvFlags, projectedUvConstantFlags);
 		const std::unordered_set<uint32_t> lodObjectsFlagValues = GenerateFlagPermutations(lodObjectsFlags, defaultConstantFlags);
 		const std::unordered_set<uint32_t> treeFlagValues = GenerateFlagPermutations(treeFlags, defaultConstantFlags);
 		const std::unordered_set<uint32_t> landFlagValues = { defaultConstantFlags };
@@ -174,6 +181,7 @@ namespace Permutations
 
 		std::unordered_set<uint32_t> result;
 		AddLightingShaderDescriptors(SIE::ShaderCache::LightingShaderTechniques::None, defaultFlagValues, result);
+		AddLightingShaderDescriptors(SIE::ShaderCache::LightingShaderTechniques::None, projectedUvFlagValues, result);
 		AddLightingShaderDescriptors(SIE::ShaderCache::LightingShaderTechniques::LODObjects, lodObjectsFlagValues, result);
 		AddLightingShaderDescriptors(SIE::ShaderCache::LightingShaderTechniques::LODObjectHD, lodObjectsFlagValues, result);
 		AddLightingShaderDescriptors(SIE::ShaderCache::LightingShaderTechniques::TreeAnim, treeFlagValues, result);
