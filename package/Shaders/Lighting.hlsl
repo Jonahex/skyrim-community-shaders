@@ -1500,15 +1500,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		endif  // SNOW
 #	endif      // LANDSCAPE
 
-#	if !defined(LANDSCAPE)
-	float4 backLightColor = 1.0;
-	if (shaderDescriptors[0].PixelShaderDescriptor & _BackLighting)
-		backLightColor = TexBackLightSampler.Sample(SampBackLightSampler, uv);
+#	if defined(BACK_LIGHTING)
+	float4 backLightColor = TexBackLightSampler.Sample(SampBackLightSampler, uv);
+#	endif  // BACK_LIGHTING
 
-	float4 rimSoftLightColor = 1.0;
-	if ((shaderDescriptors[0].PixelShaderDescriptor & _SoftLighting) || (shaderDescriptors[0].PixelShaderDescriptor & _RimLighting))
-		rimSoftLightColor = TexRimSoftLightWorldMapOverlaySampler.Sample(SampRimSoftLightWorldMapOverlaySampler, uv);
-#	endif  // !defined (LANDSCAPE)
+#	if defined(RIM_LIGHTING) || defined(SOFT_LIGHTING)
+	float4 rimSoftLightColor = TexRimSoftLightWorldMapOverlaySampler.Sample(SampRimSoftLightWorldMapOverlaySampler, uv);
+#	endif  // RIM_LIGHTING || SOFT_LIGHTING
 
 	float numLights = min(7, NumLightNumShadowLight.x);
 	float numShadowLights = min(4, NumLightNumShadowLight.y);
@@ -1530,15 +1528,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	endif      // defined (MODELSPACENORMALS) && !defined (SKINNED)
 
 	float2 baseShadowUV = 1.0.xx;
-	float4 shadowColor;
-	if (shaderDescriptors[0].PixelShaderDescriptor & _DefShadow) {
-		if ((shaderDescriptors[0].PixelShaderDescriptor & _ShadowDir) || numShadowLights > 0) {
-			baseShadowUV = input.Position.xy * DynamicResolutionParams2.xy;
-			float2 shadowUV = min(float2(DynamicResolutionParams2.z, DynamicResolutionParams1.y), max(0.0.xx, DynamicResolutionParams1.xy * (baseShadowUV * VPOSOffset.xy + VPOSOffset.zw)));
-			shadowColor = TexShadowMaskSampler.Sample(SampShadowMaskSampler, shadowUV);
-		} else {
-			shadowColor = 1.0.xxxx;
-		}
+	float4 shadowColor = 1.0;
+	if (shaderDescriptors[0].PixelShaderDescriptor & _DefShadow && (shaderDescriptors[0].PixelShaderDescriptor & _ShadowDir) || numShadowLights > 0) {
+		baseShadowUV = input.Position.xy * DynamicResolutionParams2.xy;
+		float2 shadowUV = min(float2(DynamicResolutionParams2.z, DynamicResolutionParams1.y), max(0.0.xx, DynamicResolutionParams1.xy * (baseShadowUV * VPOSOffset.xy + VPOSOffset.zw)));
+		shadowColor = TexShadowMaskSampler.Sample(SampShadowMaskSampler, shadowUV);
 	}
 
 	float texProjTmp = 0;
@@ -1557,9 +1551,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	texProjTmp += (-0.5 + input.Color.w) * 2.5;
 #		endif  // LODOBJECTSHD
 #		if defined(SPARKLE)
-	if (texProjTmp < 0) {
+	if (texProjTmp < 0)
 		discard;
-	}
 
 	modelNormal.xyz = projectedNormal;
 #			if defined(SNOW)
@@ -1676,8 +1669,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		endif
 
 #		if (!defined(DRAW_IN_WORLDSPACE))
-	if (!input.WorldSpace)
-		normalizedDirLightDirectionWS = normalize(mul(input.World[eyeIndex], float4(normalizedDirLightDirectionWS, 0)));
+	normalizedDirLightDirectionWS = lerp(normalize(mul(input.World[eyeIndex], float4(DirLightDirection, 0))), normalizedDirLightDirectionWS, input.WorldSpace);
 #		endif
 #	endif
 
@@ -1785,10 +1777,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	cellInt = round(cellF);
 
 	uint waterTile = (uint)clamp(cellInt.x + (cellInt.y * 5), 0, 24);  // remap xy to 0-24
-	float waterHeight = -2147483648;                                   // lowest 32-bit integer
-
-	if (cellInt.x < 5 && cellInt.x >= 0 && cellInt.y < 5 && cellInt.y >= 0)
-		waterHeight = lightingData[0].WaterHeight[waterTile];
+	float waterHeight = lerp(-2147483648, lightingData[0].WaterHeight[waterTile], cellInt.x < 5 && cellInt.x >= 0 && cellInt.y < 5 && cellInt.y >= 0);
 #	endif
 
 #	if defined(WETNESS_EFFECTS)
@@ -1823,11 +1812,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		puddle = FBM(puddleCoords, 3, 1.0) * 0.5 + 0.5;
 		puddle = lerp(0.2, 1.0, puddle);
 		puddle *= wetness;
-		if (shaderDescriptors[0].PixelShaderDescriptor & _DefShadow) {
-			if (shaderDescriptors[0].PixelShaderDescriptor & _ShadowDir) {
-				float upAngle = saturate(dot(float3(0, 0, 1), normalizedDirLightDirectionWS.xyz));
-				puddle *= lerp(1.0, shadowColor.x, upAngle * 0.2);
-			}
+		if (shaderDescriptors[0].PixelShaderDescriptor & _DefShadow && shaderDescriptors[0].PixelShaderDescriptor & _ShadowDir) {
+			float upAngle = saturate(dot(float3(0, 0, 1), normalizedDirLightDirectionWS.xyz));
+			puddle *= lerp(1.0, shadowColor.x, upAngle * 0.2);
 		}
 	}
 
@@ -1851,8 +1838,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float wetnessGlossinessSpecular = puddle;
 
 #		if !defined(LOD)
-	if (input.WorldPosition.z < waterHeight)
-		wetnessGlossinessSpecular *= shoreFactor;
+	wetnessGlossinessSpecular = lerp(wetnessGlossinessSpecular, wetnessGlossinessSpecular * shoreFactor, input.WorldPosition.z < waterHeight);
 #		endif
 
 #		if !defined(MODELSPACENORMALS)
@@ -1909,9 +1895,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 			float3 normalizedLightDirection = normalize(lightDirection);
 			float3 normalizedLightDirectionWS = normalizedLightDirection;
 #		if (defined(SKINNED) || !defined(MODELSPACENORMALS)) && !defined(DRAW_IN_WORLDSPACE)
-			if (!input.WorldSpace) {
-				normalizedLightDirectionWS = normalize(mul(input.World[eyeIndex], float4(normalizedLightDirection, 0)));
-			}
+			normalizedLightDirectionWS = lerp(normalize(mul(input.World[eyeIndex], float4(normalizedLightDirection, 0))), normalizedLightDirectionWS, input.WorldSpace);
 #		endif
 
 #		if defined(LIGHT_LIMIT_FIX)
@@ -1930,10 +1914,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 			if (perPassParallax[0].EnableShadows) {
 				float3 lightDirectionTS = mul(normalizedLightDirection, tbn).xyz;
 
-				bool lightIsLit = true;
-
-				if (shadowComponent.x == 0)
-					lightIsLit = false;
+				bool lightIsLit = shadowComponent.x > 0.0;
 
 #			if defined(PARALLAX)
 				if (perPassParallax[0].EnableParallax)
@@ -1994,30 +1975,29 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	uint lightCount = 0;
 	uint clusterIndex = 0;
 
-#		if defined(LIGHT_LIMIT_FIX)
+#	if defined(LIGHT_LIMIT_FIX)
 	if (perPassLLF[0].EnableGlobalLights && GetClusterIndex(screenUV, viewPosition.z, clusterIndex)) {
 		lightCount = lightGrid[clusterIndex].lightCount;
 
-		if (lightCount) {
-			uint lightOffset = lightGrid[clusterIndex].offset;
-			float shadowQualityScale = saturate(1.0 - ((float)lightCount / 128.0));
+		uint lightOffset = lightGrid[clusterIndex].offset;
+		float shadowQualityScale = saturate(1.0 - ((float)lightCount / 128.0));
 
 #			if defined(ANISO_LIGHTING)
-			input.TBN0.z = worldSpaceVertexNormal[0];
-			input.TBN1.z = worldSpaceVertexNormal[1];
-			input.TBN2.z = worldSpaceVertexNormal[2];
+		input.TBN0.z = worldSpaceVertexNormal[0];
+		input.TBN1.z = worldSpaceVertexNormal[1];
+		input.TBN2.z = worldSpaceVertexNormal[2];
 #			endif
 
-			[loop] for (uint i = 0; i < lightCount; i++)
-			{
-				uint light_index = lightList[lightOffset + i];
-				StructuredLight light = lights[light_index];
+		[loop] for (uint i = 0; i < lightCount; i++)
+		{
+			uint light_index = lightList[lightOffset + i];
+			StructuredLight light = lights[light_index];
 
-				float3 lightDirection = light.positionWS[eyeIndex].xyz - input.WorldPosition.xyz;
-				float lightDist = length(lightDirection);
-				float intensityFactor = saturate(lightDist / light.radius);
-				if (intensityFactor == 1)
-					continue;
+			float3 lightDirection = light.positionWS[eyeIndex].xyz - input.WorldPosition.xyz;
+			float lightDist = length(lightDirection);
+			float intensityFactor = saturate(lightDist / light.radius);
+			if (intensityFactor == 1)
+				continue;
 
 				float intensityMultiplier = 1 - intensityFactor * intensityFactor;
 				float3 refLightColor = light.color.xyz;
@@ -2041,13 +2021,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #			else
 							lightShadow *= lerp(contactShadow, 1.0, !frontFace * 0.2);
 #			endif
-						}
 					}
 				}
+			}
 
 #			if defined(CPM_AVAILABLE)
-				if (perPassParallax[0].EnableShadows) {
-					float3 lightDirectionTS = mul(normalizedLightDirection, tbn).xyz;
+			if (perPassParallax[0].EnableShadows) {
+				float3 lightDirectionTS = mul(normalizedLightDirection, tbn).xyz;
 
 #				if defined(PARALLAX)
 					if (perPassParallax[0].EnableParallax)
@@ -2062,7 +2042,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 					if (PBRParallax)
 						lightShadow *= GetParallaxSoftShadowMultiplier(uv, mipLevel, lightDirectionTS, sh0, TexParallaxSampler, SampParallaxSampler, 0, parallaxShadowQuality, displacementScale);
 #				endif
-				}
+			}
 #			endif
 
 			lightColor *= lightShadow;
@@ -2103,7 +2083,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #				endif
 			}
 		}
-	}
 #		endif
 #	endif
 
