@@ -611,6 +611,7 @@ namespace Hooks
 			auto lightingType = static_cast<SIE::ShaderCache::LightingShaderTechniques>((shader->currentRawTechnique >> 24) & 0x3F);
 			if (!(lightingType == LODLand || lightingType == LODLandNoise) && (lightingFlags & static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::TruePbr))) {
 				auto shadowState = RE::BSGraphics::RendererShadowState::GetSingleton();
+				auto renderer = RE::BSGraphics::Renderer::GetSingleton();
 
 				RE::BSGraphics::Renderer::PrepareVSConstantGroup(RE::BSGraphics::ConstantGroupLevel::PerMaterial);
 				RE::BSGraphics::Renderer::PreparePSConstantGroup(RE::BSGraphics::ConstantGroupLevel::PerMaterial);
@@ -688,7 +689,8 @@ namespace Hooks
 						lodTexParams[3] = pbrMaterial->terrainTexFade;
 						shadowState->SetPSConstant(lodTexParams, RE::BSGraphics::ConstantGroupLevel::PerMaterial, 24);
 					}
-				} else if (lightingType == LODLand || lightingType == LODLandNoise) {
+				} 
+				else if (lightingType == LODLand || lightingType == LODLandNoise) {
 					auto* pbrMaterial = static_cast<const RE::BSLightingShaderMaterialLODLandscape*>(material);
 
 					shadowState->SetPSTexture(0, pbrMaterial->diffuseTexture->rendererTexture);
@@ -711,7 +713,8 @@ namespace Hooks
 						lodTexParams[3] = pbrMaterial->terrainTexFade;
 						shadowState->SetPSConstant(lodTexParams, RE::BSGraphics::ConstantGroupLevel::PerMaterial, 24);
 					}
-				} else if (lightingType == None || lightingType == TreeAnim) {
+				} 
+				else if (lightingType == None || lightingType == TreeAnim) {
 					auto* pbrMaterial = static_cast<const BSLightingShaderMaterialPBR*>(material);
 					shadowState->SetPSTexture(0, pbrMaterial->diffuseTexture->rendererTexture);
 					shadowState->SetPSTextureAddressMode(0, static_cast<RE::BSGraphics::TextureAddressMode>(pbrMaterial->textureClampMode));
@@ -790,6 +793,26 @@ namespace Hooks
 					texCoordOffsetScale[2] = material->texCoordScale[bufferIndex].x;
 					texCoordOffsetScale[3] = material->texCoordScale[bufferIndex].y;
 					shadowState->SetVSConstant(texCoordOffsetScale, RE::BSGraphics::ConstantGroupLevel::PerMaterial, 11);
+				}
+
+				if (lightingFlags & static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::CharacterLight)) {
+					static const REL::Relocation<RE::ImageSpaceTexture*> characterLightTexture{ RELOCATION_ID(513464, 391302) };
+
+					if (characterLightTexture->renderTarget >= RE::RENDER_TARGET::kFRAMEBUFFER) {
+						shadowState->SetPSTexture(11, renderer->GetRuntimeData().renderTargets[characterLightTexture->renderTarget]);
+						shadowState->SetPSTextureAddressMode(11, RE::BSGraphics::TextureAddressMode::kClampSClampT);
+					}
+
+					const auto& state = RE::BSShaderManager::State::GetSingleton();
+					std::array<float, 4> characterLightParams;
+					if (state.characterLightEnabled) {
+						std::copy_n(state.characterLightParams, 4, characterLightParams.data());
+					}
+					else
+					{
+						std::fill_n(characterLightParams.data(), 4, 0.f);
+					}
+					shadowState->SetPSConstant(characterLightParams, RE::BSGraphics::ConstantGroupLevel::PerMaterial, 35);
 				}
 
 				RE::BSGraphics::Renderer::FlushVSConstantGroup(RE::BSGraphics::ConstantGroupLevel::PerMaterial);

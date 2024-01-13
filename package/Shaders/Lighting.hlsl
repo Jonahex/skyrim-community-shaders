@@ -1123,7 +1123,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	}
 #		endif  // ENVMAP
 
-#		if defined(TRUE_PBR) && !defined(LANDSCAPE) && !defined(PROJECTED_UV)
+#		if defined(TRUE_PBR) && !defined(LANDSCAPE) && !defined(LODLANDSCAPE) && !defined(PROJECTED_UV)
 	bool PBRParallax = false;
 	[branch] if ((PBRFlags & 16) != 0) {
 		PBRParallax = true;
@@ -1631,7 +1631,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	
 	ao = AOMultiBounce(RGBToLuminanceAlternative(f0), rawRMAOS.z).y;
 	
-#		if !defined(LANDSCAPE)
+#		if !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
 	subsurfaceColor = PBRParams2.xyz;
 	subsurfaceOpacity = PBRParams2.w;
 	[branch] if ((PBRFlags & 2) != 0)
@@ -1674,6 +1674,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	endif
 
 	float3 dirLightColor = DirLightColor.xyz;
+#	if defined(TRUE_PBR)
+	dirLightColor = sRGB2Lin(dirLightColor);
+#	endif
 	float selfShadowFactor = 1.0f;
 
 	float3 nsDirLightColor = dirLightColor;
@@ -1880,6 +1883,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 			float3 refLightColor = PointLightColor[lightIndex].xyz;
 			float3 lightColor = refLightColor * intensityMultiplier;
 #		endif
+#		if defined(TRUE_PBR)
+			lightColor = sRGB2Lin(lightColor);
+#		endif
 			float3 nsLightColor = lightColor;
 			
 			float lightShadow = 1.f;
@@ -2002,6 +2008,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 				float intensityMultiplier = 1 - intensityFactor * intensityFactor;
 				float3 refLightColor = light.color.xyz;
 				float3 lightColor = refLightColor * intensityMultiplier;
+#			if defined(TRUE_PBR)
+				lightColor = sRGB2Lin(lightColor);
+#			endif
 				float3 nsLightColor = lightColor;
 				float3 normalizedLightDirection = normalize(lightDirection);
 				
@@ -2143,7 +2152,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	endif  // defined (ENVMAP) || defined (MULTI_LAYER_PARALLAX) || defined(EYE)
 
 	float3 emitColor = EmitColor;
-#	if !defined(LANDSCAPE)
+#	if !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
 	[branch] if ((0x3F & (shaderDescriptors[0].PixelShaderDescriptor >> 24)) == _Glowmap || (PBRFlags & 0x1 != 0)) {
 		float3 glowColor = TexGlowSampler.Sample(SampGlowSampler, uv).xyz;
 		emitColor *= glowColor;
@@ -2256,7 +2265,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	
 #	if defined(TRUE_PBR)
 	color.xyz += specularColorPBR;
-	//color.xyz *= ao;
 #	endif
 
 #	if defined(SPECULAR) || defined(SPARKLE)

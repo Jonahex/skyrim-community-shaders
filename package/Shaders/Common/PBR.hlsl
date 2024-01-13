@@ -91,7 +91,7 @@ float GetGeometryFunctionSmithJointApprox(float roughness, float NdotV, float Nd
 float GetDistributionFunctionGGX(float roughness, float NdotH)
 {
 	float a2 = pow(roughness, 4);
-	float d = (NdotH * a2 - NdotH) * NdotH + 1;  // 2 mad
+	float d = max((NdotH * a2 - NdotH) * NdotH + 1, 1e-5);  // 2 mad
 	return a2 / (PI * d * d);                    // 4 mul, 1 rcp
 }
 
@@ -171,7 +171,7 @@ void GetDirectLightInputPBR(out float3 diffuse, out float3 transmission, out flo
 	diffuse *= 1 - RGBToLuminanceAlternative(E);
 	specular *= W;
 	
-#if !defined(LANDSCAPE)
+#if !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
 	[branch] if ((PBRFlags & 4) != 0) // Two-sided foliage
 	{
 		float wrap = 0.5;
@@ -232,6 +232,9 @@ void GetAmbientLightInputPBR(out float3 diffuse, out float3 specular, float3 N, 
 	float3 R = normalize(reflect(-V, N));
 	R = GetOffSpecularPeakReflectionDirection(N, R, roughness);
 	
+	float diffuseFactor = 0.5f;
+    float specularFactor = 0.5f;
+	
 	float weatherAmbientColor = float3(DirectionalAmbient[0].w, DirectionalAmbient[1].w, DirectionalAmbient[2].w);
 	float weatherAmbientLuminance = RGBToLuminanceAlternative(weatherAmbientColor);
 	
@@ -262,14 +265,14 @@ void GetAmbientLightInputPBR(out float3 diffuse, out float3 specular, float3 N, 
 	diffuseIrradiance += sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, N, diffuseLevel).xyz);
 	specularIrradiance += sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, R, specularLevel).xyz);
 	
-	diffuseIrradiance *= weatherAmbientColor / averageColor * 0.5;
-	specularIrradiance *= weatherAmbientColor / averageColor * 0.5;
+	diffuseIrradiance *= weatherAmbientColor / averageColor * diffuseFactor;
+	specularIrradiance *= weatherAmbientColor / averageColor * specularFactor;
 	
-	//diffuseIrradiance *= weatherAmbientLuminance / averageLuminance * 0.5;
-	//specularIrradiance *= weatherAmbientLuminance / averageLuminance * 0.5;
+	//diffuseIrradiance *= weatherAmbientLuminance / averageLuminance * diffuseFactor;
+	//specularIrradiance *= weatherAmbientLuminance / averageLuminance * specularFactor;
 #	else
-	diffuseIrradiance += directionalAmbientDiffuseColor * 0.5;
-	specularIrradiance += directionalAmbientSpecularColor * 0.5;
+	diffuseIrradiance += directionalAmbientDiffuseColor * diffuseFactor;
+	specularIrradiance += directionalAmbientSpecularColor * specularFactor;
 #	endif
 	
 	// Split-sum approximation factors for Cook-Torrance specular BRDF.
@@ -283,11 +286,10 @@ void GetAmbientLightInputPBR(out float3 diffuse, out float3 specular, float3 N, 
 	specular += specularIrradiance * (specularColor * specularBRDF.x + saturate(50.0 * specularColor.g) * specularBRDF.y);
 
 	// Subsurface
-#if !defined(LANDSCAPE)
+#if !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
 	[branch] if((PBRFlags & 8) != 0) // Subsurface
 	{
-		float dependentSplit = 0.5f;
-		diffuse += diffuseIrradiance * subsurfaceColor * dependentSplit;
+		diffuse += diffuseIrradiance * subsurfaceColor * diffuseFactor;
 		
 		float3 directionalAmbientSubsurfaceSpecularColor = mul(DirectionalAmbient, float4(-V, 1.f));
 		
@@ -297,13 +299,13 @@ void GetAmbientLightInputPBR(out float3 diffuse, out float3 specular, float3 N, 
 		float subsurfaceSpecularLevel = diffuseLevel - 2.5f;
 		subsurfaceSpecularIrradiance += sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, -V, diffuseLevel - 2.5f).xyz);
 		
-		subsurfaceSpecularIrradiance *= weatherAmbientColor / averageColor * 0.5;
+		subsurfaceSpecularIrradiance *= weatherAmbientColor / averageColor;
 		
-		//subsurfaceSpecularIrradiance *= weatherAmbientLuminance / averageLuminance * 0.5;
+		//subsurfaceSpecularIrradiance *= weatherAmbientLuminance / averageLuminance;
 #	else
-		subsurfaceSpecularIrradiance += directionalAmbientSubsurfaceSpecularColor * 0.5;
+		subsurfaceSpecularIrradiance += directionalAmbientSubsurfaceSpecularColor;
 #	endif
-		specular += subsurfaceSpecularIrradiance * subsurfaceColor * (ao * (1.0f - dependentSplit));
+		specular += subsurfaceSpecularIrradiance * subsurfaceColor * (ao * specularFactor);
 	}
 #	endif
 	
