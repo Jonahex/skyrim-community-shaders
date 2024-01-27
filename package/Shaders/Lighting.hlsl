@@ -1715,7 +1715,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		elif defined(ENVMAP)
 	if (complexMaterialParallax && perPassParallax[0].EnableShadows)
 		dirShadow *= GetParallaxSoftShadowMultiplier(uv, mipLevel, dirLightDirectionTS, sh0, TexEnvMaskSampler, SampEnvMaskSampler, 3, dirLightIsLit * parallaxShadowQuality, displacementScale);
-#		elif defined(TRUE_PBR) && !defined(PROJECTED_UV)
+#		elif defined(TRUE_PBR) && !defined(PROJECTED_UV) && !defined(LODLANDSCAPE)
 	if (PBRParallax && perPassParallax[0].EnableShadows)
 		dirShadow *= GetParallaxSoftShadowMultiplier(uv, mipLevel, dirLightDirectionTS, sh0, TexParallaxSampler, SampParallaxSampler, 0, dirLightIsLit * parallaxShadowQuality, displacementScale);
 #		endif  // LANDSCAPE
@@ -1931,7 +1931,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #			elif defined(ENVMAP)
 				if (complexMaterialParallax)
 					lightShadow *= GetParallaxSoftShadowMultiplier(uv, mipLevel, lightDirectionTS, sh0, TexEnvMaskSampler, SampEnvMaskSampler, 3, lightIsLit * parallaxShadowQuality, displacementScale);
-#			elif defined(TRUE_PBR) && !defined(PROJECTED_UV)
+#			elif defined(TRUE_PBR) && !defined(PROJECTED_UV) && !defined(LODLANDSCAPE)
 				if (PBRParallax)
 					lightShadow *= GetParallaxSoftShadowMultiplier(uv, mipLevel, lightDirectionTS, sh0, TexParallaxSampler, SampParallaxSampler, 0, lightIsLit * parallaxShadowQuality, displacementScale);
 #			endif
@@ -2047,7 +2047,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #				elif defined(ENVMAP)
 					if (complexMaterialParallax)
 						lightShadow *= GetParallaxSoftShadowMultiplier(uv, mipLevel, lightDirectionTS, sh0, TexEnvMaskSampler, SampEnvMaskSampler, 3, parallaxShadowQuality, displacementScale);
-#				elif defined(TRUE_PBR) && !defined(PROJECTED_UV)
+#				elif defined(TRUE_PBR) && !defined(PROJECTED_UV) && !defined(LODLANDSCAPE)
 					if (PBRParallax)
 						lightShadow *= GetParallaxSoftShadowMultiplier(uv, mipLevel, lightDirectionTS, sh0, TexParallaxSampler, SampParallaxSampler, 0, parallaxShadowQuality, displacementScale);
 #				endif
