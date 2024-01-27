@@ -50,7 +50,7 @@
  "Replace Original Shaders": {
   "BloodSplatter": false,
   "DistantTree": true,
-  "Effect": false,
+  "Effect": true,
   "Grass": true,
   "ImageSpace": false,
   "Lighting": true,
@@ -87,8 +87,8 @@
   "EnableWetnessEffects": 1,
   "MaxRainWetness": 1.0,
   "MaxShoreWetness": 0.5,
-  "PuddleMaxAngle": 0.949999988079071,
-  "PuddleMinWetness": 0.75,
+  "PuddleMaxAngle": 0.95,
+  "PuddleMinWetness": 0.85,
   "PuddleRadius": 1.0,
   "ShoreRange": 32
  }

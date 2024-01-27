@@ -1,5 +1,7 @@
 #include "../Common/VR.hlsl"
 RWTexture2DArray<float4> DynamicCubemap : register(u0);
+RWTexture2DArray<float4> DynamicCubemapRaw : register(u1);
+RWTexture2DArray<float4> DynamicCubemapPosition : register(u2);
 
 Texture2D<float> DepthTexture : register(t0);
 Texture2D<float4> ColorTexture : register(t1);
@@ -95,6 +97,7 @@ cbuffer UpdateData : register(b1)
 {
 	float4 CameraData;
 	uint Reset;
+	float3 CameraPreviousPosAdjust2;
 }
 
 float3 WorldToView(float3 x, bool is_position = true, uint a_eyeIndex = 0)
@@ -126,14 +129,32 @@ float2 GetDynamicResolutionAdjustedScreenPosition(float2 screenPosition)
 bool IsSaturated(float value) { return value == saturate(value); }
 bool IsSaturated(float2 value) { return IsSaturated(value.x) && IsSaturated(value.y); }
 
+float3 sRGB2Lin(float3 color)
+{
+	return color > 0.04045 ? pow(color / 1.055 + 0.055 / 1.055, 2.4) : color / 12.92;
+}
+
+// Inverse project UV + raw depth into world space.
+float3 InverseProjectUVZ(float2 uv, float z)
+{
+	uv.y = 1 - uv.y;
+	float4 cp = float4(float3(uv, z) * 2 - 1, 1);
+	float4 vp = mul(CameraViewProjInverse[0], cp);
+	return float3(vp.xy, vp.z) / vp.w;
+}
+
 [numthreads(32, 32, 1)] void main(uint3 ThreadID
 								  : SV_DispatchThreadID) {
 	float3 captureDirection = -GetSamplingVector(ThreadID, DynamicCubemap);
 	float3 viewDirection = WorldToView(captureDirection, false);
 	float2 uv = ViewToUV(viewDirection, false);
 
-	if (Reset)
+	if (Reset) {
 		DynamicCubemap[ThreadID] = 0.0;
+		DynamicCubemapRaw[ThreadID] = 0.0;
+		DynamicCubemapPosition[ThreadID] = 0.0;
+		return;
+	}
 
 	if (IsSaturated(uv) && viewDirection.z < 0.0) {  // Check that the view direction exists in screenspace and that it is in front of the camera
 		uv = GetDynamicResolutionAdjustedScreenPosition(uv);
@@ -143,11 +164,26 @@ bool IsSaturated(float2 value) { return IsSaturated(value.x) && IsSaturated(valu
 		DepthTexture.GetDimensions(textureDims.x, textureDims.y);
 
 		float depth = DepthTexture[round(uv * textureDims)];
-		depth = GetScreenDepth(depth);
+		float linearDepth = GetScreenDepth(depth);
 
-		if (depth > 16.5) {  // First person
+		if (linearDepth > 16.5) {  // First person
 			float3 color = ColorTexture[round(uv * textureDims)];
-			DynamicCubemap[ThreadID] = float4(pow(color, 2.2), 1.0);
+			float4 output = float4(sRGB2Lin(color), 1.0);
+			DynamicCubemapRaw[ThreadID] = output;
+			DynamicCubemap[ThreadID] = output;
+
+			float3 position = InverseProjectUVZ(uv, depth);
+			DynamicCubemapPosition[ThreadID] = float4(position * 0.001, 1.0);
+			return;
 		}
 	}
+
+	float4 position = DynamicCubemapPosition[ThreadID];
+	position.xyz = (position.xyz + (CameraPreviousPosAdjust2.xyz * 0.001)) - (CameraPosAdjust[0].xyz * 0.001);  // Remove adjustment, add new adjustment
+	DynamicCubemapPosition[ThreadID] = position;
+
+	float4 color = DynamicCubemapRaw[ThreadID];
+	color *= lerp(1.0, 0.0, saturate(length(position.xyz)));
+
+	DynamicCubemap[ThreadID] = color;
 }

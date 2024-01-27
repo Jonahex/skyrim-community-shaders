@@ -328,7 +328,7 @@ void LightLimitFix::BSLightingShader_SetupGeometry_After(RE::BSRenderPass*)
 	context->Unmap(strictLightData->resource.get(), 0);
 }
 
-void LightLimitFix::SetLightPosition(LightLimitFix::LightData& a_light, RE::NiPoint3& a_initialPosition)
+void LightLimitFix::SetLightPosition(LightLimitFix::LightData& a_light, RE::NiPoint3 a_initialPosition)
 {
 	auto state = RE::BSGraphics::RendererShadowState::GetSingleton();
 	for (int eyeIndex = 0; eyeIndex < eyeCount; eyeIndex++) {
@@ -474,6 +474,11 @@ struct VertexColor
 	std::uint8_t data[4];
 };
 
+struct VertexPosition
+{
+	std::uint8_t data[3];
+};
+
 bool LightLimitFix::CheckParticleLights(RE::BSRenderPass* a_pass, uint32_t)
 {
 	// See https://www.nexusmods.com/skyrimspecialedition/articles/1391
@@ -557,10 +562,12 @@ bool LightLimitFix::CheckParticleLights(RE::BSRenderPass* a_pass, uint32_t)
 							color.blue *= emittance->blue;
 						}
 
+						float radius = 0;
+
 						if (auto rendererData = a_pass->geometry->GetGeometryRuntimeData().rendererData) {
-							if (rendererData->vertexDesc.HasFlag(RE::BSGraphics::Vertex::Flags::VF_COLORS)) {
-								if (auto triShape = a_pass->geometry->AsTriShape()) {
-									uint32_t vertexSize = rendererData->vertexDesc.GetSize();
+							if (auto triShape = a_pass->geometry->AsTriShape()) {
+								uint32_t vertexSize = rendererData->vertexDesc.GetSize();
+								if (rendererData->vertexDesc.HasFlag(RE::BSGraphics::Vertex::Flags::VF_COLORS)) {
 									uint32_t offset = rendererData->vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::Attribute::VA_COLOR);
 									RE::NiColorA vertexColor{};
 									for (int v = 0; v < triShape->GetTrishapeRuntimeData().vertexCount; v++) {
@@ -577,6 +584,14 @@ bool LightLimitFix::CheckParticleLights(RE::BSRenderPass* a_pass, uint32_t)
 										color.alpha *= vertexColor.alpha;
 									}
 								}
+
+								uint32_t offset = rendererData->vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::Attribute::VA_POSITION);
+								for (int v = 0; v < triShape->GetTrishapeRuntimeData().vertexCount; v++) {
+									if (VertexPosition* vertex = reinterpret_cast<VertexPosition*>(&rendererData->rawVertexData[vertexSize * v + offset])) {
+										RE::NiPoint3 position{ (float)vertex->data[0] / 255.0f, (float)vertex->data[1] / 255.0f, (float)vertex->data[2] / 255.0f };
+										radius = std::max(radius, position.Length());
+									}
+								}
 							}
 						}
 
@@ -591,7 +606,7 @@ bool LightLimitFix::CheckParticleLights(RE::BSRenderPass* a_pass, uint32_t)
 							color.blue *= config->colorMult.blue;
 						}
 
-						queuedParticleLights.insert({ a_pass->geometry, { color, *config } });
+						queuedParticleLights.insert({ a_pass->geometry, { color, radius, *config } });
 
 						return settings.EnableParticleLightsCulling && config->cull;
 					}
@@ -630,6 +645,10 @@ void LightLimitFix::DataLoaded()
 	auto iMagicLightMaxCount = RE::GameSettingCollection::GetSingleton()->GetSetting("iMagicLightMaxCount");
 	iMagicLightMaxCount->data.i = MAXINT32;
 	logger::info("[LLF] Unlocked magic light limit");
+
+	auto iMaxDesired = RE::GetINISetting("iMaxDesired:Particles");
+	iMaxDesired->data.i = MAXINT32;
+	logger::info("[LLF] Unlocked particle limit");
 }
 
 float LightLimitFix::CalculateLightDistance(float3 a_lightPosition, float a_radius)
@@ -830,7 +849,7 @@ void LightLimitFix::UpdateLights()
 
 				auto numVertices = particleData->GetActiveVertexCount();
 				for (std::uint32_t p = 0; p < numVertices; p++) {
-					float radius = particleData->GetParticlesRuntimeData().sizes[p] * 64;
+					float radius = particleData->GetParticlesRuntimeData().sizes[p] * 50;
 
 					auto initialPosition = particleData->GetParticlesRuntimeData().positions[p];
 					if (!particleSystem->GetParticleSystemRuntimeData().isWorldspace) {
@@ -897,11 +916,10 @@ void LightLimitFix::UpdateLights()
 
 				light.color *= particleLight.second.color.alpha;
 
-				float radius = particleLight.first->GetModelData().modelBound.radius * particleLight.first->world.scale;
-
+				float radius = (particleLight.first->worldBound.radius / std::max(FLT_MIN, particleLight.first->GetModelData().modelBound.radius)) * particleLight.second.radius * 64;  // correct bad model bounds
 				light.radius = radius * settings.ParticleLightsRadiusBillboards;
 
-				SetLightPosition(light, particleLight.first->worldBound.center);  //light is complete for both eyes by now
+				SetLightPosition(light, particleLight.first->world.translate);  //light is complete for both eyes by now
 
 				currentLightCount += AddCachedParticleLights(lightsData, light, &particleLight.second.config, particleLight.first, timer);
 			}

@@ -22,16 +22,15 @@ void State::Draw()
 				auto context = RE::BSGraphics::Renderer::GetSingleton()->GetRuntimeData().context;
 
 				if (auto vertexShader = shaderCache.GetVertexShader(*currentShader, currentVertexDescriptor)) {
-					context->VSSetShader(vertexShader->shader, NULL, NULL);
-				}
+					if (auto pixelShader = shaderCache.GetPixelShader(*currentShader, currentPixelDescriptor)) {
+						context->VSSetShader(vertexShader->shader, NULL, NULL);
+						context->PSSetShader(pixelShader->shader, NULL, NULL);
 
-				if (auto pixelShader = shaderCache.GetPixelShader(*currentShader, currentPixelDescriptor)) {
-					context->PSSetShader(pixelShader->shader, NULL, NULL);
-				}
-
-				for (auto* feature : Feature::GetFeatureList()) {
-					if (feature->loaded) {
-						feature->Draw(currentShader, currentPixelDescriptor);
+						for (auto* feature : Feature::GetFeatureList()) {
+							if (feature->loaded) {
+								feature->Draw(currentShader, currentPixelDescriptor);
+							}
+						}
 					}
 				}
 			}
@@ -431,7 +430,7 @@ void State::UpdateSharedData(const RE::BSShader* a_shader, const uint32_t)
 										  RE::BSGraphics::RendererShadowState::GetSingleton()->GetRuntimeData().cubeMapRenderTarget :
 										  RE::BSGraphics::RendererShadowState::GetSingleton()->GetVRRuntimeData().cubeMapRenderTarget) == RE::RENDER_TARGETS_CUBEMAP::kREFLECTIONS;
 
-		if (lightingData.Reflections != currentReflections) {
+		if (lightingData.Reflections != (uint)currentReflections) {
 			updateBuffer = true;
 			lightingDataRequiresUpdate = true;
 		}

@@ -64,6 +64,7 @@ void SetupImGuiStyle()
 }
 
 bool IsEnabled = false;
+ImVec4 TextColor = ImVec4{ 1.0f, 0.0f, 1.0f, 1.0f };
 
 Menu::~Menu()
 {
@@ -139,6 +140,7 @@ void Menu::DrawSettings()
 	ImGui::SetNextWindowSize({ 1000, 1000 }, ImGuiCond_FirstUseEver);
 	ImGui::SetNextWindowPos({ 0, 0 }, ImGuiCond_FirstUseEver);
 	if (ImGui::Begin(std::format("Skyrim Community Shaders {}", Plugin::VERSION.string(".")).c_str(), &IsEnabled)) {
+		ImGui::PushStyleColor(ImGuiCol_Text, TextColor);
 		auto& shaderCache = SIE::ShaderCache::Instance();
 
 		if (ImGui::BeginTable("##LeButtons", 4, ImGuiTableFlags_SizingStretchSame)) {
@@ -488,6 +490,7 @@ void Menu::DrawSettings()
 
 			ImGui::EndTable();
 		}
+		ImGui::PopStyleColor(1);
 	}
 
 	ImGui::End();
@@ -542,17 +545,22 @@ void Menu::DrawOverlay()
 		}
 
 		ImGui::End();
-	} else if (failed && !hide) {
-		ImGui::SetNextWindowBgAlpha(1);
-		ImGui::SetNextWindowPos(ImVec2(10, 10));
-		if (!ImGui::Begin("ShaderCompilationInfo", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings)) {
-			ImGui::End();
-			return;
-		}
+	} else if (failed) {
+		TextColor = ImVec4{ 1.0f, 0.0f, 0.0f, 1.0f };
+		if (!hide) {
+			ImGui::SetNextWindowBgAlpha(1);
+			ImGui::SetNextWindowPos(ImVec2(10, 10));
+			if (!ImGui::Begin("ShaderCompilationInfo", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings)) {
+				ImGui::End();
+				return;
+			}
 
-		ImGui::Text("ERROR: %d shaders failed to compile. Check installation and CommunityShaders.log", failed, totalShaders);
-		ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 0, 0, 255));
-		ImGui::End();
+			ImGui::TextColored(TextColor, "ERROR: %d shaders failed to compile. Check installation and CommunityShaders.log", failed, totalShaders);
+			ImGui::End();
+		}
+	} else {
+		// Done compiling with no failures
+		TextColor = ImVec4{ 1.0f, 1.0f, 1.0f, 1.0f };
 	}
 
 	if (IsEnabled) {

@@ -1212,6 +1212,7 @@ namespace SIE
 		if (!((ShaderCache::IsSupportedShader(shader) || state->IsDeveloperMode() && state->IsShaderEnabled(shader)))) {
 			return nullptr;
 		}
+
 		auto key = SIE::SShaderCache::GetShaderString(ShaderClass::Vertex, shader, descriptor, true);
 		if (blockedKeyIndex != -1 && !blockedKey.empty() && key == blockedKey) {
 			if (std::find(blockedIDs.begin(), blockedIDs.end(), descriptor) == blockedIDs.end()) {
@@ -1246,6 +1247,7 @@ namespace SIE
 															state->IsShaderEnabled(shader))) {
 			return nullptr;
 		}
+
 		auto key = SIE::SShaderCache::GetShaderString(ShaderClass::Pixel, shader, descriptor, true);
 		if (blockedKeyIndex != -1 && !blockedKey.empty() && key == blockedKey) {
 			if (std::find(blockedIDs.begin(), blockedIDs.end(), descriptor) == blockedIDs.end()) {
