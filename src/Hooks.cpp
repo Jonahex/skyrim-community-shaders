@@ -12,13 +12,6 @@
 
 std::unordered_map<void*, std::pair<std::unique_ptr<uint8_t[]>, size_t>> ShaderBytecodeMap;
 
-struct BSLightingShader : RE::BSShader
-{
-	char _pad0[4];
-	uint32_t currentRawTechnique;
-	char _pad1[96];
-};
-
 void RegisterShaderBytecode(void* Shader, const void* Bytecode, size_t BytecodeLength)
 {
 	// Grab a copy since the pointer isn't going to be valid forever
@@ -618,7 +611,7 @@ namespace Hooks
 
 	struct BSLightingShader_SetupMaterial
 	{
-		static void thunk(BSLightingShader* shader, RE::BSLightingShaderMaterialBase const* material)
+		static void thunk(RE::BSLightingShader* shader, RE::BSLightingShaderMaterialBase const* material)
 		{
 			using enum SIE::ShaderCache::LightingShaderTechniques;
 
@@ -844,7 +837,7 @@ namespace Hooks
 
 	struct BSLightingShader_SetupGeometry
 	{
-		static void thunk(BSLightingShader* shader, RE::BSRenderPass* pass, uint32_t renderFlags)
+		static void thunk(RE::BSLightingShader* shader, RE::BSRenderPass* pass, uint32_t renderFlags)
 		{
 			const uint32_t originalExtraFlags = shader->currentRawTechnique & 0b111000u;
 

@@ -1669,7 +1669,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	endif
 
 	float3 dirLightColor = DirLightColor.xyz;
-#	if defined(TRUE_PBR)
+#	if defined(TRUE_PBR) || defined(WETNESS_EFFECTS)
 	dirLightColor = sRGB2Lin(dirLightColor);
 #	endif
 	float selfShadowFactor = 1.0f;
@@ -1838,7 +1838,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #		if defined(WETNESS_EFFECTS)
 	if (waterRoughnessSpecular < 1.0)
-		wetnessSpecular += GetWetnessSpecular(wetnessNormal, normalizedDirLightDirectionWS, worldSpaceViewDirection, sRGB2Lin(dirLightColor) * 0.1, waterRoughnessSpecular);
+		wetnessSpecular += GetWetnessSpecular(wetnessNormal, normalizedDirLightDirectionWS, worldSpaceViewDirection, dirLightColor * 0.1, waterRoughnessSpecular);
 #		endif
 
 #	endif
@@ -1873,7 +1873,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 			float3 refLightColor = PointLightColor[lightIndex].xyz;
 			float3 lightColor = refLightColor * intensityMultiplier;
 #		endif
-#		if defined(TRUE_PBR)
+#		if defined(TRUE_PBR) || defined(WETNESS_EFFECTS)
 			lightColor = sRGB2Lin(lightColor);
 #		endif
 			float3 nsLightColor = lightColor;
@@ -1928,16 +1928,16 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 			}
 #		endif
 
-		lightColor *= lightShadow;
+			lightColor *= lightShadow;
 
 #		if defined(TRUE_PBR)
-		{
-			float3 pointDiffuseColor, pointTransmissionColor, pointSpecularColor;
-			GetDirectLightInputPBR(pointDiffuseColor, pointTransmissionColor, pointSpecularColor, modelNormal.xyz, viewDirection, normalizedLightDirection, lightColor, roughness, f0, subsurfaceColor, subsurfaceOpacity, lightShadow, ao);
-			lightsDiffuseColor += pointDiffuseColor;
-			transmissionColor += pointTransmissionColor;
-			specularColorPBR += pointSpecularColor;
-		}
+			{
+				float3 pointDiffuseColor, pointTransmissionColor, pointSpecularColor;
+				GetDirectLightInputPBR(pointDiffuseColor, pointTransmissionColor, pointSpecularColor, modelNormal.xyz, viewDirection, normalizedLightDirection, lightColor, roughness, f0, subsurfaceColor, subsurfaceOpacity, lightShadow, ao);
+				lightsDiffuseColor += pointDiffuseColor;
+				transmissionColor += pointTransmissionColor;
+				specularColorPBR += pointSpecularColor;
+			}
 #		else
 			float lightAngle = dot(modelNormal.xyz, normalizedLightDirection);
 			float3 lightDiffuseColor = lightColor * saturate(lightAngle.xxx);
@@ -1963,7 +1963,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #		if defined(WETNESS_EFFECTS)
 			if (waterRoughnessSpecular < 1.0)
-				wetnessSpecular += GetWetnessSpecular(wetnessNormal, normalizedLightDirectionWS, worldSpaceViewDirection, sRGB2Lin(lightColor), waterRoughnessSpecular);
+				wetnessSpecular += GetWetnessSpecular(wetnessNormal, normalizedLightDirectionWS, worldSpaceViewDirection, lightColor, waterRoughnessSpecular);
 #		endif
 		}
 	}
@@ -1998,7 +1998,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 				float intensityMultiplier = 1 - intensityFactor * intensityFactor;
 				float3 refLightColor = light.color.xyz;
 				float3 lightColor = refLightColor * intensityMultiplier;
-#			if defined(TRUE_PBR)
+#			if defined(TRUE_PBR) || defined(WETNESS_EFFECTS)
 				lightColor = sRGB2Lin(lightColor);
 #			endif
 				float3 nsLightColor = lightColor;
@@ -2047,38 +2047,38 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 			lightColor *= lightShadow;
 
 #			if defined(TRUE_PBR)
-				{
-					float3 pointDiffuseColor, pointTransmissionColor, pointSpecularColor;
-					GetDirectLightInputPBR(pointDiffuseColor, pointTransmissionColor, pointSpecularColor, worldSpaceNormal.xyz, worldSpaceViewDirection, normalizedLightDirection, lightColor, roughness, f0, subsurfaceColor, subsurfaceOpacity, lightShadow, ao);
-					lightsDiffuseColor += pointDiffuseColor;
-					transmissionColor += pointTransmissionColor;
-					specularColorPBR += pointSpecularColor;
-				}
+			{
+				float3 pointDiffuseColor, pointTransmissionColor, pointSpecularColor;
+				GetDirectLightInputPBR(pointDiffuseColor, pointTransmissionColor, pointSpecularColor, worldSpaceNormal.xyz, worldSpaceViewDirection, normalizedLightDirection, lightColor, roughness, f0, subsurfaceColor, subsurfaceOpacity, lightShadow, ao);
+				lightsDiffuseColor += pointDiffuseColor;
+				transmissionColor += pointTransmissionColor;
+				specularColorPBR += pointSpecularColor;
+			}
 #			else
-				float lightAngle = dot(worldSpaceNormal.xyz, normalizedLightDirection);
-				float3 lightDiffuseColor = lightColor * saturate(lightAngle.xxx);
+			float lightAngle = dot(worldSpaceNormal.xyz, normalizedLightDirection);
+			float3 lightDiffuseColor = lightColor * saturate(lightAngle.xxx);
 
-#				if defined(SOFT_LIGHTING)
-				lightDiffuseColor += nsLightColor * GetSoftLightMultiplier(dot(worldSpaceNormal.xyz, normalizedLightDirection)) * rimSoftLightColor.xyz;
-#				endif
+#			if defined(SOFT_LIGHTING)
+			lightDiffuseColor += nsLightColor * GetSoftLightMultiplier(dot(worldSpaceNormal.xyz, normalizedLightDirection)) * rimSoftLightColor.xyz;
+#			endif
 
-#				if defined(RIM_LIGHTING)
-				lightDiffuseColor += nsLightColor * GetRimLightMultiplier(normalizedLightDirection, worldSpaceViewDirection, worldSpaceNormal.xyz) * rimSoftLightColor.xyz;
-#				endif
+#			if defined(RIM_LIGHTING)
+			lightDiffuseColor += nsLightColor * GetRimLightMultiplier(normalizedLightDirection, worldSpaceViewDirection, worldSpaceNormal.xyz) * rimSoftLightColor.xyz;
+#			endif
 
-#				if defined(BACK_LIGHTING)
-				lightDiffuseColor += (saturate(-lightAngle) * backLightColor.xyz) * nsLightColor;
-#				endif
+#			if defined(BACK_LIGHTING)
+			lightDiffuseColor += (saturate(-lightAngle) * backLightColor.xyz) * nsLightColor;
+#			endif
 	
-#				if defined(SPECULAR) || (defined(SPARKLE) && !defined(SNOW))
-				lightsSpecularColor += GetLightSpecularInput(input, normalizedLightDirection, worldSpaceViewDirection, worldSpaceNormal.xyz, lightColor, shininess, uv);
-#				endif
-				lightsDiffuseColor += lightDiffuseColor;
-#				endif
+#			if defined(SPECULAR) || (defined(SPARKLE) && !defined(SNOW))
+			lightsSpecularColor += GetLightSpecularInput(input, normalizedLightDirection, worldSpaceViewDirection, worldSpaceNormal.xyz, lightColor, shininess, uv);
+#			endif
+			lightsDiffuseColor += lightDiffuseColor;
+#			endif
 
 #			if defined(WETNESS_EFFECTS)
-				if (waterRoughnessSpecular < 1.0)
-					wetnessSpecular += GetWetnessSpecular(wetnessNormal, normalizedLightDirection, worldSpaceViewDirection, sRGB2Lin(lightColor), waterRoughnessSpecular);
+			if (waterRoughnessSpecular < 1.0)
+				wetnessSpecular += GetWetnessSpecular(wetnessNormal, normalizedLightDirection, worldSpaceViewDirection, lightColor, waterRoughnessSpecular);
 #			endif
 		}
 	}
