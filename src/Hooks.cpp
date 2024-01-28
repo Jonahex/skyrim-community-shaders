@@ -414,9 +414,13 @@ void hk_PollInputDevices(RE::BSTEventSource<RE::InputEvent*>* a_dispatcher, RE::
 		if (*a_events) {
 			if (auto device = (*a_events)->GetDevice()) {
 				// Check that the device is not a Gamepad or VR controller. If it is, unblock input. Values 7 & 8 are returned at least for some VR Controllers.
+				bool isVRDevice = false;
+#ifdef ENABLE_SKYRIM_VR
 				int kVRRightAlt = 7;
 				int kVRLeftAlt = 8;
-				blockedDevice = !((device == RE::INPUT_DEVICES::INPUT_DEVICE::kGamepad) || (device == RE::INPUT_DEVICES::INPUT_DEVICE::kVRRight) || (device == RE::INPUT_DEVICES::INPUT_DEVICE::kVRLeft) || (device == kVRRightAlt) || (device == kVRLeftAlt));
+				isVRDevice = (device == RE::INPUT_DEVICES::INPUT_DEVICE::kVRRight) || (device == RE::INPUT_DEVICES::INPUT_DEVICE::kVRLeft) || (device == kVRRightAlt) || (device == kVRLeftAlt);
+#endif
+				blockedDevice = !((device == RE::INPUT_DEVICES::INPUT_DEVICE::kGamepad) || isVRDevice);
 			}
 		}
 	}

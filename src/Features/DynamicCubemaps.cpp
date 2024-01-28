@@ -243,8 +243,10 @@ void DynamicCubemaps::UpdateCubemap()
 	auto context = renderer->GetRuntimeData().context;
 
 	{
-		ID3D11ShaderResourceView* view = nullptr;
-		context->PSSetShaderResources(64, 1, &view);
+		ID3D11ShaderResourceView* views[3]{
+			nullptr, nullptr, nullptr
+		};
+		context->PSSetShaderResources(64, 3, views);
 	}
 
 	auto cubemap = renderer->GetRendererData().cubemapRenderTargets[RE::RENDER_TARGETS_CUBEMAP::kREFLECTIONS];
@@ -268,16 +270,6 @@ void DynamicCubemaps::UpdateCubemap()
 		context->CSSetShader(activeReflections ? GetComputeShaderInferrenceReflections() : GetComputeShaderInferrence(), nullptr, 0);
 
 		context->Dispatch((uint32_t)std::ceil(envCaptureTexture->desc.Width / 32.0f), (uint32_t)std::ceil(envCaptureTexture->desc.Height / 32.0f), 6);
-
-		uavs[0] = perPass->uav.get();
-		uavs[1] = nullptr;
-		context->CSSetUnorderedAccessViews(0, 2, uavs, nullptr);
-
-		srv = cubemap.SRV;
-		context->CSSetShaderResources(0, 1, &srv);
-
-		context->CSSetShader(GetComputeShaderAverageColor(), nullptr, 0);
-		context->Dispatch(1, 1, 1);
 
 		srv = nullptr;
 		context->CSSetShaderResources(0, 1, &srv);
@@ -330,7 +322,7 @@ void DynamicCubemaps::UpdateCubemap()
 		}
 
 		{
-			auto srv = cubemap.SRV;
+			auto srv = envInferredTexture->srv.get();
 			context->CSSetShaderResources(0, 1, &srv);
 
 			auto uav = perPass->uav.get();
@@ -373,8 +365,7 @@ void DynamicCubemaps::Draw(const RE::BSShader* shader, const uint32_t descriptor
 			views[1] = spBRDFLUT->srv.get();
 			context->PSSetShaderResources(64, 2, views);
 		}
-		if ((descriptor & static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::TruePbr)) != 0)
-		{
+		if ((descriptor & static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::TruePbr)) != 0) {
 			auto srv = perPass->srv.get();
 			context->PSSetShaderResources(66, 1, &srv);
 		}
@@ -523,11 +514,6 @@ void DynamicCubemaps::SetupResources()
 		texDesc.Usage = D3D11_USAGE_DEFAULT;
 		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS | D3D11_BIND_RENDER_TARGET;
 		texDesc.MiscFlags = D3D11_RESOURCE_MISC_TEXTURECUBE;
-
-		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
-		srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURECUBE;
-		srvDesc.TextureCube.MostDetailedMip = 0;
-		srvDesc.TextureCube.MipLevels = 1;
 
 		D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
 		uavDesc.Format = envTexture->desc.Format;
