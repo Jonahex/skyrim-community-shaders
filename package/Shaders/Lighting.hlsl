@@ -2258,6 +2258,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	color.xyz = min(specularTmp.xyz, color.xyz);
 #	endif  // defined (SPECULAR) || defined(SPARKLE)
 
+#	if defined(TRUE_PBR) || defined(WETNESS_EFFECTS)
+	color.xyz = Lin2sRGB(color.xyz);
+#	endif
+
 #	if defined(ENVMAP) && defined(TESTCUBEMAP)
 	//color.xyz = specularTexture.SampleLevel(SampEnvSampler, envSamplingPoint, 0).xyz;
 #	endif
