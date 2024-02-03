@@ -278,4 +278,21 @@ namespace Util
 		}
 		return cameraData;
 	}
+
+	HoverTooltipWrapper::HoverTooltipWrapper()
+	{
+		hovered = ImGui::IsItemHovered();
+		if (hovered) {
+			ImGui::BeginTooltip();
+			ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+		}
+	}
+
+	HoverTooltipWrapper::~HoverTooltipWrapper()
+	{
+		if (hovered) {
+			ImGui::PopTextWrapPos();
+			ImGui::EndTooltip();
+		}
+	}
 }
