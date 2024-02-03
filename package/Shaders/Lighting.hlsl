@@ -1673,7 +1673,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	endif
 
 	float3 dirLightColor = DirLightColor.xyz;
-#	if defined(TRUE_PBR) || defined(WETNESS_EFFECTS)
+#	if defined(TRUE_PBR)
 	dirLightColor = sRGB2Lin(dirLightColor);
 #	endif
 	float selfShadowFactor = 1.0f;
@@ -1883,7 +1883,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 			float3 lightColor = refLightColor * intensityMultiplier;
 #		endif
 #		if defined(TRUE_PBR) || defined(WETNESS_EFFECTS)
-			lightColor = sRGB2Lin(lightColor);
+			float3 linLightColor = sRGB2Lin(lightColor);
+#		endif
+#		if defined(TRUE_PBR)
+			lightColor = linLightColor;
 #		endif
 			float3 nsLightColor = lightColor;
 			
@@ -1972,7 +1975,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #		if defined(WETNESS_EFFECTS)
 			if (waterRoughnessSpecular < 1.0)
-				wetnessSpecular += GetWetnessSpecular(wetnessNormal, normalizedLightDirectionWS, worldSpaceViewDirection, lightColor, waterRoughnessSpecular) * 0.4;
+				wetnessSpecular += GetWetnessSpecular(wetnessNormal, normalizedLightDirectionWS, worldSpaceViewDirection, linLightColor, waterRoughnessSpecular) * 0.4;
 #		endif
 		}
 	}
@@ -2008,7 +2011,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 				float3 refLightColor = light.color.xyz;
 				float3 lightColor = refLightColor * intensityMultiplier;
 #			if defined(TRUE_PBR) || defined(WETNESS_EFFECTS)
-				lightColor = sRGB2Lin(lightColor);
+				float3 linLightColor = sRGB2Lin(lightColor);
+#			endif
+#			if defined(TRUE_PBR)
+				lightColor = linLightColor;
 #			endif
 				float3 nsLightColor = lightColor;
 				float3 normalizedLightDirection = normalize(lightDirection);
@@ -2087,7 +2093,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #			if defined(WETNESS_EFFECTS)
 			if (waterRoughnessSpecular < 1.0)
-				wetnessSpecular += GetWetnessSpecular(wetnessNormal, normalizedLightDirection, worldSpaceViewDirection, lightColor, waterRoughnessSpecular) * 0.4;
+				wetnessSpecular += GetWetnessSpecular(wetnessNormal, normalizedLightDirection, worldSpaceViewDirection, linLightColor, waterRoughnessSpecular) * 0.4;
 #			endif
 		}
 	}

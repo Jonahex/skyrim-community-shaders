@@ -560,7 +560,8 @@ namespace Hooks
 				} else if (property->flags.any(kRimLighting)) {
 					pbrMaterial->pbrFlags.set(PBRFlags::Subsurface);
 				}
-				property->flags.reset(kSpecular, kGlowMap, kEnvMap, kSoftLighting, kRimLighting, kBackLighting, kAnisotropicLighting);
+				property->flags.set(kVertexLighting);
+				property->flags.reset(kMenuScreen, kSpecular, kGlowMap, kEnvMap, kSoftLighting, kRimLighting, kBackLighting, kAnisotropicLighting);
 			}
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
@@ -580,7 +581,7 @@ namespace Hooks
 
 			//const auto feature = property->material->GetFeature();
 			//if (feature == BSLightingShaderMaterialPBR::FEATURE || feature == BSLightingShaderMaterialPBRLandscape::FEATURE)
-			if (property->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kMenuScreen))
+			if (property->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kVertexLighting))
 			//if (property->HasExtraData("__PBR__"))
 			{
 				isPbr = true;
@@ -1024,7 +1025,7 @@ namespace Hooks
 				shaderProperty->SetFlags(RE::BSShaderProperty::EShaderPropertyFlag8::kNoLODLandBlend, noLODLandBlend);
 
 				//shaderProperty->AddExtraData("__PBR__", RE::NiExtraData::Create<RE::NiExtraData>());
-				shaderProperty->SetFlags(RE::BSShaderProperty::EShaderPropertyFlag8::kMenuScreen, true);
+				shaderProperty->SetFlags(RE::BSShaderProperty::EShaderPropertyFlag8::kVertexLighting, true);
 
 				const auto& children = land->loadedData->mesh[quadIndex]->GetChildren();
 				auto geometry = children.empty() ? nullptr : static_cast<RE::BSGeometry*>(children[0].get());

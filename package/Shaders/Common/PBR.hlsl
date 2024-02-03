@@ -232,7 +232,7 @@ void GetAmbientLightInputPBR(out float3 diffuse, out float3 specular, float3 N, 
 	float3 R = normalize(reflect(-V, N));
 	R = GetOffSpecularPeakReflectionDirection(N, R, roughness);
 	
-	float diffuseFactor = 0.5f;
+    float diffuseFactor = 0.5f;
     float specularFactor = 0.5f;
 	
 	float weatherAmbientColor = float3(DirectionalAmbient[0].w, DirectionalAmbient[1].w, DirectionalAmbient[2].w);
