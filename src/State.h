@@ -15,7 +15,9 @@ public:
 
 	bool enabledClasses[RE::BSShader::Type::Total - 1];
 
+	bool updateShader = true;
 	RE::BSShader* currentShader = nullptr;
+
 	uint32_t currentVertexDescriptor = 0;
 	uint32_t currentPixelDescriptor = 0;
 	spdlog::level::level_enum logLevel = spdlog::level::info;
@@ -27,8 +29,11 @@ public:
 
 	bool upscalerLoaded = false;
 
+	float timer = 0;
+
 	void Draw();
 	void DrawDeferred();
+	void DrawPreProcess();
 	void Reset();
 	void Setup();
 
@@ -95,9 +100,15 @@ public:
 	{
 		float WaterHeight[25];
 		uint Reflections;
+		float4 CameraData;
+		float2 BufferDim;
+		float Timer;
 	};
 
 	LightingData lightingData{};
 
 	std::unique_ptr<Buffer> lightingDataBuffer = nullptr;
+
+	float screenWidth = 0;
+	float screenHeight = 0;
 };

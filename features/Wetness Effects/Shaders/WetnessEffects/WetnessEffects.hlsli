@@ -3,9 +3,11 @@
 struct PerPassWetnessEffects
 {
 	float Wetness;
+	float PuddleWetness;
 	row_major float3x4 DirectionalAmbientWS;
 	uint EnableWetnessEffects;
 	float MaxRainWetness;
+	float MaxPuddleWetness;
 	float MaxShoreWetness;
 	uint ShoreRange;
 	float PuddleRadius;
@@ -13,7 +15,8 @@ struct PerPassWetnessEffects
 	float PuddleMinWetness;
 	float MinRainWetness;
 	float SkinWetness;
-	float pad[2];
+	float WeatherTransitionSpeed;
+	float pad[3];
 };
 
 StructuredBuffer<PerPassWetnessEffects> perPassWetnessEffects : register(t22);
@@ -53,19 +56,26 @@ float noise(float3 pos)
 		u.z);
 }
 
-float3 GetWetnessAmbientSpecular(float3 N, float3 V, float roughness)
+float3 GetWetnessAmbientSpecular(float2 uv, float3 N, float3 V, float roughness)
 {
 #if defined(DYNAMIC_CUBEMAPS)
-	float3 NT = N;
-	NT.z += 1;
-	NT = normalize(NT);
-
-	float3 R = reflect(-V, NT);
+	float3 R = reflect(-V, N);
 	float NoV = saturate(dot(N, V));
 
 	float level = roughness * 9.0;
 
-	float3 specularIrradiance = sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, R, level).rgb);
+	float3 specularIrradiance = specularTexture.SampleLevel(SampColorSampler, R, level);
+
+#	if defined(DYNAMIC_CUBEMAPS) && !defined(VR)
+	// float4 ssrBlurred = ssrTexture.SampleLevel(SampColorSampler, uv, 0);
+	// float4 ssrRaw = ssrRawTexture.SampleLevel(SampColorSampler, uv, 0);
+	// float4 ssrTexture = lerp(ssrRaw, ssrBlurred, sqrt(roughness));
+	// specularIrradiance = sRGB2Lin(lerp(specularIrradiance, ssrTexture.rgb, ssrTexture.a));
+	specularIrradiance = sRGB2Lin(specularIrradiance);
+#	else
+	specularIrradiance = sRGB2Lin(specularIrradiance);
+#	endif
+
 #else
 	float3 R = reflect(-V, N);
 	float NoV = saturate(dot(N, V));
@@ -74,7 +84,7 @@ float3 GetWetnessAmbientSpecular(float3 N, float3 V, float roughness)
 #endif
 
 	// Split-sum approximation factors for Cook-Torrance specular BRDF.
-#if defined(DYNAMIC_CUBEMAPSf)
+#if defined(DYNAMIC_CUBEMAPS)
 	float2 specularBRDF = specularBRDF_LUT.Sample(LinearSampler, float2(NoV, roughness));
 #else
 	float2 specularBRDF = EnvBRDFApprox(0.02, roughness, NoV);
@@ -85,10 +95,11 @@ float3 GetWetnessAmbientSpecular(float3 N, float3 V, float roughness)
 	float3 Fr = max(1.0.xxx - roughness.xxx, 0.02) - 0.02;
 	float3 S = 0.02 + Fr * pow(1.0 - NoV, 5.0);
 
-	return max(0, specularIrradiance * (S * specularBRDF.x + specularBRDF.y));
+	return specularIrradiance * (S * specularBRDF.x + specularBRDF.y);
 }
 
 float3 GetWetnessSpecular(float3 N, float3 L, float3 V, float3 lightColor, float roughness)
 {
+	lightColor *= 0.01;
 	return LightingFuncGGX_OPT3(N, V, L, roughness, 1.0 - roughness) * lightColor;
 }

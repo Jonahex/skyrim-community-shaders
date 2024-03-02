@@ -28,13 +28,20 @@ public:
 
 	bool HasShaderDefine(RE::BSShader::Type shaderType) override;
 
-	struct LightData
+	struct PositionOpt
+	{
+		float3 data;
+		float pad0;
+	};
+
+	struct alignas(16) LightData
 	{
 		float3 color;
 		float radius;
-		float3 positionWS[2];
-		float3 positionVS[2];
+		PositionOpt positionWS[2];
+		PositionOpt positionVS[2];
 		uint firstPersonShadow;
+		float pad0[3];
 	};
 
 	struct ClusterAABB
@@ -43,18 +50,25 @@ public:
 		float4 maxPoint;
 	};
 
-	struct LightGrid
+	struct alignas(16) LightGrid
 	{
 		uint offset;
 		uint lightCount;
+		float pad0[2];
 	};
 
-	struct alignas(16) PerFrameLightCulling
+	struct alignas(16) LightBuildingCB
 	{
 		float4x4 InvProjMatrix[2];
 		float LightsNear;
 		float LightsFar;
-		uint pad[2];
+		float pad[2];
+	};
+
+	struct alignas(16) LightCullingCB
+	{
+		uint LightCount;
+		float pad[3];
 	};
 
 	struct PerPass
@@ -65,17 +79,14 @@ public:
 		uint LightsVisualisationMode;
 		float LightsNear;
 		float LightsFar;
-		float4 CameraData;
-		float2 BufferDim;
 		uint FrameCount;
 	};
 
-	struct StrictLightData
+	struct alignas(16) StrictLightData
 	{
+		LightData StrictLights[15];
 		uint NumLights;
-		float3 PointLightPosition[15];
-		float PointLightRadius[15];
-		float3 PointLightColor[15];
+		float pad0[3];
 	};
 
 	StrictLightData strictLightDataTemp;
@@ -96,7 +107,8 @@ public:
 	ID3D11ComputeShader* clusterBuildingCS = nullptr;
 	ID3D11ComputeShader* clusterCullingCS = nullptr;
 
-	ConstantBuffer* perFrameLightCulling = nullptr;
+	ConstantBuffer* lightBuildingCB = nullptr;
+	ConstantBuffer* lightCullingCB = nullptr;
 
 	eastl::unique_ptr<Buffer> lights = nullptr;
 	eastl::unique_ptr<Buffer> clusters = nullptr;
@@ -105,8 +117,6 @@ public:
 	eastl::unique_ptr<Buffer> lightGrid = nullptr;
 
 	std::uint32_t lightCount = 0;
-
-	Texture2D* screenSpaceShadowsTexture = nullptr;
 
 	struct ParticleLightInfo
 	{
@@ -117,6 +127,9 @@ public:
 
 	eastl::hash_map<RE::BSGeometry*, ParticleLightInfo> queuedParticleLights;
 	eastl::hash_map<RE::BSGeometry*, ParticleLightInfo> particleLights;
+
+	RE::NiPoint3 eyePositionCached[2]{};
+	Matrix viewMatrixCached[2]{};
 
 	virtual void SetupResources();
 	virtual void Reset();
@@ -133,8 +146,8 @@ public:
 	virtual void DataLoaded() override;
 
 	float CalculateLightDistance(float3 a_lightPosition, float a_radius);
-	bool AddCachedParticleLights(eastl::vector<LightData>& lightsData, LightLimitFix::LightData& light, ParticleLights::Config* a_config = nullptr, RE::BSGeometry* a_geometry = nullptr, double timer = 0.0f);
-	void SetLightPosition(LightLimitFix::LightData& a_light, RE::NiPoint3 a_initialPosition);
+	void AddCachedParticleLights(eastl::vector<LightData>& lightsData, LightLimitFix::LightData& light, ParticleLights::Config* a_config = nullptr, RE::BSGeometry* a_geometry = nullptr, double timer = 0.0f);
+	void SetLightPosition(LightLimitFix::LightData& a_light, RE::NiPoint3 a_initialPosition, bool a_cached = true);
 	void UpdateLights();
 	void Bind();
 
@@ -151,9 +164,7 @@ public:
 		bool EnableParticleLights = true;
 		bool EnableParticleLightsCulling = true;
 		bool EnableParticleLightsDetection = true;
-		float ParticleLightsBrightness = 1.0f;
 		float ParticleLightsSaturation = 1.0f;
-		float ParticleLightsRadiusBillboards = 1.0f;
 		bool EnableParticleLightsOptimization = true;
 		uint ParticleLightsOptimisationClusterRadius = 32;
 	};
@@ -179,7 +190,7 @@ public:
 
 	std::shared_mutex cachedParticleLightsMutex;
 	eastl::vector<CachedParticleLight> cachedParticleLights;
-	uint32_t particleLightsDetectionHits = 0;
+	std::uint32_t particleLightsDetectionHits = 0;
 
 	float CalculateLuminance(CachedParticleLight& light, RE::NiPoint3& point);
 	void AddParticleLightLuminance(RE::NiPoint3& targetPosition, int& numHits, float& lightLevel);
@@ -326,8 +337,8 @@ struct fmt::formatter<LightLimitFix::LightData>
 			reinterpret_cast<uintptr_t>(&l),
 			(Vector3)l.color,
 			l.radius,
-			(Vector3)l.positionWS[0], (Vector3)l.positionWS[1],
-			(Vector3)l.positionVS[0], (Vector3)l.positionVS[1],
+			(Vector3)l.positionWS[0].data, (Vector3)l.positionWS[1].data,
+			(Vector3)l.positionVS[0].data, (Vector3)l.positionVS[1].data,
 			l.firstPersonShadow);
 	}
 };

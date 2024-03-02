@@ -14,8 +14,10 @@ list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 message("Options:")
 option(AUTO_PLUGIN_DEPLOYMENT "Copy the build output and addons to env:CommunityShadersOutputDir." OFF)
 option(ZIP_TO_DIST "Zip the base mod and addons to their own 7z file in dist." ON)
+option(AIO_ZIP_TO_DIST "Zip the base mod and addons to a AIO 7z file in dist." OFF)
 message("\tAuto plugin deployment: ${AUTO_PLUGIN_DEPLOYMENT}")
 message("\tZip to dist: ${ZIP_TO_DIST}")
+message("\tAIO Zip to dist: ${AIO_ZIP_TO_DIST}")
 
 # #######################################################################################################################
 # # Add CMake features
@@ -81,25 +83,69 @@ if(MSVC_VERSION GREATER_EQUAL 1936 AND MSVC_IDE) # 17.6+
 endif()
 
 # #######################################################################################################################
+# # Feature version detection
+# #######################################################################################################################
+
+file(GLOB_RECURSE FEATURE_CONFIG_FILES
+	LIST_DIRECTORIES false
+	CONFIGURE_DEPENDS
+	"features/*/Shaders/Features/*.ini"
+)
+
+foreach(FEATURE_PATH ${FEATURE_CONFIG_FILES})
+	get_filename_component(FEATURE ${FEATURE_PATH} NAME_WE)
+	file(READ "${FEATURE_PATH}" CONFIG_VALUE)
+	string(REGEX MATCH "Version = ([0-9]*)-([0-9]*)-([0-9]*)" _ ${CONFIG_VALUE})
+	set(ver_major ${CMAKE_MATCH_1})
+	set(ver_minor ${CMAKE_MATCH_2})
+	set(ver_patch ${CMAKE_MATCH_3})
+	list(APPEND FEATURE_VERSIONS \t\t{\ \"${FEATURE}\"sv,\ {${ver_major},${ver_minor},${ver_patch}}\ })
+endforeach()
+
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${FEATURE_CONFIG_FILES}")
+
+string (REPLACE ";" ",\n" FEATURE_VERSIONS "${FEATURE_VERSIONS}")
+
+configure_file(
+	${CMAKE_CURRENT_SOURCE_DIR}/cmake/FeatureVersions.h.in
+	${CMAKE_CURRENT_BINARY_DIR}/cmake/FeatureVersions.h
+	@ONLY
+)
+
+target_sources(
+	"${PROJECT_NAME}"
+	PRIVATE
+	${CMAKE_CURRENT_BINARY_DIR}/cmake/FeatureVersions.h
+)
+
+# #######################################################################################################################
 # # Automatic deployment
 # #######################################################################################################################
 file(GLOB FEATURE_PATHS LIST_DIRECTORIES true ${CMAKE_SOURCE_DIR}/features/*)
 
+if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
+	set(AIO_DIR "${CMAKE_CURRENT_BINARY_DIR}/aio")
+	message("Copying package folder with dll/pdb with all features to ${AIO_DIR}")
+	add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/package "${AIO_DIR}"
+		COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:${PROJECT_NAME}> "${AIO_DIR}/SKSE/Plugins/"
+		COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_PDB_FILE:${PROJECT_NAME}> "${AIO_DIR}/SKSE/Plugins/"
+	)
+
+	foreach(FEATURE_PATH ${FEATURE_PATHS})
+		add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+			COMMAND ${CMAKE_COMMAND} -E copy_directory ${FEATURE_PATH} "${AIO_DIR}"
+		)
+	endforeach()
+endif()
+
 # Automatic deployment to CommunityShaders output directory.
 if(AUTO_PLUGIN_DEPLOYMENT)
 	foreach(DEPLOY_TARGET $ENV{CommunityShadersOutputDir})
-		message("Copying package folder with dll/pdb with all features to ${DEPLOY_TARGET}")
+		message("Copying AIO to ${DEPLOY_TARGET}")
 		add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-			COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/package "${DEPLOY_TARGET}"
-			COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:${PROJECT_NAME}> "${DEPLOY_TARGET}/SKSE/Plugins/"
-			COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_PDB_FILE:${PROJECT_NAME}> "${DEPLOY_TARGET}/SKSE/Plugins/"
+			COMMAND ${CMAKE_COMMAND} -E copy_directory ${AIO_DIR} "${DEPLOY_TARGET}"
 		)
-
-		foreach(FEATURE_PATH ${FEATURE_PATHS})
-			add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-				COMMAND ${CMAKE_COMMAND} -E copy_directory ${FEATURE_PATH} "${DEPLOY_TARGET}"
-			)
-		endforeach()
 	endforeach()
 
 	if(NOT DEFINED ENV{CommunityShadersOutputDir})
@@ -110,7 +156,6 @@ endif()
 # Zip base CommunityShaders and all addons as their own 7z in dist folder
 if(ZIP_TO_DIST)
 	set(ZIP_DIR "${CMAKE_CURRENT_BINARY_DIR}/zip")
-	file(REMOVE_RECURSE ${CMAKE_BINARY_DIR}/test/)
 	add_custom_target(build-time-make-directory ALL
 		COMMAND ${CMAKE_COMMAND} -E remove_directory "${ZIP_DIR}" ${CMAKE_SOURCE_DIR}/dist
 		COMMAND ${CMAKE_COMMAND} -E make_directory "${ZIP_DIR}" ${CMAKE_SOURCE_DIR}/dist
@@ -138,4 +183,22 @@ if(ZIP_TO_DIST)
 			WORKING_DIRECTORY ${FEATURE_PATH}
 		)
 	endforeach()
+endif()
+
+# Create a AIO zip for easier testing
+if(AIO_ZIP_TO_DIST)
+
+	if(NOT ZIP_TO_DIST)
+		add_custom_target(build-time-make-directory ALL
+			COMMAND ${CMAKE_COMMAND} -E remove_directory "${ZIP_DIR}" ${CMAKE_SOURCE_DIR}/dist
+			COMMAND ${CMAKE_COMMAND} -E make_directory "${ZIP_DIR}" ${CMAKE_SOURCE_DIR}/dist
+		)
+	endif()
+
+	set(TARGET_AIO_ZIP "${PROJECT_NAME}_AIO.7z")
+	message("Zipping ${AIO_DIR} to ${CMAKE_SOURCE_DIR}/dist/${TARGET_AIO_ZIP}")
+	ADD_CUSTOM_COMMAND(TARGET ${PROJECT_NAME} POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E tar cf ${CMAKE_SOURCE_DIR}/dist/${TARGET_AIO_ZIP} --format=7zip -- .
+		WORKING_DIRECTORY ${AIO_DIR}
+	)
 endif()

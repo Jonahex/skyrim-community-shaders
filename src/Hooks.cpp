@@ -4,6 +4,7 @@
 
 #include "BSLightingShaderMaterialPBR.h"
 #include "BSLightingShaderMaterialPBRLandscape.h"
+#include "Bindings.h"
 #include "Menu.h"
 #include "ShaderCache.h"
 #include "State.h"
@@ -244,25 +245,9 @@ bool hk_BSShader_BeginTechnique(RE::BSShader* shader, uint32_t vertexDescriptor,
 	state->currentShader = shader;
 	state->currentVertexDescriptor = vertexDescriptor;
 	state->currentPixelDescriptor = pixelDescriptor;
-	const bool shaderFound = (ptr_BSShader_BeginTechnique)(shader, vertexDescriptor, pixelDescriptor, skipPixelShader);
-	if (shaderFound)
-	{
-		return shaderFound;
-	}
+	state->updateShader = true;
 
-	auto& shaderCache = SIE::ShaderCache::Instance();
-	State::GetSingleton()->ModifyShaderLookup(*shader, vertexDescriptor, pixelDescriptor);
-	RE::BSGraphics::VertexShader* vertexShader = shaderCache.GetVertexShader(*shader, vertexDescriptor);
-	RE::BSGraphics::PixelShader* pixelShader = shaderCache.GetPixelShader(*shader, pixelDescriptor);
-	if (vertexShader == nullptr || pixelShader == nullptr) {
-		return false;
-	}
-	RE::BSGraphics::RendererShadowState::GetSingleton()->SetVertexShader(vertexShader);
-	if (skipPixelShader) {
-		pixelShader = nullptr;
-	}
-	RE::BSGraphics::RendererShadowState::GetSingleton()->SetPixelShader(pixelShader);
-	return true;
+	return (ptr_BSShader_BeginTechnique)(shader, vertexDescriptor, pixelDescriptor, skipPixelShader);
 }
 
 decltype(&IDXGISwapChain::Present) ptr_IDXGISwapChain_Present;
@@ -304,6 +289,11 @@ decltype(&hk_BSGraphics_SetDirtyStates) ptr_BSGraphics_SetDirtyStates;
 
 void hk_BSGraphics_SetDirtyStates(bool isCompute)
 {
+	//auto& shaderCache = SIE::ShaderCache::Instance();
+
+	//if (shaderCache.IsEnabled())
+	//	Bindings::GetSingleton()->SetDirtyStates(isCompute);
+
 	(ptr_BSGraphics_SetDirtyStates)(isCompute);
 
 	{
@@ -363,7 +353,7 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 	const D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_1;  // Create a device with only the latest feature level
 
 #ifndef NDEBUG
-	// Flags |= D3D11_CREATE_DEVICE_DEBUG;
+	Flags |= D3D11_CREATE_DEVICE_DEBUG;
 #endif
 
 	HRESULT hr = (*ptrD3D11CreateDeviceAndSwapChain)(
@@ -407,7 +397,6 @@ void hk_PollInputDevices(RE::BSTEventSource<RE::InputEvent*>* a_dispatcher, RE::
 		if (*a_events) {
 			if (auto device = (*a_events)->GetDevice()) {
 				// Check that the device is not a Gamepad or VR controller. If it is, unblock input.
-				bool vrDevice = false;
 #ifdef ENABLE_SKYRIM_VR
 				auto vrDevice = (REL::Module::IsVR() && ((device == RE::INPUT_DEVICES::INPUT_DEVICE::kVivePrimary) ||
 															(device == RE::INPUT_DEVICES::INPUT_DEVICE::kViveSecondary) ||
@@ -415,6 +404,8 @@ void hk_PollInputDevices(RE::BSTEventSource<RE::InputEvent*>* a_dispatcher, RE::
 															(device == RE::INPUT_DEVICES::INPUT_DEVICE::kOculusSecondary) ||
 															(device == RE::INPUT_DEVICES::INPUT_DEVICE::kWMRPrimary) ||
 															(device == RE::INPUT_DEVICES::INPUT_DEVICE::kWMRSecondary)));
+#else
+				bool vrDevice = false;
 #endif
 				blockedDevice = !((device == RE::INPUT_DEVICES::INPUT_DEVICE::kGamepad) || vrDevice);
 			}
@@ -566,6 +557,16 @@ namespace Hooks
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
+	
+	struct BSImagespaceShaderHDRTonemapBlendCinematic_SetupTechnique
+	{
+		static void thunk(RE::BSShader* a_shader, RE::BSShaderMaterial* a_material)
+		{
+			State::GetSingleton()->DrawPreProcess();
+			func(a_shader, a_material);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
 
 	struct BSLightingShaderProperty_GetRenderPasses
 	{
@@ -609,6 +610,16 @@ namespace Hooks
 			}
 
 			return renderPasses;
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	struct BSImagespaceShaderHDRTonemapBlendCinematicFade_SetupTechnique
+	{
+		static void thunk(RE::BSShader* a_shader, RE::BSShaderMaterial* a_material)
+		{
+			State::GetSingleton()->DrawPreProcess();
+			func(a_shader, a_material);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
@@ -1115,6 +1126,10 @@ namespace Hooks
 		stl::write_vfunc<0x2, BSImagespaceShaderISSAOCompositeSAO_SetupTechnique>(RE::VTABLE_BSImagespaceShaderISSAOCompositeSAO[0]);
 		stl::write_vfunc<0x2, BSImagespaceShaderISSAOCompositeFog_SetupTechnique>(RE::VTABLE_BSImagespaceShaderISSAOCompositeFog[0]);
 		stl::write_vfunc<0x2, BSImagespaceShaderISSAOCompositeSAOFog_SetupTechnique>(RE::VTABLE_BSImagespaceShaderISSAOCompositeSAOFog[0]);
+
+		logger::info("Hooking preprocess passes");
+		stl::write_vfunc<0x2, BSImagespaceShaderHDRTonemapBlendCinematic_SetupTechnique>(RE::VTABLE_BSImagespaceShaderHDRTonemapBlendCinematic[0]);
+		stl::write_vfunc<0x2, BSImagespaceShaderHDRTonemapBlendCinematicFade_SetupTechnique>(RE::VTABLE_BSImagespaceShaderHDRTonemapBlendCinematicFade[0]);
 
 		logger::info("Hooking WndProcHandler");
 		stl::write_thunk_call_6<RegisterClassA_Hook>(REL::VariantID(75591, 77226, 0xDC4B90).address() + REL::VariantOffset(0x8E, 0x15C, 0x99).offset());

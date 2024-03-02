@@ -6,6 +6,8 @@ RWTexture2DArray<float4> DynamicCubemapPosition : register(u2);
 Texture2D<float> DepthTexture : register(t0);
 Texture2D<float4> ColorTexture : register(t1);
 
+SamplerState LinearSampler : register(s0);
+
 // Calculate normalized sampling direction vector based on current fragment coordinates.
 // This is essentially "inverse-sampling": we reconstruct what the sampling vector would be if we wanted it to "hit"
 // this particular fragment in a cubemap.
@@ -160,32 +162,35 @@ float3 InverseProjectUVZ(float2 uv, float z)
 		uv = GetDynamicResolutionAdjustedScreenPosition(uv);
 		uv = ConvertToStereoUV(uv, 0);
 
-		float2 textureDims;
-		DepthTexture.GetDimensions(textureDims.x, textureDims.y);
-
-		float depth = DepthTexture[round(uv * textureDims)];
+		float depth = DepthTexture.SampleLevel(LinearSampler, uv, 0);
 		float linearDepth = GetScreenDepth(depth);
 
-		if (linearDepth > 16.5) {  // First person
-			float3 color = ColorTexture[round(uv * textureDims)];
+		if (linearDepth > 16.5) {  // Ignore objects which are too close
+			float3 color = ColorTexture.SampleLevel(LinearSampler, uv, 0);
 			float4 output = float4(sRGB2Lin(color), 1.0);
 			float lerpFactor = 0.5;
 
+			float4 position = float4(InverseProjectUVZ(uv, depth) * 0.0005, 1.0);
+			DynamicCubemapPosition[ThreadID] = lerp(DynamicCubemapPosition[ThreadID], position, lerpFactor);
+
 			DynamicCubemapRaw[ThreadID] = lerp(DynamicCubemapRaw[ThreadID], output, lerpFactor);
+
+			float distanceFactor = saturate(length(position.xyz));
+			output *= distanceFactor;
+
 			DynamicCubemap[ThreadID] = lerp(DynamicCubemap[ThreadID], output, lerpFactor);
 
-			float3 position = InverseProjectUVZ(uv, depth);
-			DynamicCubemapPosition[ThreadID] = lerp(DynamicCubemapPosition[ThreadID], float4(position * 0.001, 1.0), lerpFactor);
 			return;
 		}
 	}
 
 	float4 position = DynamicCubemapPosition[ThreadID];
-	position.xyz = (position.xyz + (CameraPreviousPosAdjust2.xyz * 0.001)) - (CameraPosAdjust[0].xyz * 0.001);  // Remove adjustment, add new adjustment
+	position.xyz = (position.xyz + (CameraPreviousPosAdjust2.xyz * 0.0005)) - (CameraPosAdjust[0].xyz * 0.0005);  // Remove adjustment, add new adjustment
 	DynamicCubemapPosition[ThreadID] = position;
 
 	float4 color = DynamicCubemapRaw[ThreadID];
-	color *= lerp(1.0, 0.0, saturate(length(position.xyz)));
+	color *= 1.0 - saturate(length(position.xyz));
+	color *= saturate(length(position.xyz) * 10);
 
-	DynamicCubemap[ThreadID] = color;
+	DynamicCubemap[ThreadID] = max(0, color);
 }
