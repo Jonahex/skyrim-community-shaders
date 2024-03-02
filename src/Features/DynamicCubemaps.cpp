@@ -353,7 +353,6 @@ void DynamicCubemaps::Draw(const RE::BSShader* shader, const uint32_t descriptor
 		auto shadowState = RE::BSGraphics::RendererShadowState::GetSingleton();
 		auto cubeMapRenderTarget = !REL::Module::IsVR() ? shadowState->GetRuntimeData().cubeMapRenderTarget : shadowState->GetVRRuntimeData().cubeMapRenderTarget;
 
-		auto context = RE::BSGraphics::Renderer::GetSingleton()->GetRuntimeData().context;
 		
 		if (cubeMapRenderTarget != RE::RENDER_TARGETS_CUBEMAP::kREFLECTIONS && !renderedScreenCamera) {
 			UpdateCubemap();
@@ -381,6 +380,7 @@ void DynamicCubemaps::Draw(const RE::BSShader* shader, const uint32_t descriptor
 		}
 		if ((descriptor & static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::TruePbr)) != 0) {
 			auto srv = perPass->srv.get();
+			auto context = RE::BSGraphics::Renderer::GetSingleton()->GetRuntimeData().context;
 			context->PSSetShaderResources(66, 1, &srv);
 		}
 	}
