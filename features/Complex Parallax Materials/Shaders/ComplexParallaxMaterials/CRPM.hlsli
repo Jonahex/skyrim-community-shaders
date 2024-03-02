@@ -34,9 +34,9 @@ float GetMipLevel(float2 coords, Texture2D<float4> tex)
 }
 
 #if defined(LANDSCAPE)
-float2 GetParallaxCoords(float distance, float2 coords, float mipLevel, float3 viewDir, float3x3 tbn, Texture2D<float4> tex, SamplerState texSampler, uint channel, float blend, out float pixelOffset)
+float2 GetParallaxCoords(float distance, float2 coords, float mipLevel, float3 viewDir, float3x3 tbn, Texture2D<float4> tex, SamplerState texSampler, uint channel, float blend, float scale, out float pixelOffset)
 #else
-float2 GetParallaxCoords(float distance, float2 coords, float mipLevel, float3 viewDir, float3x3 tbn, Texture2D<float4> tex, SamplerState texSampler, uint channel, out float pixelOffset)
+float2 GetParallaxCoords(float distance, float2 coords, float mipLevel, float3 viewDir, float3x3 tbn, Texture2D<float4> tex, SamplerState texSampler, uint channel, float scale, out float pixelOffset)
 #endif
 {
 	pixelOffset = 0.5;
@@ -116,7 +116,7 @@ float2 GetParallaxCoords(float distance, float2 coords, float mipLevel, float3 v
 			currHeight.w = tex.SampleLevel(texSampler, currentOffset[1].zw, mipLevel)[channel];
 
 			currHeight.xyzw -= 0.5;
-			currHeight.xyzw = heightCorrectionScale * currHeight.xyzw + 0.5;
+			currHeight.xyzw = heightCorrectionScale * scale * currHeight.xyzw + 0.5;
 
 			bool4 testResult = currHeight >= currentBound;
 			[branch] if (any(testResult))
@@ -202,13 +202,13 @@ float2 GetParallaxCoords(float distance, float2 coords, float mipLevel, float3 v
 		}
 
 		if (nearBlendToMid > 0.0) {
-			float height = tex.Sample(texSampler, coords.xy)[channel];
+			float height = scale * tex.Sample(texSampler, coords.xy)[channel];
 			height = height * maxHeight - minHeight;
 			pixelOffset = lerp(pt1.x, height, nearBlendToMid);
 			output = lerp(output, viewDirTS.xy * height.xx + coords.xy, nearBlendToMid);
 		}
 	} else if (midBlendToFar < 1.0) {
-		float height = tex.Sample(texSampler, coords.xy)[channel];
+		float height = scale * tex.Sample(texSampler, coords.xy)[channel];
 		if (midBlendToFar > 0.0) {
 			maxHeight *= (1 - midBlendToFar);
 			minHeight *= (1 - midBlendToFar);

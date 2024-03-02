@@ -247,7 +247,25 @@ bool hk_BSShader_BeginTechnique(RE::BSShader* shader, uint32_t vertexDescriptor,
 	state->currentPixelDescriptor = pixelDescriptor;
 	state->updateShader = true;
 
-	return (ptr_BSShader_BeginTechnique)(shader, vertexDescriptor, pixelDescriptor, skipPixelShader);
+	const bool shaderFound = (ptr_BSShader_BeginTechnique)(shader, vertexDescriptor, pixelDescriptor, skipPixelShader);
+	if (shaderFound)
+	{
+		return shaderFound;
+	}
+
+	auto& shaderCache = SIE::ShaderCache::Instance();
+	State::GetSingleton()->ModifyShaderLookup(*shader, vertexDescriptor, pixelDescriptor);
+	RE::BSGraphics::VertexShader* vertexShader = shaderCache.GetVertexShader(*shader, vertexDescriptor);
+	RE::BSGraphics::PixelShader* pixelShader = shaderCache.GetPixelShader(*shader, pixelDescriptor);
+	if (vertexShader == nullptr || pixelShader == nullptr) {
+		return false;
+	}
+	RE::BSGraphics::RendererShadowState::GetSingleton()->SetVertexShader(vertexShader);
+	if (skipPixelShader) {
+		pixelShader = nullptr;
+	}
+	RE::BSGraphics::RendererShadowState::GetSingleton()->SetPixelShader(pixelShader);
+	return true;
 }
 
 decltype(&IDXGISwapChain::Present) ptr_IDXGISwapChain_Present;
