@@ -228,17 +228,18 @@ float2 GetParallaxCoords(float distance, float2 coords, float mipLevel, float3 v
 
 // Cheap method of creating soft shadows using height for a given light source
 // Only uses 1 sample vs the 8 in the original paper's example, which makes this effect very scaleable at the cost of small details
-float GetParallaxSoftShadowMultiplier(float2 coords, float mipLevel, float3 L, float sh0, Texture2D<float4> tex, SamplerState texSampler, uint channel, float quality)
+float GetParallaxSoftShadowMultiplier(float2 coords, float mipLevel, float3 L, float sh0, Texture2D<float4> tex, SamplerState texSampler, uint channel, float quality, float scale)
 {
 	if (quality > 0.0) {
-		const float height = 0.025;
-		const float2 rayDir = L.xy * height;
+		const float shadow_strength = 14.0;
+		const float height = 0.05;
+		const float2 rayDir = L.xy * height * scale;
 
 		const float h0 = 1.0 - sh0;
 		const float h = 1.0 - tex.SampleLevel(texSampler, coords + rayDir, mipLevel)[channel];
 
 		// Compare the difference between the two heights to see if the height blocks it
-		const float occlusion = 1.0 - saturate((h0 - h) * 7.0);
+		const float occlusion = 1.0 - saturate((h0 - h) * shadow_strength * scale);
 
 		// Fade out with quality
 		return lerp(1.0, occlusion, quality);
@@ -247,22 +248,22 @@ float GetParallaxSoftShadowMultiplier(float2 coords, float mipLevel, float3 L, f
 }
 
 #if defined(LANDSCAPE)
-float GetParallaxSoftShadowMultiplierTerrain(PS_INPUT input, float2 coords[6], float mipLevel[6], float3 L, float sh0[6], float quality)
+float GetParallaxSoftShadowMultiplierTerrain(PS_INPUT input, float2 coords[6], float mipLevel[6], float3 L, float sh0[6], float quality, float scale)
 {
 	float occlusion = 0.0;
 
 	if (input.LandBlendWeights1.x > 0)
-		occlusion += GetParallaxSoftShadowMultiplier(coords[0], mipLevel[0], L, sh0[0], TexColorSampler, SampTerrainParallaxSampler, 3, quality) * input.LandBlendWeights1.x;
+		occlusion += GetParallaxSoftShadowMultiplier(coords[0], mipLevel[0], L, sh0[0], TexColorSampler, SampTerrainParallaxSampler, 3, quality, scale) * input.LandBlendWeights1.x;
 	if (input.LandBlendWeights1.y > 0)
-		occlusion += GetParallaxSoftShadowMultiplier(coords[1], mipLevel[1], L, sh0[1], TexLandColor2Sampler, SampTerrainParallaxSampler, 3, quality) * input.LandBlendWeights1.y;
+		occlusion += GetParallaxSoftShadowMultiplier(coords[1], mipLevel[1], L, sh0[1], TexLandColor2Sampler, SampTerrainParallaxSampler, 3, quality, scale) * input.LandBlendWeights1.y;
 	if (input.LandBlendWeights1.z > 0)
-		occlusion += GetParallaxSoftShadowMultiplier(coords[2], mipLevel[2], L, sh0[2], TexLandColor3Sampler, SampTerrainParallaxSampler, 3, quality) * input.LandBlendWeights1.z;
+		occlusion += GetParallaxSoftShadowMultiplier(coords[2], mipLevel[2], L, sh0[2], TexLandColor3Sampler, SampTerrainParallaxSampler, 3, quality, scale) * input.LandBlendWeights1.z;
 	if (input.LandBlendWeights1.w > 0)
-		occlusion += GetParallaxSoftShadowMultiplier(coords[3], mipLevel[3], L, sh0[3], TexLandColor4Sampler, SampTerrainParallaxSampler, 3, quality) * input.LandBlendWeights1.w;
+		occlusion += GetParallaxSoftShadowMultiplier(coords[3], mipLevel[3], L, sh0[3], TexLandColor4Sampler, SampTerrainParallaxSampler, 3, quality, scale) * input.LandBlendWeights1.w;
 	if (input.LandBlendWeights2.x > 0)
-		occlusion += GetParallaxSoftShadowMultiplier(coords[4], mipLevel[4], L, sh0[4], TexLandColor5Sampler, SampTerrainParallaxSampler, 3, quality) * input.LandBlendWeights2.x;
+		occlusion += GetParallaxSoftShadowMultiplier(coords[4], mipLevel[4], L, sh0[4], TexLandColor5Sampler, SampTerrainParallaxSampler, 3, quality, scale) * input.LandBlendWeights2.x;
 	if (input.LandBlendWeights2.y > 0)
-		occlusion += GetParallaxSoftShadowMultiplier(coords[5], mipLevel[5], L, sh0[5], TexLandColor6Sampler, SampTerrainParallaxSampler, 3, quality) * input.LandBlendWeights2.y;
+		occlusion += GetParallaxSoftShadowMultiplier(coords[5], mipLevel[5], L, sh0[5], TexLandColor6Sampler, SampTerrainParallaxSampler, 3, quality, scale) * input.LandBlendWeights2.y;
 	return saturate(occlusion);  // Blend weights seem to go greater than 1.0 sometimes
 }
 #endif

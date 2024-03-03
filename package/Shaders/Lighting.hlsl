@@ -1193,9 +1193,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		if defined(TRUE_PBR) && !defined(LANDSCAPE) && !defined(LODLANDSCAPE) && !defined(PROJECTED_UV)
 	[branch] if ((PBRFlags & 16) != 0) {
 		PBRParallax = true;
-		float displacementScale = PBRParams1.y;
 		mipLevel = GetMipLevel(uv, TexParallaxSampler);
-		uv = GetParallaxCoords(viewPosition.z, uv, mipLevel, viewDirection, tbnTr, TexParallaxSampler, SampParallaxSampler, 0, displacementScale, pixelOffset);
+		uv = GetParallaxCoords(viewPosition.z, uv, mipLevel, viewDirection, tbnTr, TexParallaxSampler, SampParallaxSampler, 0, PBRParams1.y, pixelOffset);
 		if (perPassParallax[0].EnableShadows && parallaxShadowQuality > 0.0f)
 			sh0 = TexParallaxSampler.SampleLevel(SampParallaxSampler, uv, mipLevel).x;
 	}
@@ -1751,16 +1750,16 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #		if defined(LANDSCAPE)
 	if (perPassParallax[0].EnableTerrainParallax && perPassParallax[0].EnableShadows)
-		dirShadow *= GetParallaxSoftShadowMultiplierTerrain(input, terrainUVs, mipLevel, dirLightDirectionTS, sh0, dirLightIsLit * parallaxShadowQuality);
+		dirShadow *= GetParallaxSoftShadowMultiplierTerrain(input, terrainUVs, mipLevel, dirLightDirectionTS, sh0, dirLightIsLit * parallaxShadowQuality, PBRParallax ? PBRParams1.y : 0.5);
 #		elif defined(PARALLAX)
 	if (perPassParallax[0].EnableParallax && perPassParallax[0].EnableShadows)
-		dirShadow *= GetParallaxSoftShadowMultiplier(uv, mipLevel, dirLightDirectionTS, sh0, TexParallaxSampler, SampParallaxSampler, 0, dirLightIsLit * parallaxShadowQuality);
+		dirShadow *= GetParallaxSoftShadowMultiplier(uv, mipLevel, dirLightDirectionTS, sh0, TexParallaxSampler, SampParallaxSampler, 0, dirLightIsLit * parallaxShadowQuality, 0.5);
 #		elif defined(ENVMAP)
 	if (complexMaterialParallax && perPassParallax[0].EnableShadows)
-		dirShadow *= GetParallaxSoftShadowMultiplier(uv, mipLevel, dirLightDirectionTS, sh0, TexEnvMaskSampler, SampEnvMaskSampler, 3, dirLightIsLit * parallaxShadowQuality);
+		dirShadow *= GetParallaxSoftShadowMultiplier(uv, mipLevel, dirLightDirectionTS, sh0, TexEnvMaskSampler, SampEnvMaskSampler, 3, dirLightIsLit * parallaxShadowQuality, 0.5);
 #		elif defined(TRUE_PBR) && !defined(PROJECTED_UV) && !defined(LODLANDSCAPE)
 	if (PBRParallax && perPassParallax[0].EnableShadows)
-		dirShadow *= GetParallaxSoftShadowMultiplier(uv, mipLevel, dirLightDirectionTS, sh0, TexParallaxSampler, SampParallaxSampler, 0, dirLightIsLit * parallaxShadowQuality);
+		dirShadow *= GetParallaxSoftShadowMultiplier(uv, mipLevel, dirLightDirectionTS, sh0, TexParallaxSampler, SampParallaxSampler, 0, dirLightIsLit * parallaxShadowQuality, PBRParams1.y);
 #		endif  // LANDSCAPE
 #	endif      // defined(CPM_AVAILABLE) && (defined (SKINNED) || !defined \
 				// (MODELSPACENORMALS))
@@ -2034,16 +2033,16 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #				if defined(PARALLAX)
 			[branch] if (perPassParallax[0].EnableParallax)
-				lightShadow *= GetParallaxSoftShadowMultiplier(uv, mipLevel, lightDirectionTS, sh0, TexParallaxSampler, SampParallaxSampler, 0, parallaxShadowQuality);
+				lightShadow *= GetParallaxSoftShadowMultiplier(uv, mipLevel, lightDirectionTS, sh0, TexParallaxSampler, SampParallaxSampler, 0, parallaxShadowQuality, 0.5);
 #				elif defined(LANDSCAPE)
 			[branch] if (perPassParallax[0].EnableTerrainParallax)
-				lightShadow *= GetParallaxSoftShadowMultiplierTerrain(input, terrainUVs, mipLevel, lightDirectionTS, sh0, parallaxShadowQuality);
+				lightShadow *= GetParallaxSoftShadowMultiplierTerrain(input, terrainUVs, mipLevel, lightDirectionTS, sh0, parallaxShadowQuality, PBRParallax ? PBRParams1.y : 0.5);
 #				elif defined(ENVMAP)
 			[branch] if (complexMaterialParallax)
-				lightShadow *= GetParallaxSoftShadowMultiplier(uv, mipLevel, lightDirectionTS, sh0, TexEnvMaskSampler, SampEnvMaskSampler, 3, parallaxShadowQuality);
+				lightShadow *= GetParallaxSoftShadowMultiplier(uv, mipLevel, lightDirectionTS, sh0, TexEnvMaskSampler, SampEnvMaskSampler, 3, parallaxShadowQuality, 0.5);
 #				elif defined(TRUE_PBR) && !defined(PROJECTED_UV) && !defined(LODLANDSCAPE)
 			[branch] if (PBRParallax)
-				lightShadow *= GetParallaxSoftShadowMultiplier(uv, mipLevel, lightDirectionTS, sh0, TexParallaxSampler, SampParallaxSampler, 0, parallaxShadowQuality);
+				lightShadow *= GetParallaxSoftShadowMultiplier(uv, mipLevel, lightDirectionTS, sh0, TexParallaxSampler, SampParallaxSampler, 0, parallaxShadowQuality, PBRParams1.y);
 #				endif
 		}
 #			endif
