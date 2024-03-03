@@ -235,11 +235,11 @@ void GetAmbientLightInputPBR(out float3 diffuse, out float3 specular, float3 N, 
     float diffuseFactor = 0.5f;
     float specularFactor = 0.5f;
 	
-	float weatherAmbientColor = float3(DirectionalAmbient[0].w, DirectionalAmbient[1].w, DirectionalAmbient[2].w);
+	float weatherAmbientColor = sRGB2Lin(float3(DirectionalAmbient[0].w, DirectionalAmbient[1].w, DirectionalAmbient[2].w));
 	float weatherAmbientLuminance = RGBToLuminanceAlternative(weatherAmbientColor);
 	
-	float3 directionalAmbientDiffuseColor = mul(DirectionalAmbient, float4(N, 1.f));
-	float3 directionalAmbientSpecularColor = mul(DirectionalAmbient, float4(R, 1.f));
+	float3 directionalAmbientDiffuseColor =  sRGB2Lin(mul(DirectionalAmbient, float4(N, 1.f)));
+	float3 directionalAmbientSpecularColor = sRGB2Lin(mul(DirectionalAmbient, float4(R, 1.f)));
 
 	float3 diffuseIrradiance = 0;
 	float3 specularIrradiance = 0;
