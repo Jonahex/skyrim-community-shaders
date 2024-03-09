@@ -1,5 +1,6 @@
 #include "Common/Color.hlsl"
 #include "Common/FrameBuffer.hlsl"
+#include "Common/LightingData.hlsl"
 #include "Common/MotionBlur.hlsl"
 
 #define GRASS
@@ -355,6 +356,10 @@ float3x3 CalculateTBN(float3 N, float3 p, float2 uv)
 #		include "DynamicCubemaps/DynamicCubemaps.hlsli"
 #	endif
 
+#	if defined(CLOUD_SHADOWS)
+#		include "CloudShadows/CloudShadows.hlsli"
+#	endif
+
 PS_OUTPUT main(PS_INPUT input, bool frontFace
 			   : SV_IsFrontFace)
 {
@@ -435,6 +440,14 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		dirLightColor *= SunlightScale;
 	}
 
+#		if defined(CLOUD_SHADOWS)
+	float3 cloudShadowMult = 1.0;
+	if (perPassCloudShadow[0].EnableCloudShadows && !lightingData[0].Reflections) {
+		cloudShadowMult = getCloudShadowMult(input.WorldPosition.xyz, DirLightDirection.xyz, SampColorSampler);
+		dirLightColor *= cloudShadowMult;
+	}
+#		endif
+
 	dirLightColor *= shadowColor.x;
 
 #		if defined(SCREEN_SPACE_SHADOWS)
@@ -478,7 +491,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		if (lightCount) {
 			uint lightOffset = lightGrid[clusterIndex].offset;
 
-			float screenNoise = InterleavedGradientNoise(screenUV * perPassLLF[0].BufferDim);
+			float screenNoise = InterleavedGradientNoise(screenUV * lightingData[0].BufferDim);
 			float shadowQualityScale = saturate(1.0 - (((float)lightCount * (float)lightCount) / 128.0));
 
 			[loop] for (uint i = 0; i < lightCount; i++)
@@ -518,6 +531,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		endif
 
 	float3 directionalAmbientColor = mul(DirectionalAmbient, float4(worldNormal.xyz, 1));
+#		if defined(CLOUD_SHADOWS)
+	if (perPassCloudShadow[0].EnableCloudShadows && !lightingData[0].Reflections)
+		directionalAmbientColor *= lerp(1.0, cloudShadowMult, perPassCloudShadow[0].AbsorptionAmbient);
+#		endif
 	lightsDiffuseColor += directionalAmbientColor;
 
 	diffuseColor += lightsDiffuseColor;
