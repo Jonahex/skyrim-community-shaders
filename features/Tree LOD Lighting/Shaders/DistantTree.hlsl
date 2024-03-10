@@ -105,6 +105,7 @@ struct PS_OUTPUT
 
 #ifdef PSHADER
 SamplerState SampDiffuse : register(s0);
+SamplerState SampShadowMaskSampler : register(s14);
 Texture2D<float4> TexDiffuse : register(t0);
 
 cbuffer AlphaTestRefCB : register(b11)
@@ -216,8 +217,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 	float2 screenMotionVector = GetSSMotionVector(input.WorldPosition, input.PreviousWorldPosition);
 
-	float shadowColor = TexShadowMaskSampler.Load(int3(input.Position.xy, 0));
-
 	psout.MotionVector = screenMotionVector;
 
 	float3 ddx = ddx_coarse(input.WorldPosition);
@@ -263,7 +262,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #		if defined(SCREEN_SPACE_SHADOWS)
 	float dirLightSShadow = PrepassScreenSpaceShadows(input.WorldPosition);
-	shadowColor *= dirLightSShadow;
 #		endif
 
 	float3 diffuseColor = 0;
