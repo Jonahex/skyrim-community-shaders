@@ -1706,9 +1706,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	endif
 
 	float3 dirLightColor = DirLightColor.xyz;
-#	if defined(TRUE_PBR)
-	dirLightColor = sRGB2Lin(dirLightColor);
-#	endif
 	float selfShadowFactor = 1.0f;
 
 	float3 normalizedDirLightDirectionWS = DirLightDirection;
@@ -1903,9 +1900,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		float intensityMultiplier = 1 - intensityFactor * intensityFactor;
 		float3 lightColor = PointLightColor[lightIndex].xyz * intensityMultiplier;
 
-#			if defined(TRUE_PBR)
-		lightColor = sRGB2Lin(lightColor);
-#			endif
 		float3 nsLightColor = lightColor;
 		
 		float lightShadow = 1.f;
@@ -1989,12 +1983,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 		float intensityMultiplier = 1 - intensityFactor * intensityFactor;
 		float3 lightColor = light.color.xyz * intensityMultiplier;
-		
-#			if defined(TRUE_PBR) || defined(WETNESS_EFFECTS)
-		float3 linLightColor = sRGB2Lin(lightColor);
-#			endif
 #			if defined(TRUE_PBR)
-		lightColor = linLightColor;
+		lightColor = light.pbrColor.xyz * intensityMultiplier;
 #			endif
 			
 		float3 nsLightColor = lightColor;
@@ -2081,7 +2071,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #				if defined(WETNESS_EFFECTS)
 		if (waterRoughnessSpecular < 1.0)
-			wetnessSpecular += GetWetnessSpecular(wetnessNormal, normalizedLightDirection, worldSpaceViewDirection, linLightColor, waterRoughnessSpecular) * 0.4;
+			wetnessSpecular += GetWetnessSpecular(wetnessNormal, normalizedLightDirection, worldSpaceViewDirection, sRGB2Lin(lightColor), waterRoughnessSpecular) * 0.4;
 #				endif
 	}
 #		endif
@@ -2288,10 +2278,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	specularTmp.xyz = tmpColor.xyz + ColourOutputClamp.zzz;
 	color.xyz = min(specularTmp.xyz, color.xyz);
 #	endif  // defined (SPECULAR) || defined(SPARKLE)
-
-#	if defined(TRUE_PBR)
-	color.xyz = Lin2sRGB(color.xyz);
-#	endif
 
 #	if defined(ENVMAP) && defined(TESTCUBEMAP)
 	color.xyz = specularTexture.SampleLevel(SampEnvSampler, envSamplingPoint, 0).xyz;

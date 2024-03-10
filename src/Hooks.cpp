@@ -594,7 +594,7 @@ namespace Hooks
 			{
 				isPbr = true;
 			}
-			else if (property->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kLODLandscape))
+			else if (property->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kLODLandscape) && State::GetSingleton()->pbrSettings.pbrLodLand)
 			{
 				isPbr = true;
 			}
@@ -853,8 +853,26 @@ namespace Hooks
 		{
 			const uint32_t originalExtraFlags = shader->currentRawTechnique & 0b111000u;
 
+			RE::NiTransform originalDirectionalAmbient;
+
 			if ((shader->currentRawTechnique & static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::TruePbr)) != 0) {
 				shader->currentRawTechnique |= static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::AmbientSpecular);
+
+				auto state = State::GetSingleton();
+				const float mult = state->pbrSettings.lightColorMultiplier;
+				const float power = state->pbrSettings.lightColorPower;
+
+				for (uint32_t lightIndex = 0; lightIndex < pass->numLights; ++lightIndex) {
+					auto& color = pass->sceneLights[lightIndex]->light->diffuse;
+
+					color.red = mult * pow(color.red, power);
+					color.green = mult * pow(color.green, power);
+					color.blue = mult * pow(color.blue, power);
+				}
+
+				auto& shaderManagerState = RE::BSShaderManager::State::GetSingleton();
+				originalDirectionalAmbient = shaderManagerState.directionalAmbientTransform;
+				shaderManagerState.directionalAmbientTransform = state->pbrDirectionalAmbientTransform;
 			}
 
 			shader->currentRawTechnique &= ~0b111000u;
@@ -867,6 +885,20 @@ namespace Hooks
 
 			if ((shader->currentRawTechnique & static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::TruePbr)) != 0) {
 				shader->currentRawTechnique &= ~static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::AmbientSpecular);
+
+				auto state = State::GetSingleton();
+				const float mult = 1.f / state->pbrSettings.lightColorMultiplier;
+				const float power = 1.f / state->pbrSettings.lightColorPower;
+				for (uint32_t lightIndex = 0; lightIndex < pass->numLights; ++lightIndex) {
+					auto& color = pass->sceneLights[lightIndex]->light->diffuse;
+
+					color.red = pow(mult * color.red, power);
+					color.green = pow(mult * color.green, power);
+					color.blue = pow(mult * color.blue, power);
+				}
+
+				auto& shaderManagerState = RE::BSShaderManager::State::GetSingleton();
+				shaderManagerState.directionalAmbientTransform = originalDirectionalAmbient;
 			}
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
@@ -1153,6 +1185,35 @@ namespace Hooks
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
+	void hk_InitDirectionalAmbient(RE::NiColor (&directionalAmbientColors)[3][2], RE::NiColor* ambientSpecularColor, float ambientSpecularAlpha);
+	decltype(&hk_InitDirectionalAmbient) ptr_InitDirectionalAmbient;
+
+	void hk_InitDirectionalAmbient(RE::NiColor (&directionalAmbientColors)[3][2], RE::NiColor* ambientSpecularColor, float ambientSpecularAlpha)
+	{
+		{
+			auto state = State::GetSingleton();
+			const float mult = state->pbrSettings.ambientLightColorMultiplier;
+			const float power = state->pbrSettings.ambientLightColorPower;
+
+			RE::NiColor pbrDirectionalAmbientColors[3][2];
+			for (size_t i = 0; i < 3; ++i) {
+				for (size_t j = 0; j < 2; ++j) {
+					auto color = directionalAmbientColors[i][j];
+					color.red = mult * pow(color.red, power);
+					color.green = mult * pow(color.green, power);
+					color.blue = mult * pow(color.blue, power);
+					pbrDirectionalAmbientColors[i][j] = color;
+				}
+			}
+
+			auto& shaderManagerState = RE::BSShaderManager::State::GetSingleton();
+			ptr_InitDirectionalAmbient(pbrDirectionalAmbientColors, ambientSpecularColor, ambientSpecularAlpha);
+			state->pbrDirectionalAmbientTransform = shaderManagerState.directionalAmbientTransform;
+		}
+
+		ptr_InitDirectionalAmbient(directionalAmbientColors, ambientSpecularColor, ambientSpecularAlpha);
+	}
+
 	void Install()
 	{
 		SKSE::AllocTrampoline(14);
@@ -1212,5 +1273,8 @@ namespace Hooks
 		logger::info("Hooking TESLandTexture");
 		stl::write_vfunc<0x32, TESForm_GetFormEditorID>(RE::VTABLE_TESLandTexture[0]);
 		stl::write_vfunc<0x33, TESForm_SetFormEditorID>(RE::VTABLE_TESLandTexture[0]);
+
+		logger::info("Hooking InitDirectionalAmbient");
+		*(uintptr_t*)&ptr_InitDirectionalAmbient = Detours::X64::DetourFunction(REL::RelocationID(98989, 105643).address(), (uintptr_t)&hk_InitDirectionalAmbient);
 	}
 }

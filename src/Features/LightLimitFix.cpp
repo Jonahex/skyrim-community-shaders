@@ -275,6 +275,8 @@ void LightLimitFix::BSLightingShader_SetupGeometry_GeometrySetupConstantPointLig
 	auto accumulator = RE::BSGraphics::BSShaderAccumulator::GetCurrentAccumulator();
 	bool inWorld = accumulator->GetRuntimeData().activeShadowSceneNode == RE::BSShaderManager::State::GetSingleton().shadowSceneNode[0];
 
+	auto csState = State::GetSingleton();
+
 	strictLightDataTemp.NumLights = a_pass->numLights - 1;
 	for (uint32_t i = 0; i < strictLightDataTemp.NumLights; i++) {
 		auto bsLight = a_pass->sceneLights[i + 1];
@@ -284,8 +286,17 @@ void LightLimitFix::BSLightingShader_SetupGeometry_GeometrySetupConstantPointLig
 
 		LightData light{};
 		light.color = { runtimeData.diffuse.red, runtimeData.diffuse.green, runtimeData.diffuse.blue };
-		light.color *= runtimeData.fade;
-		light.color *= bsLight->lodDimmer;
+
+		float fade = 1.f;
+		fade *= runtimeData.fade;
+		fade *= bsLight->lodDimmer;
+
+		light.pbrColor.x = csState->pbrSettings.lightColorMultiplier * pow(light.color.x, csState->pbrSettings.lightColorPower);
+		light.pbrColor.y = csState->pbrSettings.lightColorMultiplier * pow(light.color.y, csState->pbrSettings.lightColorPower);
+		light.pbrColor.z = csState->pbrSettings.lightColorMultiplier * pow(light.color.z, csState->pbrSettings.lightColorPower);
+
+		light.color *= fade;
+		light.pbrColor *= fade;
 
 		light.radius = runtimeData.radius.x;
 
@@ -644,6 +655,7 @@ void LightLimitFix::AddCachedParticleLights(eastl::vector<LightData>& lightsData
 
 	float distance = CalculateLightDistance(light.positionWS[0].data, light.radius);
 
+	float fade = 1.f;
 	float dimmer = 0.0f;
 
 	if (distance < lightFadeStart || lightFadeEnd == 0.0f) {
@@ -654,7 +666,7 @@ void LightLimitFix::AddCachedParticleLights(eastl::vector<LightData>& lightsData
 		dimmer = 0.0f;
 	}
 
-	light.color *= dimmer;
+	fade *= dimmer;
 
 	float distantLightFadeStart = lightsFar * lightsFar * (lightFadeStart / lightFadeEnd);
 	float distantLightFadeEnd = lightsFar * lightsFar;
@@ -667,7 +679,15 @@ void LightLimitFix::AddCachedParticleLights(eastl::vector<LightData>& lightsData
 		dimmer = 0.0f;
 	}
 
-	light.color *= dimmer;
+	fade *= dimmer;
+
+	auto csState = State::GetSingleton();
+	light.pbrColor.x = csState->pbrSettings.lightColorMultiplier * pow(light.color.x, csState->pbrSettings.lightColorPower);
+	light.pbrColor.y = csState->pbrSettings.lightColorMultiplier * pow(light.color.y, csState->pbrSettings.lightColorPower);
+	light.pbrColor.z = csState->pbrSettings.lightColorMultiplier * pow(light.color.z, csState->pbrSettings.lightColorPower);
+
+	light.color *= fade;
+	light.pbrColor *= fade;
 
 	if ((light.color.x + light.color.y + light.color.z) > 1e-4 && light.radius > 1e-4) {
 		if (a_geometry && a_config && a_config->flicker) {
@@ -726,6 +746,7 @@ void LightLimitFix::UpdateLights()
 
 	auto shadowSceneNode = RE::BSShaderManager::State::GetSingleton().shadowSceneNode[0];
 	auto state = RE::BSGraphics::RendererShadowState::GetSingleton();
+	auto csState = State::GetSingleton();
 
 	// Cache data since cameraData can become invalid in first-person
 
@@ -777,8 +798,14 @@ void LightLimitFix::UpdateLights()
 
 					LightData light{};
 					light.color = { runtimeData.diffuse.red, runtimeData.diffuse.green, runtimeData.diffuse.blue };
-					light.color *= runtimeData.fade;
-					light.color *= bsLight->lodDimmer;
+
+					light.pbrColor.x = csState->pbrSettings.lightColorMultiplier * pow(light.color.x, csState->pbrSettings.lightColorPower);
+					light.pbrColor.y = csState->pbrSettings.lightColorMultiplier * pow(light.color.y, csState->pbrSettings.lightColorPower);
+					light.pbrColor.z = csState->pbrSettings.lightColorMultiplier * pow(light.color.z, csState->pbrSettings.lightColorPower);
+
+					float fade = 1.f;
+					fade *= runtimeData.fade;
+					fade *= bsLight->lodDimmer;
 
 					light.radius = runtimeData.radius.x;
 
@@ -802,7 +829,10 @@ void LightLimitFix::UpdateLights()
 						dimmer = 0.0f;
 					}
 
-					light.color *= dimmer;
+					fade *= dimmer;
+
+					light.color *= fade;
+					light.pbrColor *= fade;
 
 					if ((light.color.x + light.color.y + light.color.z) > 1e-4 && light.radius > 1e-4) {
 						light.firstPersonShadow = bsLight == firstPersonLight || bsLight == thirdPersonLight || niLight == refLight || niLight == magicLight;

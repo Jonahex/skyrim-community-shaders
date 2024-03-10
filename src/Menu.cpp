@@ -381,6 +381,15 @@ void Menu::DrawSettings()
 				ImGui::Text(std::format("Shader Compiler : {}", shaderCache.GetShaderStatsString()).c_str());
 				ImGui::TreePop();
 			}
+			if (ImGui::TreeNodeEx("PBR", ImGuiTreeNodeFlags_DefaultOpen)) {
+				auto state = State::GetSingleton();
+				ImGui::Checkbox("PBR LOD Land", &state->pbrSettings.pbrLodLand);
+				ImGui::SliderFloat("Light Color Multiplier", &state->pbrSettings.lightColorMultiplier, 1e-3f, 1e2f, "%.3f", ImGuiSliderFlags_Logarithmic);
+				ImGui::SliderFloat("Light Color Power", &state->pbrSettings.lightColorPower, 1e-3f, 1e2f, "%.3f", ImGuiSliderFlags_Logarithmic);
+				ImGui::SliderFloat("Ambient Light Color Multiplier", &state->pbrSettings.ambientLightColorMultiplier, 1e-3f, 1e2f, "%.3f", ImGuiSliderFlags_Logarithmic);
+				ImGui::SliderFloat("Ambient Light Color Power", &state->pbrSettings.ambientLightColorPower, 1e-3f, 1e2f, "%.3f", ImGuiSliderFlags_Logarithmic);
+				ImGui::TreePop();
+			}
 		}
 
 		if (ImGui::CollapsingHeader("Replace Original Shaders", ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick)) {

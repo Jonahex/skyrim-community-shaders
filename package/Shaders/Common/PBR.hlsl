@@ -158,11 +158,11 @@ void GetDirectLightInputPBR(out float3 diffuse, out float3 transmission, out flo
 	float satNdotH = saturate(NdotH);
 	float satVdotH = saturate(VdotH);
 
-	//diffuse += PI * GetDiffuseDirectLightMultiplierLambert() * lightColor * satNdotL;
+	diffuse += PI * GetDiffuseDirectLightMultiplierLambert() * lightColor * satNdotL;
 	//diffuse += PI * GetDiffuseDirectLightMultiplierBurley(roughness, satNdotV, satNdotL, satVdotH) * lightColor * satNdotL;
 	//diffuse += PI * GetDiffuseDirectLightMultiplierOrenNayar(roughness, satNdotV, satNdotL, satVdotL) * lightColor * satNdotL;
 	//diffuse += PI * GetDiffuseDirectLightMultiplierGotanda(roughness, satNdotV, satNdotL, satVdotL) * lightColor * satNdotL;
-	diffuse += PI * GetDiffuseDirectLightMultiplierChan(roughness, saturate(NdotV), satNdotL, satVdotH, satNdotH) * lightColor * satNdotL;
+	//diffuse += PI * GetDiffuseDirectLightMultiplierChan(roughness, saturate(NdotV), satNdotL, satVdotH, satNdotH) * lightColor * satNdotL;
 	specular += PI * GetSpecularDirectLightMultiplierMicrofacet(roughness, specularColor, satNdotL, satNdotV, satNdotH, satVdotH) * lightColor * satNdotL;
 	
 	// Energy conservation
@@ -232,10 +232,10 @@ void GetAmbientLightInputPBR(out float3 diffuse, out float3 specular, float3 N, 
 	float3 R = normalize(reflect(-V, N));
 	R = GetOffSpecularPeakReflectionDirection(N, R, roughness);
 	
-    float diffuseFactor = 0.5f;
-    float specularFactor = 0.5f;
+    float diffuseFactor = 1.f;
+    float specularFactor = 1.f;
 	
-	float weatherAmbientColor = float3(DirectionalAmbient[0].w, DirectionalAmbient[1].w, DirectionalAmbient[2].w);
+	float3 weatherAmbientColor = float3(DirectionalAmbient[0].w, DirectionalAmbient[1].w, DirectionalAmbient[2].w);
 	float weatherAmbientLuminance = RGBToLuminanceAlternative(weatherAmbientColor);
 	
 	float3 directionalAmbientDiffuseColor = mul(DirectionalAmbient, float4(N, 1.f));
@@ -271,9 +271,12 @@ void GetAmbientLightInputPBR(out float3 diffuse, out float3 specular, float3 N, 
 	//diffuseIrradiance *= weatherAmbientLuminance / averageLuminance * diffuseFactor;
 	//specularIrradiance *= weatherAmbientLuminance / averageLuminance * specularFactor;
 #	else
-	diffuseIrradiance += directionalAmbientDiffuseColor * diffuseFactor;
-	specularIrradiance += directionalAmbientSpecularColor * specularFactor;
+	//diffuseIrradiance += directionalAmbientDiffuseColor * diffuseFactor;
+	//specularIrradiance += directionalAmbientSpecularColor * specularFactor;
 #	endif
+
+	//diffuseIrradiance += directionalAmbientDiffuseColor * diffuseFactor;
+	//specularIrradiance += directionalAmbientSpecularColor * specularFactor;
 	
 	// Split-sum approximation factors for Cook-Torrance specular BRDF.
 #	if defined(DYNAMIC_CUBEMAPS)
@@ -282,6 +285,8 @@ void GetAmbientLightInputPBR(out float3 diffuse, out float3 specular, float3 N, 
 	float2 specularBRDF = GetEnvBRDFApproxLazarov(roughness, NdotV);
 #	endif
 
+	specularBRDF = GetEnvBRDFApproxLazarov(roughness, NdotV);
+	
 	diffuse += diffuseIrradiance * diffuseColor;
 	specular += specularIrradiance * (specularColor * specularBRDF.x + saturate(50.0 * specularColor.g) * specularBRDF.y);
 

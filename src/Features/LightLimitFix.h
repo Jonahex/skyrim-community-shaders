@@ -38,11 +38,11 @@ public:
 	struct alignas(16) LightData
 	{
 		float3 color;
+		float3 pbrColor;
 		float radius;
 		PositionOpt positionWS[2];
 		PositionOpt positionVS[2];
 		uint firstPersonShadow;
-		float pad0[3];
 	};
 
 	struct ClusterAABB
