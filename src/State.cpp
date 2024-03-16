@@ -247,6 +247,29 @@ void State::Load(bool a_test)
 		}
 	}
 
+	if (settings["PBR"].is_object()) {
+		json& pbr = settings["PBR"];
+
+		if (pbr["Use Dynamic Cubemap"].is_boolean()) {
+			pbrSettings.useDynamicCubemap = pbr["Use Dynamic Cubemap"];
+		}
+		if (pbr["PBR LOD Land"].is_boolean()) {
+			pbrSettings.pbrLodLand = pbr["PBR LOD Land"];
+		}
+		if (pbr["Light Color Multiplier"].is_number_float()) {
+			pbrSettings.lightColorMultiplier = pbr["Light Color Multiplier"];
+		}
+		if (pbr["Light Color Power"].is_number_float()) {
+			pbrSettings.lightColorPower = pbr["Light Color Power"];
+		}
+		if (pbr["Ambient Light Color Multiplier"].is_number_float()) {
+			pbrSettings.ambientLightColorMultiplier = pbr["Ambient Light Color Multiplier"];
+		}
+		if (pbr["Ambient Light Color Power"].is_number_float()) {
+			pbrSettings.ambientLightColorPower = pbr["Ambient Light Color Power"];
+		}
+	}
+
 	for (auto* feature : Feature::GetFeatureList())
 		feature->Load(settings);
 	i.close();
@@ -278,6 +301,17 @@ void State::Save(bool a_test)
 	general["Enable Async"] = shaderCache.IsAsync();
 
 	settings["General"] = general;
+
+	{
+		json pbr;
+		pbr["Use Dynamic Cubemap"] = pbrSettings.useDynamicCubemap;
+		pbr["PBR LOD Land"] = pbrSettings.pbrLodLand;
+		pbr["Light Color Multiplier"] = pbrSettings.lightColorMultiplier;
+		pbr["Light Color Power"] = pbrSettings.lightColorPower;
+		pbr["Ambient Light Color Multiplier"] = pbrSettings.ambientLightColorMultiplier;
+		pbr["Ambient Light Color Power"] = pbrSettings.ambientLightColorPower;
+		settings["PBR"] = pbr;
+	}
 
 	json originalShaders;
 	for (int classIndex = 0; classIndex < RE::BSShader::Type::Total - 1; ++classIndex) {

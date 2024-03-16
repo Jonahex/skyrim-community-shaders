@@ -632,6 +632,7 @@ namespace Hooks
 			if (!(lightingType == LODLand || lightingType == LODLandNoise) && (lightingFlags & static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::TruePbr))) {
 				auto shadowState = RE::BSGraphics::RendererShadowState::GetSingleton();
 				auto renderer = RE::BSGraphics::Renderer::GetSingleton();
+				auto state = State::GetSingleton();
 
 				RE::BSGraphics::Renderer::PrepareVSConstantGroup(RE::BSGraphics::ConstantGroupLevel::PerMaterial);
 				RE::BSGraphics::Renderer::PreparePSConstantGroup(RE::BSGraphics::ConstantGroupLevel::PerMaterial);
@@ -685,6 +686,10 @@ namespace Hooks
 							{
 								flags |= (1 << textureIndex);
 							}
+						}
+						if (state->pbrSettings.useDynamicCubemap)
+						{
+							flags |= static_cast<uint32_t>(PBRShaderFlags::UseDynamicCubemap);
 						}
 						shadowState->SetPSConstant(flags, RE::BSGraphics::ConstantGroupLevel::PerMaterial, 36);
 					}
@@ -749,6 +754,9 @@ namespace Hooks
 					shadowState->SetPSTextureFilterMode(5, RE::BSGraphics::TextureFilterMode::kAnisotropic);
 
 					stl::enumeration<PBRShaderFlags> shaderFlags;
+					if (state->pbrSettings.useDynamicCubemap) {
+						shaderFlags.set(PBRShaderFlags::UseDynamicCubemap);
+					}
 					if (pbrMaterial->pbrFlags.any(PBRFlags::TwoSidedFoliage)) {
 						shaderFlags.set(PBRShaderFlags::TwoSidedFoliage);
 					} else if (pbrMaterial->pbrFlags.any(PBRFlags::Subsurface)) {
@@ -823,10 +831,10 @@ namespace Hooks
 						shadowState->SetPSTextureAddressMode(11, RE::BSGraphics::TextureAddressMode::kClampSClampT);
 					}
 
-					const auto& state = RE::BSShaderManager::State::GetSingleton();
+					const auto& smState = RE::BSShaderManager::State::GetSingleton();
 					std::array<float, 4> characterLightParams;
-					if (state.characterLightEnabled) {
-						std::copy_n(state.characterLightParams, 4, characterLightParams.data());
+					if (smState.characterLightEnabled) {
+						std::copy_n(smState.characterLightParams, 4, characterLightParams.data());
 					}
 					else
 					{

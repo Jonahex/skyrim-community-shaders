@@ -392,6 +392,7 @@ void Menu::DrawSettings()
 			}
 			if (ImGui::TreeNodeEx("PBR", ImGuiTreeNodeFlags_DefaultOpen)) {
 				auto state = State::GetSingleton();
+				ImGui::Checkbox("Use Dynamic Cubemap", &state->pbrSettings.useDynamicCubemap);
 				ImGui::Checkbox("PBR LOD Land", &state->pbrSettings.pbrLodLand);
 				ImGui::SliderFloat("Light Color Multiplier", &state->pbrSettings.lightColorMultiplier, 1e-3f, 1e2f, "%.3f", ImGuiSliderFlags_Logarithmic);
 				ImGui::SliderFloat("Light Color Power", &state->pbrSettings.lightColorPower, 1e-3f, 1e2f, "%.3f", ImGuiSliderFlags_Logarithmic);

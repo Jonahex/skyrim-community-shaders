@@ -235,9 +235,6 @@ void GetAmbientLightInputPBR(out float3 diffuse, out float3 specular, float3 N, 
     float diffuseFactor = 1.f;
     float specularFactor = 1.f;
 	
-	float3 weatherAmbientColor = float3(DirectionalAmbient[0].w, DirectionalAmbient[1].w, DirectionalAmbient[2].w);
-	float weatherAmbientLuminance = RGBToLuminanceAlternative(weatherAmbientColor);
-	
 	float3 directionalAmbientDiffuseColor = mul(DirectionalAmbient, float4(N, 1.f));
 	float3 directionalAmbientSpecularColor = mul(DirectionalAmbient, float4(R, 1.f));
 
@@ -251,29 +248,14 @@ void GetAmbientLightInputPBR(out float3 diffuse, out float3 specular, float3 N, 
 	float diffuseLevel = levelCount - 4;
 	float specularLevel = ComputeCubemapMipFromRoughness(roughness, levelCount);
 	
-	//float3 averageColor = 0;
-	//averageColor += sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, float3(1, 0, 0), levelCount - 1).xyz);
-	//averageColor += sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, float3(-1, 0, 0), levelCount - 1).xyz);
-	//averageColor += sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, float3(0, 1, 0), levelCount - 1).xyz);
-	//averageColor += sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, float3(0, -1, 0), levelCount - 1).xyz);
-	//averageColor += sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, float3(0, 0, 1), levelCount - 1).xyz);
-	//averageColor += sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, float3(0, 0, -1), levelCount - 1).xyz);
-	//averageColor = max(averageColor / 6, 1e-5);
-	float3 averageColor = max(perPassDynamicCubemaps[0].AverageColor, 1e-5);
-	float averageLuminance = RGBToLuminanceAlternative(averageColor);
-	
-	diffuseIrradiance += sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, N, diffuseLevel).xyz);
-	specularIrradiance += sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, R, specularLevel).xyz);
-	
-	diffuseIrradiance *= weatherAmbientColor / averageColor * diffuseFactor;
-	specularIrradiance *= weatherAmbientColor / averageColor * specularFactor;
-	
-	//diffuseIrradiance *= weatherAmbientLuminance / averageLuminance * diffuseFactor;
-	//specularIrradiance *= weatherAmbientLuminance / averageLuminance * specularFactor;
-#	else
-	diffuseIrradiance += directionalAmbientDiffuseColor * diffuseFactor;
-	specularIrradiance += directionalAmbientSpecularColor * specularFactor;
+	if ((PBRFlags & 256) != 0)
+	{
+		specularIrradiance += sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, R, specularLevel).xyz);
+	}
 #	endif
+	
+    diffuseIrradiance += directionalAmbientDiffuseColor * diffuseFactor;
+    specularIrradiance += directionalAmbientSpecularColor * specularFactor;
 	
     float2 specularBRDF = GetEnvBRDFApproxLazarov(roughness, NdotV);
 	
@@ -291,15 +273,14 @@ void GetAmbientLightInputPBR(out float3 diffuse, out float3 specular, float3 N, 
 		float3 subsurfaceSpecularIrradiance = 0.f;
 	
 #	if defined(DYNAMIC_CUBEMAPS)
-		float subsurfaceSpecularLevel = diffuseLevel - 2.5f;
-		subsurfaceSpecularIrradiance += sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, -V, diffuseLevel - 2.5f).xyz);
-		
-		subsurfaceSpecularIrradiance *= weatherAmbientColor / averageColor;
-		
-		//subsurfaceSpecularIrradiance *= weatherAmbientLuminance / averageLuminance;
-#	else
-		subsurfaceSpecularIrradiance += directionalAmbientSubsurfaceSpecularColor;
+		if ((PBRFlags & 256) != 0)
+		{
+			float subsurfaceSpecularLevel = diffuseLevel - 2.5f;
+			subsurfaceSpecularIrradiance += sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, -V, diffuseLevel - 2.5f).xyz);
+		}
 #	endif
+        subsurfaceSpecularIrradiance += directionalAmbientSubsurfaceSpecularColor;
+		
 		specular += subsurfaceSpecularIrradiance * subsurfaceColor * (ao * specularFactor);
 	}
 #	endif

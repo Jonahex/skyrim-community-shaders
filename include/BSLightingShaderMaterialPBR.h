@@ -13,6 +13,7 @@ enum class PBRShaderFlags : uint32_t
 	TwoSidedFoliage = 1 << 2,
 	Subsurface = 1 << 3,
 	HasDisplacement = 1 << 4,
+	UseDynamicCubemap = 1 << 8,
 };
 
 class BSLightingShaderMaterialPBR : public RE::BSLightingShaderMaterialBase

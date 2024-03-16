@@ -116,6 +116,7 @@ public:
 
 	struct PBRSettings
 	{
+		bool useDynamicCubemap = false;
 		bool pbrLodLand = false;
 		float lightColorMultiplier = 2.f;
 		float lightColorPower = 1.f;
