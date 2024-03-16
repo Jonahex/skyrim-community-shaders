@@ -16,6 +16,12 @@ namespace SIE
 	{
 		static void GetShaderDefines(RE::BSShader::Type, uint32_t, D3D_SHADER_MACRO*);
 		static std::string GetShaderString(ShaderClass, const RE::BSShader&, uint32_t, bool = false);
+		/**
+		@brief Get the BSShader::Type from the ShaderString
+		@param a_key The key generated from GetShaderString
+		@return A string with a valid BSShader::Type
+		*/
+		static std::string GetTypeFromShaderString(std::string);
 		constexpr const char* VertexShaderProfile = "vs_5_0";
 		constexpr const char* PixelShaderProfile = "ps_5_0";
 		constexpr const char* ComputeShaderProfile = "cs_5_0";
@@ -958,6 +964,15 @@ namespace SIE
 			return result;
 		}
 
+		std::string GetTypeFromShaderString(std::string a_key)
+		{
+			std::string type = "";
+			std::string::size_type pos = a_key.find(':');
+			if (pos != std::string::npos)
+				type = a_key.substr(0, pos);
+			return type;
+		}
+
 		static ID3DBlob* CompileShader(ShaderClass shaderClass, const RE::BSShader& shader, uint32_t descriptor, bool useDiskCache)
 		{
 			ID3DBlob* shaderBlob = nullptr;
@@ -977,7 +992,11 @@ namespace SIE
 
 			if (!shaderBlob && useDiskCache && std::filesystem::exists(diskPath)) {
 				shaderBlob = nullptr;
-				if (FAILED(D3DReadFileToBlob(diskPath.c_str(), &shaderBlob))) {
+				// check build time of cache
+				auto diskCacheTime = std::chrono::clock_cast<std::chrono::system_clock>(std::filesystem::last_write_time(diskPath));
+				if (cache.ShaderModifiedSince(shader.fxpFilename, diskCacheTime)) {
+					logger::debug("Diskcached shader {} older than {}", SIE::SShaderCache::GetShaderString(shaderClass, shader, descriptor, true), std::format("{:%Y%m%d%H%M}", diskCacheTime));
+				} else if (FAILED(D3DReadFileToBlob(diskPath.c_str(), &shaderBlob))) {
 					logger::error("Failed to load {} shader {}::{}", magic_enum::enum_name(shaderClass), magic_enum::enum_name(type), descriptor);
 
 					if (shaderBlob != nullptr) {
@@ -1016,12 +1035,17 @@ namespace SIE
 			defines[lastIndex] = { nullptr, nullptr };  // do final entry
 			GetShaderDefines(type, descriptor, &defines[lastIndex]);
 
-			logger::debug("Defines set for {}:{}:{:X} to {}", magic_enum::enum_name(type), magic_enum::enum_name(shaderClass), descriptor, MergeDefinesString(defines));
+			const std::wstring path = GetShaderPath(shader.fxpFilename);
+
+			std::string strPath;
+			std::transform(path.begin(), path.end(), std::back_inserter(strPath), [](wchar_t c) {
+				return (char)c;
+			});
+			logger::debug("Compiling {} {}:{}:{:X} to {}", strPath, magic_enum::enum_name(type), magic_enum::enum_name(shaderClass), descriptor, MergeDefinesString(defines));
 
 			// compile shaders
-			const std::wstring path = GetShaderPath(shader.fxpFilename);
 			ID3DBlob* errorBlob = nullptr;
-			const uint32_t flags = D3DCOMPILE_OPTIMIZATION_LEVEL3;
+			const uint32_t flags = !State::GetSingleton()->IsDeveloperMode() ? D3DCOMPILE_OPTIMIZATION_LEVEL3 : D3DCOMPILE_DEBUG;
 			const HRESULT compileResult = D3DCompileFromFile(path.c_str(), defines.data(), D3D_COMPILE_STANDARD_FILE_INCLUDE, "main",
 				GetShaderProfile(shaderClass), flags, 0, &shaderBlob, &errorBlob);
 
@@ -1045,15 +1069,18 @@ namespace SIE
 			logger::debug("Compiled shader {}:{}:{:X}", magic_enum::enum_name(type), magic_enum::enum_name(shaderClass), descriptor);
 
 			// strip debug info
-			ID3DBlob* strippedShaderBlob = nullptr;
+			if (!State::GetSingleton()->IsDeveloperMode()) {
+				ID3DBlob* strippedShaderBlob = nullptr;
 
-			const uint32_t stripFlags = D3DCOMPILER_STRIP_DEBUG_INFO |
-			                            D3DCOMPILER_STRIP_TEST_BLOBS |
-			                            D3DCOMPILER_STRIP_PRIVATE_DATA;
+				const uint32_t stripFlags = D3DCOMPILER_STRIP_DEBUG_INFO |
+				                            D3DCOMPILER_STRIP_REFLECTION_DATA |
+				                            D3DCOMPILER_STRIP_TEST_BLOBS |
+				                            D3DCOMPILER_STRIP_PRIVATE_DATA;
 
-			D3DStripShader(shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(), stripFlags, &strippedShaderBlob);
-			std::swap(shaderBlob, strippedShaderBlob);
-			strippedShaderBlob->Release();
+				D3DStripShader(shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(), stripFlags, &strippedShaderBlob);
+				std::swap(shaderBlob, strippedShaderBlob);
+				strippedShaderBlob->Release();
+			}
 
 			// save shader to disk
 			if (useDiskCache) {
@@ -1291,6 +1318,7 @@ namespace SIE
 	ShaderCache::~ShaderCache()
 	{
 		Clear();
+		fileWatcher->removeWatch(watchID);
 	}
 
 	void ShaderCache::Clear()
@@ -1313,23 +1341,48 @@ namespace SIE
 		shaderMap.clear();
 	}
 
+	void ShaderCache::Clear(RE::BSShader::Type a_type)
+	{
+		logger::debug("Clearing cache for {}", magic_enum::enum_name(a_type));
+		std::lock_guard lockGuardV(vertexShadersMutex);
+		{
+			for (auto& [id, shader] : vertexShaders[static_cast<size_t>(a_type)]) {
+				shader->shader->Release();
+			}
+			vertexShaders[static_cast<size_t>(a_type)].clear();
+		}
+		std::lock_guard lockGuardP(pixelShadersMutex);
+		{
+			for (auto& [id, shader] : pixelShaders[static_cast<size_t>(a_type)]) {
+				shader->shader->Release();
+			}
+			pixelShaders[static_cast<size_t>(a_type)].clear();
+		}
+		compilationSet.Clear();
+	}
+
 	bool ShaderCache::AddCompletedShader(ShaderClass shaderClass, const RE::BSShader& shader, uint32_t descriptor, ID3DBlob* a_blob)
 	{
 		auto key = SIE::SShaderCache::GetShaderString(shaderClass, shader, descriptor, true);
 		auto status = a_blob ? ShaderCompilationTask::Status::Completed : ShaderCompilationTask::Status::Failed;
 		std::unique_lock lock{ mapMutex };
 		logger::debug("Adding {} shader to map: {}", magic_enum ::enum_name(status), key);
-		shaderMap.insert_or_assign(key, std::pair(a_blob, status));
+		shaderMap.insert_or_assign(key, ShaderCacheResult{ a_blob, status, system_clock::now() });
 		return (bool)a_blob;
 	}
 
 	ID3DBlob* ShaderCache::GetCompletedShader(const std::string a_key)
 	{
+		std::string type = SIE::SShaderCache::GetTypeFromShaderString(a_key);
 		std::scoped_lock lock{ mapMutex };
 		if (!shaderMap.empty() && shaderMap.contains(a_key)) {
-			auto status = shaderMap.at(a_key).second;
+			if (ShaderModifiedSince(type, shaderMap.at(a_key).compileTime)) {
+				logger::debug("Shader {} compiled {} before changes at {}", a_key, std::format("{:%Y%m%d%H%M}", shaderMap.at(a_key).compileTime), std::format("{:%Y%m%d%H%M}", GetModifiedShaderMapTime(type)));
+				return nullptr;
+			}
+			auto status = shaderMap.at(a_key).status;
 			if (status != ShaderCompilationTask::Status::Pending)
-				return shaderMap.at(a_key).first;
+				return shaderMap.at(a_key).blob;
 		}
 		return nullptr;
 	}
@@ -1351,7 +1404,7 @@ namespace SIE
 	{
 		std::scoped_lock lock{ mapMutex };
 		if (!shaderMap.empty() && shaderMap.contains(a_key)) {
-			return shaderMap.at(a_key).second;
+			return shaderMap.at(a_key).status;
 		}
 		return ShaderCompilationTask::Status::Pending;
 	}
@@ -1457,6 +1510,35 @@ namespace SIE
 		compilationPool.push_task(&ShaderCache::ManageCompilationSet, this, ssource.get_token());
 	}
 
+	void ShaderCache::StartFileWatcher()
+	{
+		fileWatcher = new efsw::FileWatcher();
+		listener = new UpdateListener();
+		// Add a folder to watch, and get the efsw::WatchID
+		// Reporting the files and directories changes to the instance of the listener
+		watchID = fileWatcher->addWatch("Data\\Shaders", listener, true);
+		// Start watching asynchronously the directories
+		fileWatcher->watch();
+		std::string pathStr = "";
+		for (auto path : fileWatcher->directories()) {
+			pathStr += std::format("{}; ", path);
+		}
+		logger::debug("ShaderCache watching for changes in {}", pathStr);
+	}
+
+	bool ShaderCache::ShaderModifiedSince(std::string a_type, system_clock::time_point a_current)
+	{
+		if (a_type.empty() || magic_enum::enum_cast<RE::BSShader::Type>(a_type, magic_enum::case_insensitive).has_value())  // type is invalid
+			return false;
+		std::filesystem::path filePath{ SIE::SShaderCache::GetShaderPath(a_type) };
+		std::lock_guard lockGuard(modifiedMapMutex);
+		if (std::filesystem::exists(filePath) &&
+			(modifiedShaderMap.empty() || !modifiedShaderMap.contains(a_type)))  // insert timestamp when first seen; rely on filewatcher for subsequent changes
+			modifiedShaderMap.insert_or_assign(a_type, std::chrono::clock_cast<std::chrono::system_clock>(std::filesystem::last_write_time(filePath)));
+		return !modifiedShaderMap.empty() && modifiedShaderMap.contains(a_type)  // map has Type
+		       && modifiedShaderMap.at(a_type) > a_current;                      //modification time is older than a_current
+	}
+
 	RE::BSGraphics::VertexShader* ShaderCache::MakeAndAddVertexShader(const RE::BSShader& shader,
 		uint32_t descriptor)
 	{
@@ -1540,6 +1622,18 @@ namespace SIE
 	bool ShaderCache::IsHideErrors()
 	{
 		return hideError;
+	}
+
+	void ShaderCache::InsertModifiedShaderMap(std::string a_shader, std::chrono::time_point<std::chrono::system_clock> a_time)
+	{
+		std::lock_guard lockGuard(modifiedMapMutex);
+		modifiedShaderMap.insert_or_assign(a_shader, a_time);
+	}
+
+	std::chrono::time_point<std::chrono::system_clock> ShaderCache::GetModifiedShaderMapTime(std::string a_shader)
+	{
+		std::lock_guard lockGuard(modifiedMapMutex);
+		return modifiedShaderMap.at(a_shader);
 	}
 
 	void ShaderCache::ToggleErrorMessages()
@@ -1730,5 +1824,42 @@ namespace SIE
 			(std::uint64_t)cacheHitTasks,
 			GetHumanTime(totalMs),
 			GetHumanTime(GetEta() + totalMs));
+	}
+
+	void UpdateListener::handleFileAction(efsw::WatchID, const std::string& dir, const std::string& filename, efsw::Action action, std::string)
+	{
+		auto& cache = SIE::ShaderCache::Instance();
+		const std::filesystem::path filePath = std::filesystem::path(std::format("{}\\{}", dir, filename));
+		std::chrono::time_point<std::chrono::system_clock> modifiedTime{};
+		std::string extension = filePath.extension().string();
+		std::string parentDir = filePath.parent_path().string();
+		std::string shaderTypeString = filePath.stem().string();
+		auto shaderType = magic_enum::enum_cast<RE::BSShader::Type>(shaderTypeString, magic_enum::case_insensitive);
+		switch (action) {
+		case efsw::Actions::Add:
+			break;
+		case efsw::Actions::Delete:
+			break;
+		case efsw::Actions::Modified:
+			logger::debug("Detected changed path {}", filePath.string());
+			if (std::filesystem::exists(filePath))
+				modifiedTime = std::chrono::clock_cast<std::chrono::system_clock>(std::filesystem::last_write_time(filePath));
+			else  // if file doesn't exist, don't do anything
+				return;
+			if (!std::filesystem::is_directory(filePath) && extension.starts_with(".hlsl") && parentDir.ends_with("Shaders") && shaderType.has_value()) {  // TODO: Case insensitive checks
+				// Shader types, so only invalidate specific shader type (e.g,. Lighting)
+				cache.InsertModifiedShaderMap(shaderTypeString, modifiedTime);
+				cache.Clear(shaderType.value());
+			} else if (!std::filesystem::is_directory(filePath) && extension.starts_with(".hlsl")) {  // TODO: Case insensitive checks
+				// all other shaders, since we don't know what is using it, clear everything
+				cache.DeleteDiskCache();
+				cache.Clear();
+			}
+			break;
+		case efsw::Actions::Moved:
+			break;
+		default:
+			logger::error("Filewatcher received invalid action {}", magic_enum::enum_name(action));
+		}
 	}
 }

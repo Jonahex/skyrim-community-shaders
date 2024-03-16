@@ -182,15 +182,14 @@ float smoothbumpstep(float edge0, float edge1, float x)
 
 			position.w = smoothstep(1.0, 4096.0 * 0.001, distance);  // Objects which are far away from the perspective of the camera do not fade out
 
-			if (depth > 0.999)
+			if (linearDepth > (4096.0 * 5.0))
 				position.w = 0;
 
 			DynamicCubemapPosition[ThreadID] = lerp(DynamicCubemapPosition[ThreadID], position, lerpFactor);
 
 			DynamicCubemapRaw[ThreadID] = max(0, lerp(DynamicCubemapRaw[ThreadID], output, lerpFactor));
 
-			float distanceFactor = smoothbumpstep(0.0, 1.0, length(position.xyz));
-			output *= max(distanceFactor, position.w);  // Pick the largest value
+			output *= sqrt(saturate(0.5 * length(position.xyz)));
 
 			DynamicCubemap[ThreadID] = max(0, lerp(DynamicCubemap[ThreadID], output, lerpFactor));
 
@@ -204,8 +203,8 @@ float smoothbumpstep(float edge0, float edge1, float x)
 
 	float4 color = DynamicCubemapRaw[ThreadID];
 
-	float distanceFactor = smoothbumpstep(0.0, 1.0, length(position.xyz));
-	color *= max(distanceFactor, position.w);
+	float distanceFactor = sqrt(smoothbumpstep(0.0, 1.0, length(position.xyz)));
+	color *= max(0.001, max(distanceFactor, position.w));
 
 	DynamicCubemap[ThreadID] = max(0, color);
 }

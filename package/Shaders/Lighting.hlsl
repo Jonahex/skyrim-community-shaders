@@ -1703,6 +1703,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	[flatten] if (!input.WorldSpace)
 		worldSpaceVertexNormal = normalize(mul(input.World[eyeIndex], float4(worldSpaceVertexNormal, 0)));
 #		endif
+#	else
+	float3 worldSpaceVertexNormal = worldSpaceNormal;
 #	endif
 
 	float3 dirLightColor = DirLightColor.xyz;
@@ -1731,7 +1733,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		dirShadow *= shadowColor.xxx;
 
 #	if defined(SCREEN_SPACE_SHADOWS)
-	float dirLightSShadow = PrepassScreenSpaceShadows(input.WorldPosition.xyz);
+	float dirLightSShadow = PrepassScreenSpaceShadows(input.WorldPosition.xyz, eyeIndex);
 	dirLightSShadow = lerp(dirLightSShadow, 1.0, !frontFace * 0.2);
 	dirShadow *= dirLightSShadow;
 #	endif  // SCREEN_SPACE_SHADOWS
@@ -1832,7 +1834,27 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float minWetnessAngle = 0;
 	minWetnessAngle = saturate(max(minWetnessValue, worldSpaceNormal.z));
 
+	bool raindropOccluded = false;
+
+	float4 raindropInfo = float4(0, 0, 1, 0);
+	if (perPassWetnessEffects[0].Raining > 0.0f && perPassWetnessEffects[0].EnableRaindropFx &&
+		(dot(input.WorldPosition, input.WorldPosition) < perPassWetnessEffects[0].RaindropFxRange * perPassWetnessEffects[0].RaindropFxRange)) {
+		float4 precipPositionCS = float4(2 * float2(screenUV.x, -screenUV.y + 1) - 1, input.Position.z, 1);
+		float4 precipPositionMS = mul(CameraViewProjInverse[eyeIndex], precipPositionCS);
+		precipPositionMS.xyz = precipPositionMS.xyz / precipPositionMS.w;
+
+		float4 precipOcclusionTexCoord = mul(perPassWetnessEffects[0].PrecipProj, float4(precipPositionMS.xyz, 1));
+		precipOcclusionTexCoord.y = -precipOcclusionTexCoord.y;
+		float2 precipOcclusionUv = precipOcclusionTexCoord.xy * 0.5.xx + 0.5.xx;
+		float precipOcclusionZ = TexPrecipOcclusion.SampleLevel(SampShadowMaskSampler, precipOcclusionUv, 0).x;
+
+		if (precipOcclusionTexCoord.z < precipOcclusionZ + 1e-2)
+			raindropInfo = GetRainDrops((input.WorldPosition + CameraPosAdjust[eyeIndex]).xyz, perPassWetnessEffects[0].Time, worldSpaceNormal);
+	}
+
 	float rainWetness = perPassWetnessEffects[0].Wetness * minWetnessAngle * perPassWetnessEffects[0].MaxRainWetness;
+	rainWetness = max(rainWetness, raindropInfo.w);
+
 	float puddleWetness = perPassWetnessEffects[0].PuddleWetness * minWetnessAngle;
 #		if defined(SKIN)
 	rainWetness = perPassWetnessEffects[0].SkinWetness * perPassWetnessEffects[0].Wetness;
@@ -1842,7 +1864,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		endif
 
 	wetness = max(shoreFactor * perPassWetnessEffects[0].MaxShoreWetness, rainWetness);
-	wetness *= nearFactor;
 
 	float3 wetnessNormal = worldSpaceNormal;
 
@@ -1860,6 +1881,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		}
 	}
 
+	puddle *= nearFactor;
+
 	float3 wetnessSpecular = 0.0;
 
 	float wetnessGlossinessAlbedo = max(puddle, shoreFactorAlbedo * perPassWetnessEffects[0].MaxShoreWetness);
@@ -1874,13 +1897,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 	wetnessNormal = normalize(lerp(wetnessNormal, float3(0, 0, 1), saturate(flatnessAmount)));
 
+	float3 rippleNormal = normalize(lerp(float3(0, 0, 1), raindropInfo.xyz, clamp(flatnessAmount, .2, 1)));
+	wetnessNormal = ReorientNormal(rippleNormal, wetnessNormal);
+
 	float waterRoughnessSpecular = 1.0 - wetnessGlossinessSpecular;
 
-#		if defined(WETNESS_EFFECTS)
 	if (waterRoughnessSpecular < 1.0)
-		wetnessSpecular += GetWetnessSpecular(wetnessNormal, normalizedDirLightDirectionWS, worldSpaceViewDirection, sRGB2Lin(dirLightColor) * 0.01, waterRoughnessSpecular);
-#		endif
-
+		wetnessSpecular += GetWetnessSpecular(wetnessNormal, normalizedDirLightDirectionWS, worldSpaceViewDirection, sRGB2Lin(dirLightColor) * perPassWetnessEffects[0].MaxDALCSpecular, waterRoughnessSpecular);
 #	endif
 
 #	if defined(LIGHT_LIMIT_FIX)
@@ -2001,7 +2024,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 		float3 normalizedLightDirection = normalize(lightDirection);
 
-		[branch] if (!FrameParams.z && FrameParams.y && (light.firstPersonShadow || perPassLLF[0].EnableContactShadows) && shadowComponent != 0.0)
+		[branch] if (perPassLLF[0].EnableGlobalLights && !FrameParams.z && FrameParams.y && (light.firstPersonShadow || perPassLLF[0].EnableContactShadows) && shadowComponent != 0.0)
 		{
 			float3 normalizedLightDirectionVS = normalize(light.positionVS[eyeIndex].xyz - viewPosition.xyz);
 			float contactShadow = ContactShadows(viewPosition, screenUV, screenNoise, normalizedLightDirectionVS, light.radius, light.firstPersonShadow, eyeIndex);
@@ -2071,8 +2094,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #				if defined(WETNESS_EFFECTS)
 		if (waterRoughnessSpecular < 1.0)
-			wetnessSpecular += GetWetnessSpecular(wetnessNormal, normalizedLightDirection, worldSpaceViewDirection, sRGB2Lin(lightColor), waterRoughnessSpecular) * 0.4;
-#				endif
+			wetnessSpecular += GetWetnessSpecular(wetnessNormal, normalizedLightDirection, worldSpaceViewDirection, sRGB2Lin(lightColor), waterRoughnessSpecular) * perPassWetnessEffects[0].MaxPointLightSpecular;
+#endif
 	}
 #		endif
 #	endif
@@ -2119,39 +2142,50 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float envMask = (EnvmapData.y * (envMaskColor - glossiness) + glossiness) * (EnvmapData.x * MaterialData.x);
 	float viewNormalAngle = dot(worldSpaceNormal.xyz, viewDirection);
 	float3 envSamplingPoint = (viewNormalAngle * 2) * modelNormal.xyz - viewDirection;
-	float3 envColorBase = TexEnvSampler.Sample(SampEnvSampler, envSamplingPoint).xyz;
+	float4 envColorBase = TexEnvSampler.Sample(SampEnvSampler, envSamplingPoint);
 	float3 envColor = envColorBase * envMask;
 #		if defined(DYNAMIC_CUBEMAPS)
-#			if defined(EYE)
-	bool dynamicCubemap = true;
-	envColor = GetDynamicCubemap(screenUV, worldSpaceNormal, worldSpaceViewDirection, 1.0 / 9.0, 0.25, true) * envMask;
-#			else
+	float3 F0 = 0.0;
+	float envRoughness = 1.0;
+
 	uint2 envSize;
 	TexEnvSampler.GetDimensions(envSize.x, envSize.y);
-	bool dynamicCubemap = envMask != 0 && envSize.x == 1;
-	if (dynamicCubemap) {
-#				if defined(CPM_AVAILABLE) && defined(ENVMAP)
-		float3 F0 = lerp(envColorBase, 1.0, envColorBase.x == 0.0 && envColorBase.y == 0.0 && envColorBase.z == 0.0);
 
-		envColor = GetDynamicCubemap(screenUV, worldSpaceNormal, worldSpaceViewDirection, lerp(1.0 / 9.0, 1.0 - complexMaterialColor.y, complexMaterial), lerp(F0, complexSpecular, complexMaterial), complexMaterial) * envMask;
-#				else
-		float3 F0 = lerp(envColorBase, 1.0, envColorBase.x == 0.0 && envColorBase.y == 0.0 && envColorBase.z == 0.0);
-		envColor = GetDynamicCubemap(screenUV, worldSpaceNormal, worldSpaceViewDirection, 1.0 / 9.0, F0, 0.0) * envMask;
-#				endif
-		if (shaderDescriptors[0].PixelShaderDescriptor & _DefShadow && shaderDescriptors[0].PixelShaderDescriptor & _ShadowDir) {
-			float upAngle = saturate(dot(float3(0, 0, 1), normalizedDirLightDirectionWS.xyz));
-			envColor *= lerp(1.0, shadowColor.x, saturate(upAngle) * 0.2);
+	bool dynamicCubemap = false;
+	[flatten] if (envMask != 0 && envSize.x == 1)
+	{
+		dynamicCubemap = true;
+		envColorBase = TexEnvSampler.SampleLevel(SampEnvSampler, float3(1.0, 0.0, 0.0), 0);
+		if (envColorBase.a < 1.0) {
+			F0 = sRGB2Lin(envColorBase.rgb) + sRGB2Lin(baseColor.rgb);
+			envRoughness = envColorBase.a;
+		} else {
+			F0 = 1.0;
+			envRoughness = 1.0 / 9.0;
 		}
 	}
-#				if !defined(VR)
-// else if (envMask > 0.0 && !FrameParams.z && FrameParams.y) {
-// 	float4 ssrBlurred = ssrTexture.SampleLevel(SampColorSampler, screenUV, 0);
-// 	float4 ssrRaw = ssrRawTexture.SampleLevel(SampColorSampler, screenUV, 0);
-// 	float4 ssrTexture = lerp(ssrRaw, ssrBlurred, 1.0 - saturate(envMask));
-// 	envColor = lerp(envColor, ssrTexture.rgb * envColor * 10, ssrTexture.a);
-// }
-#				endif
+
+#			if defined(CREATOR)
+	if (perFrameCreator[0].Enabled) {
+		dynamicCubemap = true;
+		F0 = sRGB2Lin(perFrameCreator[0].CubemapColor.rgb) + sRGB2Lin(baseColor.xyz);
+		envRoughness = perFrameCreator[0].CubemapColor.a;
+	}
 #			endif
+
+	if (dynamicCubemap) {
+#			if defined(CPM_AVAILABLE)
+		envRoughness = lerp(envRoughness, 1.0 - complexMaterialColor.y, (float)complexMaterial);
+		F0 = lerp(F0, sRGB2Lin(complexSpecular), (float)complexMaterial);
+#			endif
+
+		envColor = GetDynamicCubemap(screenUV, worldSpaceNormal, worldSpaceVertexNormal, worldSpaceViewDirection, envRoughness, F0, diffuseColor, viewPosition.z) * envMask;
+
+		if (shaderDescriptors[0].PixelShaderDescriptor & _DefShadow && shaderDescriptors[0].PixelShaderDescriptor & _ShadowDir) {
+			float upAngle = saturate(dot(float3(0, 0, 1), normalizedDirLightDirectionWS.xyz));
+			envColor *= lerp(1.0, shadowColor.x, saturate(upAngle) / 3.0);
+		}
+	}
 #		endif
 #	endif  // defined (ENVMAP) || defined (MULTI_LAYER_PARALLAX) || defined(EYE)
 
@@ -2166,7 +2200,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	baseColor.xyz = lerp(baseColor.xyz, pow(baseColor.xyz, 1.0 + wetnessDarkeningAmount), 0.8);
 #		endif
 	if (waterRoughnessSpecular < 1.0)
-		wetnessSpecular += GetWetnessAmbientSpecular(screenUV, wetnessNormal, worldSpaceViewDirection, 1.0 - wetnessGlossinessSpecular);
+		wetnessSpecular += GetWetnessAmbientSpecular(screenUV, wetnessNormal, worldSpaceVertexNormal, worldSpaceViewDirection, 1.0 - wetnessGlossinessSpecular) * perPassWetnessEffects[0].MaxAmbientSpecular;
 #	endif
 
 	float4 color = 0;
@@ -2258,6 +2292,22 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	color.xyz += wetnessSpecular * wetnessGlossinessSpecular;
 #	endif
 
+#	if defined(DYNAMIC_CUBEMAPS)
+#		if defined(EYE)
+	color.xyz += GetDynamicCubemapFresnel(screenUV, worldSpaceNormal, worldSpaceVertexNormal, worldSpaceViewDirection, 0.5, 2, diffuseColor, viewPosition.z) * input.Color.xyz * envMask;
+#		elif defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX)
+	color.xyz += GetDynamicCubemapFresnel(screenUV, worldSpaceNormal, worldSpaceVertexNormal, worldSpaceViewDirection, 0.5 - (saturate(envMask) * 0.5), 2 - saturate(envMask), diffuseColor, viewPosition.z) * (1.0 - ((float)dynamicCubemap * saturate(envMask))) * input.Color.xyz;
+#		elif defined(HAIR)
+	color.xyz += GetDynamicCubemapFresnel(screenUV, worldSpaceNormal, worldSpaceVertexNormal, worldSpaceViewDirection, 0.5, 2, diffuseColor, viewPosition.z);
+#		else
+	color.xyz += GetDynamicCubemapFresnel(screenUV, worldSpaceNormal, worldSpaceVertexNormal, worldSpaceViewDirection, 0.5, 2, diffuseColor, viewPosition.z) * input.Color.xyz;
+#		endif
+#	endif
+
+#	if defined(EYE)
+	color.xyz *= saturate(normalize(input.EyeNormal2.xyz).y);  // Occlusion
+#	endif
+
 #	if defined(WATER_CAUSTICS)
 	color.xyz *= ComputeWaterCaustics(waterHeight, input.WorldPosition.xyz, worldSpaceNormal);
 #	endif
@@ -2280,7 +2330,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	endif  // defined (SPECULAR) || defined(SPARKLE)
 
 #	if defined(ENVMAP) && defined(TESTCUBEMAP)
-	color.xyz = specularTexture.SampleLevel(SampEnvSampler, envSamplingPoint, 0).xyz;
+	color.xyz = specularTexture.SampleLevel(SampEnvSampler, envSamplingPoint, 1).xyz;
 #	endif
 
 #	if defined(TRUE_PBR)
@@ -2372,6 +2422,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	tmp = saturate(tmp1 * tmp2);
 	tmp *= tmp * (3 + -2 * tmp);
 	psout.ScreenSpaceNormals.w = tmp * SSRParams.w;
+	psout.ScreenSpaceNormals.w = 0.0;
 
 #	if defined(WATER_BLENDING)
 	if (perPassWaterBlending[0].EnableWaterBlendingSSR) {
@@ -2382,8 +2433,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		psout.ScreenSpaceNormals.w *= blendFactor;
 	}
 #	endif  // WATER_BLENDING
-
-	psout.ScreenSpaceNormals.w = 0.0;
 
 #	if (defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX) || defined(EYE))
 #		if defined(DYNAMIC_CUBEMAPS)
@@ -2443,11 +2492,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		endif
 #	endif
 
-#	if defined(EYE)
-	float eyeCurve = saturate(normalize(input.EyeNormal2.xyz).y);  // Occlusion
-	float eyeCenter = pow(eyeCurve, 150);                          // Iris
-	psout.Albedo.xyz *= eyeCurve + eyeCenter;
-#	endif
+#	if defined(OUTLINE)
+	psout.Albedo = float4(1, 0, 0, 1);
+#	endif  // OUTLINE
 
 #	if defined(SSS) && defined(SKIN)
 	if (perPassSSS[0].ValidMaterial) {

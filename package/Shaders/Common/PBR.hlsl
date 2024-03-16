@@ -271,21 +271,11 @@ void GetAmbientLightInputPBR(out float3 diffuse, out float3 specular, float3 N, 
 	//diffuseIrradiance *= weatherAmbientLuminance / averageLuminance * diffuseFactor;
 	//specularIrradiance *= weatherAmbientLuminance / averageLuminance * specularFactor;
 #	else
-	//diffuseIrradiance += directionalAmbientDiffuseColor * diffuseFactor;
-	//specularIrradiance += directionalAmbientSpecularColor * specularFactor;
+	diffuseIrradiance += directionalAmbientDiffuseColor * diffuseFactor;
+	specularIrradiance += directionalAmbientSpecularColor * specularFactor;
 #	endif
-
-	//diffuseIrradiance += directionalAmbientDiffuseColor * diffuseFactor;
-	//specularIrradiance += directionalAmbientSpecularColor * specularFactor;
 	
-	// Split-sum approximation factors for Cook-Torrance specular BRDF.
-#	if defined(DYNAMIC_CUBEMAPS)
-	float2 specularBRDF = specularBRDF_LUT.Sample(LinearSampler, float2(NdotV, roughness)).xy;
-#	else
-	float2 specularBRDF = GetEnvBRDFApproxLazarov(roughness, NdotV);
-#	endif
-
-	specularBRDF = GetEnvBRDFApproxLazarov(roughness, NdotV);
+    float2 specularBRDF = GetEnvBRDFApproxLazarov(roughness, NdotV);
 	
 	diffuse += diffuseIrradiance * diffuseColor;
 	specular += specularIrradiance * (specularColor * specularBRDF.x + saturate(50.0 * specularColor.g) * specularBRDF.y);

@@ -1,7 +1,10 @@
-TextureCube EnvCaptureTexture : register(t0);
-
+TextureCube<float4> EnvCaptureTexture : register(t0);
+#if defined(REFLECTIONS)
+TextureCube<float4> ReflectionsTexture : register(t1);
+#else
+TextureCube<float4> DefaultCubemap : register(t1);
+#endif
 RWTexture2DArray<float4> EnvInferredTexture : register(u0);
-RWTexture2DArray<float4> EnvReflectionsTexture : register(u1);
 
 SamplerState LinearSampler : register(s0);
 
@@ -53,35 +56,6 @@ float3 Lin2sRGB(float3 color)
 	return color > 0.0031308 ? 1.055 * pow(color, 1.0 / 2.4) - 0.055 : 12.92 * color;
 }
 
-// https://www.shadertoy.com/view/XdlGzX
-// Nikos Papadopoulos, 4rknova / 2013
-// Creative Commons Attribution-NonCommercial-ShareAlike 3.0 Unported License.
-
-float hash(in float3 p)
-{
-	return frac(sin(dot(p, float3(127.1, 311.7, 321.4))) * 43758.5453123);
-}
-
-float noise(in float3 p)
-{
-	float3 i = floor(p);
-	float3 f = frac(p);
-	f *= f * (3. - 2. * f);
-
-	float2 c = float2(0, 1);
-
-	return lerp(
-		lerp(lerp(hash(i + c.xxx), hash(i + c.yxx), f.x),
-			lerp(hash(i + c.xyx), hash(i + c.yyx), f.x),
-			f.y),
-		lerp(lerp(hash(i + c.xxy), hash(i + c.yxy), f.x),
-			lerp(hash(i + c.xyy), hash(i + c.yyy), f.x),
-			f.y),
-		f.z);
-}
-
-/////
-
 [numthreads(32, 32, 1)] void main(uint3 ThreadID
 								  : SV_DispatchThreadID) {
 	float3 uv = GetSamplingVector(ThreadID, EnvInferredTexture);
@@ -126,9 +100,9 @@ float noise(in float3 p)
 	}
 
 #if defined(REFLECTIONS)
-	color.rgb = lerp(color.rgb, sRGB2Lin(EnvReflectionsTexture[ThreadID]), saturate(mipLevel * (1.0 / 10.0)));
+	color.rgb = lerp(color.rgb, sRGB2Lin(ReflectionsTexture.SampleLevel(LinearSampler, uv, 0)), saturate(mipLevel * (1.0 / 10.0)));
 #else
-	color.rgb = lerp(color.rgb, max(float3(0.0, 0.0, 0.0), color.rgb * noise(uv * 5.0)), mipLevel * (1.0 / 10.0));
+	color.rgb = lerp(color.rgb, color.rgb * DefaultCubemap.SampleLevel(LinearSampler, uv, 0).x * 5.0, saturate(mipLevel * (1.0 / 10.0)));
 #endif
 
 	color.rgb = Lin2sRGB(color.rgb);

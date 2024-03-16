@@ -528,13 +528,14 @@ bool LightLimitFix::CheckParticleLights(RE::BSRenderPass* a_pass, uint32_t)
 {
 	auto configs = GetParticleLightConfigs(a_pass);
 	if (configs.has_value()) {
-		AddParticleLight(a_pass, configs.value());
-		return !(settings.EnableParticleLightsCulling && configs->first->cull);
+		if (AddParticleLight(a_pass, configs.value())) {
+			return !(settings.EnableParticleLightsCulling && configs->first->cull);
+		}
 	}
 	return true;
 }
 
-void LightLimitFix::AddParticleLight(RE::BSRenderPass* a_pass, LightLimitFix::ConfigPair a_config)
+bool LightLimitFix::AddParticleLight(RE::BSRenderPass* a_pass, LightLimitFix::ConfigPair a_config)
 {
 	auto shaderProperty = netimmerse_cast<RE::BSEffectShaderProperty*>(a_pass->shaderProperty);
 	auto material = shaderProperty->GetMaterial();
@@ -570,21 +571,29 @@ void LightLimitFix::AddParticleLight(RE::BSRenderPass* a_pass, LightLimitFix::Co
 
 				uint8_t maxAlpha = 0u;
 				VertexColor* vertexColor = nullptr;
+				bool alphaOne = false;
+				bool alphaZero = false;
+
 				for (int v = 0; v < triShape->GetTrishapeRuntimeData().vertexCount; v++) {
 					if (VertexColor* vertex = reinterpret_cast<VertexColor*>(&rendererData->rawVertexData[vertexSize * v + offset])) {
-						if (vertex->data[3] > maxAlpha) {
-							maxAlpha = vertex->data[3];
+						uint8_t alpha = vertex->data[3];
+						alphaZero = alphaOne || alpha == 0;
+						alphaOne = alphaOne || alpha == 255;
+						if (alpha > maxAlpha) {
+							maxAlpha = alpha;
 							vertexColor = vertex;
 						}
 					}
 				}
-				if (vertexColor) {
-					color.red *= vertexColor->data[0] / 255.f;
-					color.green *= vertexColor->data[1] / 255.f;
-					color.blue *= vertexColor->data[2] / 255.f;
-					if (shaderProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kVertexAlpha)) {
-						color.alpha *= vertexColor->data[3] / 255.f;
-					}
+
+				if (!vertexColor || !alphaZero || !alphaOne)
+					return false;
+
+				color.red *= vertexColor->data[0] / 255.f;
+				color.green *= vertexColor->data[1] / 255.f;
+				color.blue *= vertexColor->data[2] / 255.f;
+				if (shaderProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kVertexAlpha)) {
+					color.alpha *= vertexColor->data[3] / 255.f;
 				}
 			}
 
@@ -611,6 +620,7 @@ void LightLimitFix::AddParticleLight(RE::BSRenderPass* a_pass, LightLimitFix::Co
 	}
 
 	queuedParticleLights.insert({ a_pass->geometry, { color, radius, *config } });
+	return true;
 }
 
 enum class GrassShaderTechniques
@@ -784,10 +794,6 @@ void LightLimitFix::UpdateLights()
 	eastl::vector<LightData> lightsData{};
 	lightsData.reserve(MAX_LIGHTS);
 
-	static float* deltaTime = (float*)REL::RelocationID(523660, 410199).address();
-	static double timer = 0;
-	timer += *deltaTime;
-
 	// Process point lights
 
 	for (auto& e : shadowSceneNode->GetRuntimeData().activePointLights) {
@@ -932,7 +938,7 @@ void LightLimitFix::UpdateLights()
 
 				SetLightPosition(light, position);  // Light is complete for both eyes by now
 
-				AddCachedParticleLights(lightsData, light, &particleLight.second.config, particleLight.first, timer);
+				AddCachedParticleLights(lightsData, light, &particleLight.second.config, particleLight.first, State::GetSingleton()->timer);
 			}
 		}
 

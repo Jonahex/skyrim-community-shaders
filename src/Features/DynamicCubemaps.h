@@ -41,12 +41,7 @@ public:
 	ID3D11ComputeShader* specularIrradianceCS = nullptr;
 	ConstantBuffer* spmapCB = nullptr;
 	Texture2D* envTexture = nullptr;
-	winrt::com_ptr<ID3D11UnorderedAccessView> uavArray[9];
-
-	// BRDF 2D LUT
-
-	ID3D11ComputeShader* spBRDFProgram = nullptr;
-	Texture2D* spBRDFLUT = nullptr;
+	ID3D11UnorderedAccessView* uavArray[9];
 
 	// Reflection capture
 
@@ -68,6 +63,8 @@ public:
 	Texture2D* envCapturePositionTexture = nullptr;
 	Texture2D* envInferredTexture = nullptr;
 
+	ID3D11ShaderResourceView* defaultCubemap = nullptr;
+
 	ID3D11ComputeShader* averageColorCS = nullptr;
 
 	bool activeReflections = false;
@@ -82,7 +79,19 @@ public:
 
 	NextTask nextTask = NextTask::kCapture;
 
-	ID3D11UnorderedAccessView* cubemapUAV;
+	// Editor window
+
+	bool enableCreator = false;
+	float4 cubemapColor{ 1.0f, 1.0f, 1.0f, 0.0f };
+
+	struct alignas(16) CreatorSettingsCB
+	{
+		uint Enabled;
+		uint pad0[3];
+		float4 CubemapColor;
+	};
+
+	std::unique_ptr<Buffer> perFrameCreator = nullptr;
 
 	void UpdateCubemap();
 
