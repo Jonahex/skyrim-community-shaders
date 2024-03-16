@@ -118,9 +118,9 @@ public:
 	{
 		bool useDynamicCubemap = false;
 		bool pbrLodLand = false;
-		float lightColorMultiplier = 2.f;
+		float lightColorMultiplier = 1.f;
 		float lightColorPower = 1.f;
-		float ambientLightColorMultiplier = 3.f;
+		float ambientLightColorMultiplier = 2.5f;
 		float ambientLightColorPower = 1.f;
 	} pbrSettings{};
 

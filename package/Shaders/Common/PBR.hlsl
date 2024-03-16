@@ -248,7 +248,7 @@ void GetAmbientLightInputPBR(out float3 diffuse, out float3 specular, float3 N, 
 	float diffuseLevel = levelCount - 4;
 	float specularLevel = ComputeCubemapMipFromRoughness(roughness, levelCount);
 	
-	if ((PBRFlags & 256) != 0)
+	[branch] if ((PBRFlags & 256) != 0)
 	{
 		specularIrradiance += sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, R, specularLevel).xyz);
 	}
@@ -273,7 +273,7 @@ void GetAmbientLightInputPBR(out float3 diffuse, out float3 specular, float3 N, 
 		float3 subsurfaceSpecularIrradiance = 0.f;
 	
 #	if defined(DYNAMIC_CUBEMAPS)
-		if ((PBRFlags & 256) != 0)
+		[branch] if ((PBRFlags & 256) != 0)
 		{
 			float subsurfaceSpecularLevel = diffuseLevel - 2.5f;
 			subsurfaceSpecularIrradiance += sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, -V, diffuseLevel - 2.5f).xyz);

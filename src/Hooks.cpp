@@ -279,7 +279,7 @@ HRESULT WINAPI hk_IDXGISwapChain_Present(IDXGISwapChain* This, UINT SyncInterval
 struct ExtendedRendererState
 {
 	static constexpr uint32_t NumPSTextures = 6;
-	static constexpr uint32_t FirstPSTexture = 23;
+	static constexpr uint32_t FirstPSTexture = 24;
 
 	uint32_t PSResourceModifiedBits = 0;
 	ID3D11ShaderResourceView* PSTexture[NumPSTextures];
