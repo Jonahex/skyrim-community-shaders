@@ -1073,7 +1073,6 @@ namespace SIE
 				ID3DBlob* strippedShaderBlob = nullptr;
 
 				const uint32_t stripFlags = D3DCOMPILER_STRIP_DEBUG_INFO |
-				                            D3DCOMPILER_STRIP_REFLECTION_DATA |
 				                            D3DCOMPILER_STRIP_TEST_BLOBS |
 				                            D3DCOMPILER_STRIP_PRIVATE_DATA;
 
