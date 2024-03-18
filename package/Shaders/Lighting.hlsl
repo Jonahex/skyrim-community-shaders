@@ -2284,6 +2284,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	else
 	color.xyz += specularColor;
 #	endif  // defined (CPM_AVAILABLE) && defined(ENVMAP)
+#	endif
 
 #	if defined(DYNAMIC_CUBEMAPS) && !defined(TRUE_PBR)
 #		if defined(EYE)
@@ -2312,14 +2313,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	if defined(WATER_CAUSTICS)
 	color.xyz *= ComputeWaterCaustics(waterHeight, input.WorldPosition.xyz, worldSpaceNormal);
 #	endif
-
-#	if !defined(TRUE_PBR)
-	color.xyz = Lin2sRGB(color.xyz);
-#	endif
 	
 #	if defined(TRUE_PBR)
 	color.xyz += specularColorPBR;
 #	endif
+
+	color.xyz = Lin2sRGB(color.xyz);
 
 #	if defined(SPECULAR) || defined(SPARKLE)
 	float3 specularTmp = lerp(color.xyz, input.FogParam.xyz, input.FogParam.w);
