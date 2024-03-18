@@ -119,9 +119,9 @@ public:
 		bool useDynamicCubemap = true;
 		bool pbrLodLand = false;
 		float lightColorMultiplier = 1.f;
-		float lightColorPower = 2.2f;
+		float lightColorPower = 1.f;
 		float ambientLightColorMultiplier = 1.f;
-		float ambientLightColorPower = 2.2f;
+		float ambientLightColorPower = 1.f;
 	} pbrSettings{};
 
 	RE::NiTransform pbrDirectionalAmbientTransform;

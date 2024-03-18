@@ -1708,6 +1708,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	endif
 
 	float3 dirLightColor = DirLightColor.xyz;
+#if defined(TRUE_PBR)
+	dirLightColor = sRGB2Lin(dirLightColor);
+#endif
+
 	float selfShadowFactor = 1.0f;
 
 	float3 normalizedDirLightDirectionWS = DirLightDirection;
@@ -1921,7 +1925,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 			continue;
 
 		float intensityMultiplier = 1 - intensityFactor * intensityFactor;
-		float3 lightColor = PointLightColor[lightIndex].xyz * intensityMultiplier;
+
+		float3 lightColor = PointLightColor[lightIndex].xyz;
+#			if defined(TRUE_PBR)
+		lightColor = sRGB2Lin(lightColor);
+#			endif
+		lightColor *= intensityMultiplier;
 
 		float3 nsLightColor = lightColor;
 		
@@ -2004,11 +2013,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		if (intensityFactor == 1)
 			continue;
 
-		float intensityMultiplier = 1 - intensityFactor * intensityFactor;
-		float3 lightColor = light.color.xyz * intensityMultiplier;
+		float3 lightColor = light.color.xyz;
 #			if defined(TRUE_PBR)
-		lightColor = light.pbrColor.xyz * intensityMultiplier;
+		lightColor = sRGB2Lin(lightColor);
 #			endif
+		float intensityMultiplier = 1 - intensityFactor * intensityFactor;
+		lightColor *= intensityMultiplier;
 			
 		float3 nsLightColor = lightColor;
 		

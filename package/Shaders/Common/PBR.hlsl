@@ -224,8 +224,8 @@ void GetAmbientLightInputPBR(out float3 diffuse, out float3 specular, float3 N, 
 	float3 R = normalize(reflect(-V, N));
 	R = GetOffSpecularPeakReflectionDirection(N, R, roughness);
 	
-	float3 directionalAmbientDiffuseColor = mul(DirectionalAmbient, float4(N, 1.f));
-	float3 directionalAmbientSpecularColor = mul(DirectionalAmbient, float4(R, 1.f));
+	float3 directionalAmbientDiffuseColor = sRGB2Lin(mul(DirectionalAmbient, float4(N, 1.f)));
+	float3 directionalAmbientSpecularColor = sRGB2Lin(mul(DirectionalAmbient, float4(R, 1.f)));
 
 	float3 diffuseIrradiance = 0;
 	float3 specularIrradiance = 0;
@@ -250,7 +250,7 @@ void GetAmbientLightInputPBR(out float3 diffuse, out float3 specular, float3 N, 
 		averageColor += sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, float3(0, 0, -1), levelCount - 1).xyz);
 		averageColor = max(averageColor / 6, 1e-5);
 		
-		ambientScale = float3(DirectionalAmbient[0].w, DirectionalAmbient[1].w, DirectionalAmbient[2].w) / averageColor;
+		ambientScale = sRGB2Lin(float3(DirectionalAmbient[0].w, DirectionalAmbient[1].w, DirectionalAmbient[2].w)) / averageColor;
 	
 		diffuseIrradiance += ambientScale * sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, N, specularLevel).xyz);
 		specularIrradiance += ambientScale * sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, R, specularLevel).xyz);
