@@ -1708,10 +1708,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	endif
 
 	float3 dirLightColor = DirLightColor.xyz;
-#if defined(TRUE_PBR)
-	dirLightColor = sRGB2Lin(dirLightColor);
-#endif
-
 	float selfShadowFactor = 1.0f;
 
 	float3 normalizedDirLightDirectionWS = DirLightDirection;
@@ -1783,7 +1779,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	if defined(TRUE_PBR)
 	{
 		float3 dirDiffuseColor, dirTransmissionColor, dirSpecularColor;
-		GetDirectLightInputPBR(dirDiffuseColor, dirTransmissionColor, dirSpecularColor, modelNormal.xyz, viewDirection, DirLightDirection, dirLightColor, roughness, f0, subsurfaceColor, subsurfaceOpacity, dirShadow, ao);
+		GetDirectLightInputPBR(dirDiffuseColor, dirTransmissionColor, dirSpecularColor, modelNormal.xyz, viewDirection, DirLightDirection, sRGB2Lin(dirLightColor), roughness, f0, subsurfaceColor, subsurfaceOpacity, dirShadow, ao);
 		lightsDiffuseColor += dirDiffuseColor;
 		transmissionColor += dirTransmissionColor;
 		specularColorPBR += dirSpecularColor;
@@ -1925,12 +1921,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 			continue;
 
 		float intensityMultiplier = 1 - intensityFactor * intensityFactor;
-
-		float3 lightColor = PointLightColor[lightIndex].xyz;
-#			if defined(TRUE_PBR)
-		lightColor = sRGB2Lin(lightColor);
-#			endif
-		lightColor *= intensityMultiplier;
+		float3 lightColor = PointLightColor[lightIndex].xyz * intensityMultiplier;
 
 		float3 nsLightColor = lightColor;
 		
@@ -1945,11 +1936,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		float3 normalizedLightDirection = normalize(lightDirection);
 
 		lightColor *= lightShadow;
-
+		
 #			if defined(TRUE_PBR)
 		{
 			float3 pointDiffuseColor, pointTransmissionColor, pointSpecularColor;
-			GetDirectLightInputPBR(pointDiffuseColor, pointTransmissionColor, pointSpecularColor, modelNormal.xyz, viewDirection, normalizedLightDirection, lightColor, roughness, f0, subsurfaceColor, subsurfaceOpacity, lightShadow, ao);
+			GetDirectLightInputPBR(pointDiffuseColor, pointTransmissionColor, pointSpecularColor, modelNormal.xyz, viewDirection, normalizedLightDirection, sRGB2Lin(lightColor), roughness, f0, subsurfaceColor, subsurfaceOpacity, lightShadow, ao);
 			lightsDiffuseColor += pointDiffuseColor;
 			transmissionColor += pointTransmissionColor;
 			specularColorPBR += pointSpecularColor;
@@ -2013,13 +2004,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		if (intensityFactor == 1)
 			continue;
 
-		float3 lightColor = light.color.xyz;
-#			if defined(TRUE_PBR)
-		lightColor = sRGB2Lin(lightColor);
-#			endif
 		float intensityMultiplier = 1 - intensityFactor * intensityFactor;
-		lightColor *= intensityMultiplier;
-			
+		float3 lightColor = light.color.xyz * intensityMultiplier;
+		
 		float3 nsLightColor = lightColor;
 		
 		float lightShadow = 1.f;
@@ -2049,7 +2036,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 			}
 		}
 
-#			if defined(CPM_AVAILABLE)
+#if defined(CPM_AVAILABLE)
 		if (perPassParallax[0].EnableShadows && shadowComponent != 0.0) {
 			float3 lightDirectionTS = normalize(mul(normalizedLightDirection, tbn).xyz);
 
@@ -2074,7 +2061,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #			if defined(TRUE_PBR)
 		{
 			float3 pointDiffuseColor, pointTransmissionColor, pointSpecularColor;
-			GetDirectLightInputPBR(pointDiffuseColor, pointTransmissionColor, pointSpecularColor, worldSpaceNormal.xyz, worldSpaceViewDirection, normalizedLightDirection, lightColor, roughness, f0, subsurfaceColor, subsurfaceOpacity, lightShadow, ao);
+			GetDirectLightInputPBR(pointDiffuseColor, pointTransmissionColor, pointSpecularColor, worldSpaceNormal.xyz, worldSpaceViewDirection, normalizedLightDirection, sRGB2Lin(lightColor), roughness, f0, subsurfaceColor, subsurfaceOpacity, lightShadow, ao);
 			lightsDiffuseColor += pointDiffuseColor;
 			transmissionColor += pointTransmissionColor;
 			specularColorPBR += pointSpecularColor;
