@@ -1315,6 +1315,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	complexMaterial = complexMaterial && complexMaterialColor.y > (4.0 / 255.0) && (complexMaterialColor.y < (1.0 - (4.0 / 255.0)));
 	shininess = lerp(shininess, shininess * complexMaterialColor.y, complexMaterial);
 	float3 complexSpecular = lerp(1.0, lerp(1.0, baseColor.xyz, complexMaterialColor.z), complexMaterial);
+	baseColor.xyz = lerp(baseColor.xyz, lerp(baseColor.xyz, 0.0, complexMaterialColor.z), complexMaterial);
 #	endif  // defined (CPM_AVAILABLE) && defined(ENVMAP)
 
 #	if defined(FACEGEN)
@@ -2177,6 +2178,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	if (dynamicCubemap) {
 #			if defined(CPM_AVAILABLE)
 		envRoughness = lerp(envRoughness, 1.0 - complexMaterialColor.y, (float)complexMaterial);
+		envRoughness *= envRoughness;
 		F0 = lerp(F0, sRGB2Lin(complexSpecular), (float)complexMaterial);
 #			endif
 
@@ -2239,7 +2241,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	endif  // MULTI_LAYER_PARALLAX
 
 #	if defined(SPECULAR)
+#		if defined(CPM_AVAILABLE) && defined(ENVMAP)
+	specularColor = (specularColor * glossiness * MaterialData.yyy) * lerp(SpecularColor.xyz, complexSpecular, complexMaterial);
+#		else
 	specularColor = (specularColor * glossiness * MaterialData.yyy) * SpecularColor.xyz;
+#		endif
 #	elif defined(SPARKLE)
 	specularColor *= glossiness;
 #	endif  // SPECULAR
@@ -2280,26 +2286,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	color.xyz = min(vertexColor.xyz, color.xyz);
 
 #	if !defined(TRUE_PBR)
-#	if defined(CPM_AVAILABLE) && defined(ENVMAP)
-	color.xyz += specularColor * complexSpecular;
-#	else
 	color.xyz += specularColor;
-#	endif  // defined (CPM_AVAILABLE) && defined(ENVMAP)
-#	endif
 
-#	if defined(DYNAMIC_CUBEMAPS) && !defined(TRUE_PBR)
-#		if defined(EYE)
-	color.xyz += GetDynamicCubemapFresnel(screenUV, worldSpaceNormal, worldSpaceVertexNormal, worldSpaceViewDirection, 0.5, 2, diffuseColor, viewPosition.z) * input.Color.xyz * envMask;
-#		elif defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX)
-	color.xyz += GetDynamicCubemapFresnel(screenUV, worldSpaceNormal, worldSpaceVertexNormal, worldSpaceViewDirection, 0.5 - (saturate(envMask) * 0.5), 2 - saturate(envMask), diffuseColor, viewPosition.z) * (1.0 - ((float)dynamicCubemap * saturate(envMask))) * input.Color.xyz;
-#		elif defined(HAIR)
-	color.xyz += GetDynamicCubemapFresnel(screenUV, worldSpaceNormal, worldSpaceVertexNormal, worldSpaceViewDirection, 0.5, 2, diffuseColor, viewPosition.z);
-#		else
-	color.xyz += GetDynamicCubemapFresnel(screenUV, worldSpaceNormal, worldSpaceVertexNormal, worldSpaceViewDirection, 0.5, 2, diffuseColor, viewPosition.z) * input.Color.xyz;
-#		endif
-#	endif
-
-#	if !defined(TRUE_PBR)
 	color.xyz = sRGB2Lin(color.xyz);
 #	endif
 
