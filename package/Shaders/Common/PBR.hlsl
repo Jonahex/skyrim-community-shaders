@@ -1,10 +1,71 @@
+struct PBRData
+{
+	uint DiffuseModel;
+	bool UseMultipleScattering;
+	bool UseMultiBounceAO;
+	bool UseDynamicCubemap;
+	bool MatchDynamicCubemapToAmbient;
+};
+
+#define TruePBR_Lambert 0
+#define TruePBR_Burley 1
+#define TruePBR_OrenNayar 2
+#define TruePBR_Gotanda 3
+#define TruePBR_Chan 4
+
+#define TruePBR_HasEmissive (1 << 0)
+#define TruePBR_HasSubsurface (1 << 1)
+#define TruePBR_Subsurface (1 << 3)
+#define TruePBR_HasDisplacement (1 << 4)
+	
+StructuredBuffer<PBRData> pbrData : register(t121);
+
 // [Jimenez et al. 2016, "Practical Realtime Strategies for Accurate Indirect Occlusion"]
-float3 AOMultiBounce(float3 baseColor, float ao)
+float3 MultiBounceAO(float3 baseColor, float ao)
 {
 	float3 a = 2.0404 * baseColor - 0.3324;
 	float3 b = -4.7951 * baseColor + 0.6417;
 	float3 c = 2.7552 * baseColor + 0.6903;
 	return max(ao, ((ao * a + b) * ao + c) * ao);
+}
+
+// [Lagarde et al 2014, "Moving Frostbite to Physically Based Rendering 3.0"]
+float SpecularAOLagarde(float NdotV, float ao, float roughness) 
+{
+    return saturate(pow(NdotV + ao, exp2(-16.0 * roughness - 1.0)) - 1.0 + ao);
+}
+
+// [Schlick 1994, "An Inexpensive BRDF Model for Physically-Based Rendering"]
+float3 GetFresnelFactorSchlick(float3 specularColor, float VdotH)
+{
+	float Fc = pow(1 - VdotH, 5);
+	return Fc + (1 - Fc) * specularColor;
+}
+
+// [Heitz 2014, "Understanding the Masking-Shadowing Function in Microfacet-Based BRDFs"]
+float GetGeometryFunctionSmithJointApprox(float roughness, float NdotV, float NdotL)
+{
+	float a = roughness * roughness;
+	float visSmithV = NdotL * (NdotV * (1 - a) + a);
+	float visSmithL = NdotV * (NdotL * (1 - a) + a);
+	return 0.5 * rcp(visSmithV + visSmithL);
+}
+
+// [Walter et al. 2007, "Microfacet models for refraction through rough surfaces"]
+float GetDistributionFunctionGGX(float roughness, float NdotH)
+{
+	float a2 = pow(roughness, 4);
+	float d = max((NdotH * a2 - NdotH) * NdotH + 1, 1e-5);
+	return a2 / (PI * d * d);
+}
+
+float3 GetSpecularDirectLightMultiplierMicrofacet(float roughness, float3 specularColor, float NdotL, float NdotV, float NdotH, float VdotH)
+{
+	float D = GetDistributionFunctionGGX(roughness, NdotH);
+	float G = GetGeometryFunctionSmithJointApprox(roughness, NdotV, NdotL);
+	float3 F = GetFresnelFactorSchlick(specularColor, VdotH);
+
+	return D * G * F;
 }
 
 float GetDiffuseDirectLightMultiplierLambert()
@@ -15,22 +76,26 @@ float GetDiffuseDirectLightMultiplierLambert()
 // [Burley 2012, "Physically-Based Shading at Disney"]
 float3 GetDiffuseDirectLightMultiplierBurley(float roughness, float NdotV, float NdotL, float VdotH)
 {
-	float FD90 = 0.5 + 2 * VdotH * VdotH * roughness;
-	float FdV = 1 + (FD90 - 1) * pow(1 - NdotV, 5);
-	float FdL = 1 + (FD90 - 1) * pow(1 - NdotL, 5);
+	float Fd90 = 0.5 + 2 * VdotH * VdotH * roughness;
+	float FdV = 1 + (Fd90 - 1) * pow(1 - NdotV, 5);
+	float FdL = 1 + (Fd90 - 1) * pow(1 - NdotL, 5);
 	return (1 / PI) * FdV * FdL;
 }
 
-// [Gotanda 2012, "Beyond a Simple Physically Based Blinn-Phong Model in Real-Time"]
-float3 GetDiffuseDirectLightMultiplierOrenNayar(float roughness, float NdotV, float NdotL, float VdotL)
+// [Oren et al 1994, "Generalization of Lambert’s Reflectance Model"]
+float3 GetDiffuseDirectLightMultiplierOrenNayar(float roughness, float3 N, float3 V, float3 L, float NdotV, float NdotL)
 {
-	float a = roughness * roughness;
-	float s = a;
-	float s2 = s * s;
-	float Cosri = VdotL - NdotV * NdotL;
-	float C1 = 1 - 0.5 * s2 / (s2 + 0.33);
-	float C2 = 0.45 * s2 / (s2 + 0.09) * Cosri * (Cosri >= 0 ? rcp(max(NdotL, NdotV)) : 1);
-	return (1 / PI) * (C1 + C2) * (1 + roughness * 0.5);
+	float a = roughness * roughness * 0.25;
+    float A = 1.0 - 0.5 * (a / (a + 0.33));
+    float B = 0.45 * (a / (a + 0.09));
+	
+	float gamma = dot(V - N * NdotV, L - N * NdotL) / (sqrt(saturate(1.0 - NdotV * NdotV)) * sqrt(saturate(1.0 - NdotL * NdotL)));
+
+    float2 cos_alpha_beta = NdotV < NdotL ? float2(NdotV, NdotL) : float2(NdotL, NdotV);
+    float2 sin_alpha_beta = sqrt(saturate(1.0 - cos_alpha_beta * cos_alpha_beta));
+    float C = sin_alpha_beta.x * sin_alpha_beta.y / (1e-6 + cos_alpha_beta.y);
+
+    return (1 / PI) * (A + B * max(0.0, gamma) * C);
 }
 
 // [Gotanda 2014, "Designing Reflectance Models for New Consoles"]
@@ -40,8 +105,7 @@ float3 GetDiffuseDirectLightMultiplierGotanda(float roughness, float NdotV, floa
 	float a2 = a * a;
 	float F0 = 0.04;
 	float Cosri = VdotL - NdotV * NdotL;
-	float a2_13 = a2 + 1.36053;
-	float Fr = (1 - (0.542026 * a2 + 0.303573 * a) / a2_13) * (1 - pow(1 - NdotV, 5 - 4 * a2) / a2_13) * ((-0.733996 * a2 * a + 1.50912 * a2 - 1.16402 * a) * pow(1 - NdotV, 1 + rcp(39 * a2 * a2 + 1)) + 1);
+	float Fr = (1 - (0.542026 * a2 + 0.303573 * a) / (a2 + 1.36053)) * (1 - pow(1 - NdotV, 5 - 4 * a2) / (a2 + 1.36053)) * ((-0.733996 * a2 * a + 1.50912 * a2 - 1.16402 * a) * pow(1 - NdotV, 1 + rcp(39 * a2 * a2 + 1)) + 1);
 	float Lm = (max(1 - 2 * a, 0) * (1 - pow(1 - NdotL, 5)) + min(2 * a, 1)) * (1 - 0.5 * a * (NdotL - 1)) * NdotL;
 	float Vd = (a2 / ((a2 + 0.09) * (1.31072 + 0.995584 * NdotV))) * (1 - pow(1 - NdotL, (1 - 0.3726732 * NdotV * NdotV) / (0.188566 + 0.38841 * NdotV)));
 	float Bp = Cosri < 0 ? 1.4 * NdotV * NdotL * Cosri : Cosri;
@@ -67,73 +131,18 @@ float3 GetDiffuseDirectLightMultiplierChan(float roughness, float NdotV, float N
 	return (1 / PI) * (Fd + Fb);
 }
 
-// [Schlick 1994, "An Inexpensive BRDF Model for Physically-Based Rendering"]
-float3 GetFresnelFactorSchlick(float3 specularColor, float VdotH)
+// [Lazarov 2013, "Getting More Physical in Call of Duty: Black Ops II"]
+float2 GetEnvBRDFApproxLazarov(float roughness, float NdotV)
 {
-	float Fc = pow(1 - VdotH, 5);
-	return saturate(50.0 * specularColor.g) * Fc + (1 - Fc) * specularColor;
+	const float4 c0 = { -1, -0.0275, -0.572, 0.022 };
+	const float4 c1 = { 1, 0.0425, 1.04, -0.04 };
+	float4 r = roughness * c0 + c1;
+	float a004 = min(r.x * r.x, exp2(-9.28 * NdotV)) * r.x + r.y;
+	float2 AB = float2(-1.04, 1.04) * a004 + r.zw;
+	return AB;
 }
 
-// [Heitz 2014, "Understanding the Masking-Shadowing Function in Microfacet-Based BRDFs"]
-float GetGeometryFunctionSmithJointApprox(float roughness, float NdotV, float NdotL)
-{
-	float a = roughness * roughness;
-	float Vis_SmithV = NdotL * (NdotV * (1 - a) + a);
-	float Vis_SmithL = NdotV * (NdotL * (1 - a) + a);
-	return 0.5 * rcp(Vis_SmithV + Vis_SmithL);
-}
-
-// [Walter et al. 2007, "Microfacet models for refraction through rough surfaces"]
-float GetDistributionFunctionGGX(float roughness, float NdotH)
-{
-	float a2 = pow(roughness, 4);
-	float d = max((NdotH * a2 - NdotH) * NdotH + 1, 1e-5);
-	return a2 / (PI * d * d);
-}
-
-float3 GetSpecularDirectLightMultiplierMicrofacet(float roughness, float3 specularColor, float NdotL, float NdotV, float NdotH, float VdotH)
-{
-	float D = GetDistributionFunctionGGX(roughness, NdotH);
-	float G = GetGeometryFunctionSmithJointApprox(roughness, NdotV, NdotL);
-	float3 F = GetFresnelFactorSchlick(specularColor, VdotH);
-
-	return D * G * F;
-}
-
-float2 GGXEnergyLookup(float roughness, float NdotV)
-{
-	const float r = roughness;
-	const float c = NdotV;
-	const float E = 1.0 - saturate(pow(r, c / r) * ((r * c + 0.0266916) / (0.466495 + c)));
-	const float Ef = pow(1 - c, 5) * pow(2.36651 * pow(c, 4.7703 * r) + 0.0387332, r);
-	return float2(E, Ef);
-}
-
-void ComputeFresnelEnergyTerms(out float3 W, out float3 E, float2 energy, float3 F0, float3 F90)
-{
-	W = 1.0 + F0 * ((1 - energy.x) / energy.x);
-	E = W * (energy.x * F0 + energy.y * (F90 - F0));
-}
-
-void ComputeGGXSpecularEnergyTerms(out float3 W, out float3 E, float roughness, float NdotV, float3 F0)
-{
-	const float F90 = saturate(50.0 * F0.g);
-	ComputeFresnelEnergyTerms(W, E, GGXEnergyLookup(roughness, NdotV), F0, F90);
-}
-
-float3 TransmittanceToExtinction(float3 transmittanceColor, float thicknessMeters)
-{
-	const float MinTransmittance = 0.000000000001f;
-	const float MinMFPMeter = 0.000000000001f;
-	return -log(clamp(transmittanceColor, MinTransmittance, 1.0f)) / max(MinMFPMeter, thicknessMeters);
-}
-
-float3 ExtinctionToTransmittance(float3 extinction, float thicknessMeters)
-{
-	return exp(-extinction * thicknessMeters);
-}
-
-void GetDirectLightInputPBR(out float3 diffuse, out float3 transmission, out float3 specular, float3 N, float3 V, float3 L, float3 lightColor, float roughness, float3 specularColor, float3 subsurfaceColor, float subsurfaceOpacity, float shadow, float ao)
+void GetDirectLightInputPBR(out float3 diffuse, out float3 transmission, out float3 specular, float3 N, float3 V, float3 L, float3 lightColor, float roughness, float3 specularColor, float3 subsurfaceColor, float thickness)
 {
 	diffuse = 0;
 	transmission = 0;
@@ -152,152 +161,156 @@ void GetDirectLightInputPBR(out float3 diffuse, out float3 transmission, out flo
 	float satVdotL = saturate(VdotL);
 	float satNdotH = saturate(NdotH);
 	float satVdotH = saturate(VdotH);
+	
+	float diffuseMultiplier = 1;
+	[branch] if (pbrData[0].DiffuseModel == TruePBR_Lambert)
+	{
+		diffuseMultiplier = GetDiffuseDirectLightMultiplierLambert();
+	}
+	else if (pbrData[0].DiffuseModel == TruePBR_Burley)
+	{
+		diffuseMultiplier = GetDiffuseDirectLightMultiplierBurley(roughness, satNdotV, satNdotL, satVdotH);
+	}
+	else if (pbrData[0].DiffuseModel == TruePBR_OrenNayar)
+	{
+		diffuseMultiplier = GetDiffuseDirectLightMultiplierOrenNayar(roughness, N, V, L, NdotV, NdotL);
+	}
+	else if (pbrData[0].DiffuseModel == TruePBR_Gotanda)
+	{
+		diffuseMultiplier = GetDiffuseDirectLightMultiplierGotanda(roughness, satNdotV, satNdotL, satVdotL);
+	}
+	else
+	{
+		diffuseMultiplier = GetDiffuseDirectLightMultiplierChan(roughness, satNdotV, satNdotL, satVdotH, satNdotH);
+	}
 
-	diffuse += PI * GetDiffuseDirectLightMultiplierLambert() * lightColor * satNdotL;
-	//diffuse += PI * GetDiffuseDirectLightMultiplierBurley(roughness, satNdotV, satNdotL, satVdotH) * lightColor * satNdotL;
-	//diffuse += PI * GetDiffuseDirectLightMultiplierOrenNayar(roughness, satNdotV, satNdotL, satVdotL) * lightColor * satNdotL;
-	//diffuse += PI * GetDiffuseDirectLightMultiplierGotanda(roughness, satNdotV, satNdotL, satVdotL) * lightColor * satNdotL;
-	//diffuse += PI * GetDiffuseDirectLightMultiplierChan(roughness, saturate(NdotV), satNdotL, satVdotH, satNdotH) * lightColor * satNdotL;
+	diffuse += PI * diffuseMultiplier * lightColor * satNdotL;
 	specular += PI * GetSpecularDirectLightMultiplierMicrofacet(roughness, specularColor, satNdotL, satNdotV, satNdotH, satVdotH) * lightColor * satNdotL;
 	
-	// Energy conservation
-	float3 W, E;
-	ComputeGGXSpecularEnergyTerms(W, E, roughness, satNdotV, specularColor);
-	diffuse *= 1 - RGBToLuminanceAlternative(E);
-	specular *= W;
-	
-#if !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
-	[branch] if ((PBRFlags & 4) != 0) // Two-sided foliage
+	[branch] if (pbrData[0].UseMultipleScattering)
 	{
-		float wrap = 0.5;
-		float wrapNdotL = saturate((-NdotL + wrap) / ((1 + wrap) * (1 + wrap)));
-		float scatter = GetDistributionFunctionGGX(0.6, saturate(-VdotL));
-
-		transmission += PI * wrapNdotL * scatter * lightColor * subsurfaceColor;
+		float2 specularBRDF = GetEnvBRDFApproxLazarov(roughness, satNdotV);
+		specular *= 1 + specularColor * (1 / (specularBRDF.x + specularBRDF.y) - 1);
 	}
-	else if ((PBRFlags & 8) != 0) // Subsurface
+	
+#	if !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
+	[branch] if ((PBRFlags & TruePBR_Subsurface) != 0)
 	{
-		float scatter = pow(saturate(-VdotL), 12) * lerp(3, .1f, subsurfaceOpacity);
-		float wrappedDiffuse = pow(saturate(NdotL * (1.f / 1.5f) + (0.5f / 1.5f)), 1.5f) * (2.5f / 1.5f);
-		float normalContribution = lerp(1.f, wrappedDiffuse, subsurfaceOpacity);
-		float backScatter = ao * normalContribution / (PI * 2);
-		float3 extinctionCoefficients = TransmittanceToExtinction(subsurfaceColor, 0.15f);
-		float3 rawTransmittedColor = ExtinctionToTransmittance(extinctionCoefficients, 1.0f);
-		float3 transmittedColor = HSV2Lin(float3(Lin2HSV(rawTransmittedColor).xy, Lin2HSV(subsurfaceColor).z));
-
-		transmission += PI * lerp(backScatter, 1, scatter) * lerp(transmittedColor, subsurfaceColor, shadow) * lightColor;
+		const float subsurfacePower = 12.234;
+		float forwardScatter = exp2(saturate(-VdotL) * subsurfacePower - subsurfacePower);
+		float backScatter = saturate(satNdotL * thickness + (1.0 - thickness)) * 0.5;
+		float subsurface = lerp(backScatter, 1, forwardScatter) * (1.0 - thickness);
+		transmission += PI * diffuseMultiplier * subsurfaceColor * subsurface * lightColor;
 	}
 #	endif
 }
 
-float ComputeCubemapMipFromRoughness(float roughness, float cubemapMaxMip)
+float RoughnessToMip(float roughness, float levelCount)
 {
-	const float RoughestMip = 3;
-	const float RoughnessMipScale = 1.15;
-	float LevelFrom1x1 = RoughestMip - RoughnessMipScale * log2(roughness);
-	return cubemapMaxMip - 1 - LevelFrom1x1;
+    return (levelCount - 1) * roughness * (2.0 - roughness);
 }
 
-// [Lazarov 2013, "Getting More Physical in Call of Duty: Black Ops II"]
-float2 GetEnvBRDFApproxLazarov(float roughness, float NdotV)
-{
-	const float4 c0 = { -1, -0.0275, -0.572, 0.022 };
-	const float4 c1 = { 1, 0.0425, 1.04, -0.04 };
-	float4 r = roughness * c0 + c1;
-	float a004 = min(r.x * r.x, exp2(-9.28 * NdotV)) * r.x + r.y;
-	float2 AB = float2(-1.04, 1.04) * a004 + r.zw;
-	return AB;
-}
-
-float3 GetOffSpecularPeakReflectionDirection(float3 N, float3 R, float roughness)
+// [Lagarde et al 2014, "Moving Frostbite to Physically Based Rendering 3.0"]
+float3 GetSpecularDominantDirection(float3 N, float3 R, float roughness)
 {
 	float a = roughness * roughness;
 	return lerp(N, R, (1 - a) * (sqrt(1 - a) + a));	
 }
 
-void GetAmbientLightInputPBR(out float3 diffuse, out float3 specular, float3 N, float3 V, float3 diffuseColor, float roughness, float3 specularColor, float3 subsurfaceColor, float ao)
+void GetAmbientLightInputPBR(out float3 diffuse, out float3 specular, float3 N, float3 V, float3 diffuseColor, float roughness, float3 specularColor, float3 subsurfaceColor, float thickness, float materialAO)
 {
 	diffuse = 0;
 	specular = 0;
 
 	float NdotV = saturate(dot(N, V));
 	float3 R = normalize(reflect(-V, N));
-	R = GetOffSpecularPeakReflectionDirection(N, R, roughness);
-	
-	float3 directionalAmbientDiffuseColor = sRGB2Lin(mul(DirectionalAmbient, float4(N, 1.f)));
-	float3 directionalAmbientSpecularColor = sRGB2Lin(mul(DirectionalAmbient, float4(R, 1.f)));
+	R = GetSpecularDominantDirection(N, R, roughness);
 
 	float3 diffuseIrradiance = 0;
 	float3 specularIrradiance = 0;
-	
-	float ambientScale = 1;
 
 #	if defined(DYNAMIC_CUBEMAPS)
 	uint width = 0, height = 0;
 	specularTexture.GetDimensions(width, height);
 	uint levelCount = log2(width) + 1;
-	float diffuseLevel = levelCount - 4;
-	float specularLevel = ComputeCubemapMipFromRoughness(roughness, levelCount);
+	float specularLevel = RoughnessToMip(roughness, levelCount);
 	
-	[branch] if ((PBRFlags & 256) != 0)
+	float ambientScale = 1;
+	
+	[branch] if (pbrData[0].UseDynamicCubemap)
 	{
-		float3 averageColor = 0;
-		averageColor += sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, float3(1, 0, 0), levelCount - 1).xyz);
-		averageColor += sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, float3(-1, 0, 0), levelCount - 1).xyz);
-		averageColor += sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, float3(0, 1, 0), levelCount - 1).xyz);
-		averageColor += sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, float3(0, -1, 0), levelCount - 1).xyz);
-		averageColor += sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, float3(0, 0, 1), levelCount - 1).xyz);
-		averageColor += sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, float3(0, 0, -1), levelCount - 1).xyz);
-		averageColor = max(averageColor / 6, 1e-5);
+		[branch] if (pbrData[0].MatchDynamicCubemapToAmbient)
+		{
+			ambientScale = sRGB2Lin(float3(DirectionalAmbient[0].w, DirectionalAmbient[1].w, DirectionalAmbient[2].w)) / perPassDynamicCubemaps[0].AverageColor;
+		}
 		
-		ambientScale = sRGB2Lin(float3(DirectionalAmbient[0].w, DirectionalAmbient[1].w, DirectionalAmbient[2].w)) / averageColor;
-	
-		diffuseIrradiance += ambientScale * sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, N, specularLevel).xyz);
 		specularIrradiance += ambientScale * sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, R, specularLevel).xyz);
+		diffuseIrradiance += ambientScale * sRGB2Lin(diffuseTexture.SampleLevel(SampColorSampler, N, 0).xyz);
 	}
 	else
-	{
-		diffuseIrradiance += directionalAmbientDiffuseColor;
-		specularIrradiance += directionalAmbientSpecularColor;
-	}
-#	else
-	diffuseIrradiance += directionalAmbientDiffuseColor;
-	specularIrradiance += directionalAmbientSpecularColor;
 #	endif
+	{
+		diffuseIrradiance += sRGB2Lin(mul(DirectionalAmbient, float4(N, 1.f)));
+		specularIrradiance += sRGB2Lin(mul(DirectionalAmbient, float4(R, 1.f)));
+	}
+
+	// [Fdez-Aguera 2019, "A Multiple-Scattering Microfacet Model for Real-Time Image Based Lighting"]
+	// Roughness dependent fresnel
+	float3 Fr = max(1 - roughness, specularColor) - specularColor;
+	float3 S = specularColor + Fr * pow(1.0 - NdotV, 5.0);
 	
     float2 specularBRDF = GetEnvBRDFApproxLazarov(roughness, NdotV);
+	float3 FssEss = S * specularBRDF.x + specularBRDF.y;
 	
-	diffuse += diffuseIrradiance * diffuseColor;
-	specular += specularIrradiance * (specularColor * specularBRDF.x + saturate(50.0 * specularColor.g) * specularBRDF.y);
-
-	// Subsurface
-#if !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
-	[branch] if((PBRFlags & 8) != 0) // Subsurface
+	float3 diffuseLobeWeight = diffuseColor;
+	float3 specularLobeWeight = FssEss;
+	
+	[branch] if (pbrData[0].UseMultipleScattering)
 	{
-		diffuse += diffuseIrradiance * subsurfaceColor * 0.5;
+		// Multiple scattering
+		float Ess = specularBRDF.x + specularBRDF.y;
+		float Ems = 1 - Ess;
+		float3 Favg = specularColor + (1 - specularColor) / 21;
+		float3 Fms = FssEss * Favg /(1 - (1 - Ess) * Favg);
 		
-		float3 directionalAmbientSubsurfaceSpecularColor = mul(DirectionalAmbient, float4(-V, 1.f));
+		// Dielectrics
+		float3 Edss = 1 - (FssEss + Fms * Ems);
+		float3 kD = diffuseColor * Edss;
 		
-		float3 subsurfaceSpecularIrradiance = 0.f;
+		diffuseLobeWeight = kD + Fms * Ems;
+	}
 	
+	diffuse += diffuseIrradiance * diffuseLobeWeight;
+	specular += specularIrradiance * specularLobeWeight;
+	
+	[branch] if ((PBRFlags & TruePBR_Subsurface) != 0)
+	{
+		float3 subsurfaceSpecularIrradiance = 0;
+		
 #	if defined(DYNAMIC_CUBEMAPS)
-		[branch] if ((PBRFlags & 256) != 0)
+		[branch] if (pbrData[0].UseDynamicCubemap)
 		{
-			float subsurfaceSpecularLevel = diffuseLevel - 2.5f;
-			subsurfaceSpecularIrradiance += ambientScale * sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, -V, diffuseLevel - 2.5f).xyz);
+			float level = (levelCount - 1) * roughness * roughness + 1 + thickness;
+			subsurfaceSpecularIrradiance += ambientScale * sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, -V, level).xyz);
 		}
 		else
+#	endif
 		{
-			subsurfaceSpecularIrradiance += directionalAmbientSubsurfaceSpecularColor;
+			subsurfaceSpecularIrradiance += sRGB2Lin(mul(DirectionalAmbient, float4(-V, 1.f)));
 		}
-#	else
-		subsurfaceSpecularIrradiance += directionalAmbientSubsurfaceSpecularColor;
-#	endif
 		
-		specular += subsurfaceSpecularIrradiance * subsurfaceColor * (ao * 0.5);
+		float attenuation = (1.0 - thickness) / (2.0 * PI);
+		diffuse += subsurfaceColor * (diffuseIrradiance + subsurfaceSpecularIrradiance) * attenuation;
 	}
-#	endif
 	
-	diffuse *= ao;
-	specular *= ao;
+	float3 diffuseAO = materialAO;
+	float3 specularAO = SpecularAOLagarde(NdotV, materialAO, roughness);
+	[branch] if (pbrData[0].UseMultiBounceAO)
+	{
+		diffuseAO = MultiBounceAO(diffuseColor, diffuseAO).y;
+		specularAO = MultiBounceAO(specularColor, specularAO).y;
+	}
+	
+	diffuse *= diffuseAO;
+	specular *= specularAO;
 }

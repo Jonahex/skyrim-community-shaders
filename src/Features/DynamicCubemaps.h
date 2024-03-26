@@ -36,6 +36,22 @@ public:
 	Texture2D* envTexture = nullptr;
 	ID3D11UnorderedAccessView* uavArray[9];
 
+	// Diffuse irradiance
+
+	ID3D11ComputeShader* diffuseIrradianceCS = nullptr;
+	Texture2D* diffuseIrradianceTexture = nullptr;
+
+	// Average color
+
+	struct alignas(16) PerPass
+	{
+		float3 averageColor;
+		float pad;
+	};
+	std::unique_ptr<Buffer> perPass;
+
+	ID3D11ComputeShader* averageColorCS = nullptr;
+
 	// Reflection capture
 
 	struct alignas(16) UpdateCubemapCB
@@ -123,6 +139,8 @@ public:
 	ID3D11ComputeShader* GetComputeShaderInferrence();
 	ID3D11ComputeShader* GetComputeShaderInferrenceReflections();
 	ID3D11ComputeShader* GetComputeShaderSpecularIrradiance();
+	ID3D11ComputeShader* GetComputeShaderDiffuseIrradiance();
+	ID3D11ComputeShader* GetComputeShaderAverageColor();
 
 	void UpdateCubemapCapture();
 

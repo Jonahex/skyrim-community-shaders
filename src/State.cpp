@@ -253,8 +253,21 @@ void State::Load(bool a_test)
 		json& pbr = settings["PBR"];
 
 		if (pbr["Use Dynamic Cubemap"].is_boolean()) {
-			pbrSettings.useDynamicCubemap = pbr["Use Dynamic Cubemap"];
+			pbrData.useDynamicCubemap = pbr["Use Dynamic Cubemap"];
 		}
+		if (pbr["Match Dynamic Cubemap Color To Ambient"].is_boolean()) {
+			pbrData.matchDynamicCubemapColorToAmbient = pbr["Match Dynamic Cubemap Color To Ambient"];
+		}
+		if (pbr["Use Multiple Scattering"].is_boolean()) {
+			pbrData.useMultipleScattering = pbr["Use Multiple Scattering"];
+		}
+		if (pbr["Use Multi-bounce AO"].is_boolean()) {
+			pbrData.useMultiBounceAO = pbr["Use Multi-bounce AO"];
+		}
+		if (pbr["Diffuse Model"].is_number_integer()) {
+			pbrData.diffuseModel = pbr["Diffuse Model"];
+		}
+
 		if (pbr["PBR LOD Land"].is_boolean()) {
 			pbrSettings.pbrLodLand = pbr["PBR LOD Land"];
 		}
@@ -307,7 +320,12 @@ void State::Save(bool a_test)
 
 	{
 		json pbr;
-		pbr["Use Dynamic Cubemap"] = pbrSettings.useDynamicCubemap;
+		pbr["Use Dynamic Cubemap"] = pbrData.useDynamicCubemap;
+		pbr["Match Dynamic Cubemap Color To Ambient"] = pbrData.matchDynamicCubemapColorToAmbient;
+		pbr["Use Multiple Scattering"] = pbrData.useMultipleScattering;
+		pbr["Use Multi-bounce AO"] = pbrData.useMultiBounceAO;
+		pbr["Diffuse Model"] = pbrData.diffuseModel;
+
 		pbr["PBR LOD Land"] = pbrSettings.pbrLodLand;
 		pbr["Light Color Multiplier"] = pbrSettings.lightColorMultiplier;
 		pbr["Light Color Power"] = pbrSettings.lightColorPower;
@@ -428,26 +446,33 @@ void State::SetupResources()
 {
 	auto renderer = RE::BSGraphics::Renderer::GetSingleton();
 
-	D3D11_BUFFER_DESC sbDesc{};
-	sbDesc.Usage = D3D11_USAGE_DYNAMIC;
-	sbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-	sbDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-	sbDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
-	sbDesc.StructureByteStride = sizeof(PerShader);
-	sbDesc.ByteWidth = sizeof(PerShader);
-	shaderDataBuffer = std::make_unique<Buffer>(sbDesc);
+	{
+		D3D11_BUFFER_DESC sbDesc{};
+		sbDesc.Usage = D3D11_USAGE_DYNAMIC;
+		sbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+		sbDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+		sbDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
+		sbDesc.StructureByteStride = sizeof(PerShader);
+		sbDesc.ByteWidth = sizeof(PerShader);
+		shaderDataBuffer = std::make_unique<Buffer>(sbDesc);
 
-	D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
-	srvDesc.Format = DXGI_FORMAT_UNKNOWN;
-	srvDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
-	srvDesc.Buffer.FirstElement = 0;
-	srvDesc.Buffer.NumElements = 1;
-	shaderDataBuffer->CreateSRV(srvDesc);
+		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
+		srvDesc.Format = DXGI_FORMAT_UNKNOWN;
+		srvDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
+		srvDesc.Buffer.FirstElement = 0;
+		srvDesc.Buffer.NumElements = 1;
+		shaderDataBuffer->CreateSRV(srvDesc);
 
-	sbDesc.StructureByteStride = sizeof(LightingData);
-	sbDesc.ByteWidth = sizeof(LightingData);
-	lightingDataBuffer = std::make_unique<Buffer>(sbDesc);
-	lightingDataBuffer->CreateSRV(srvDesc);
+		sbDesc.StructureByteStride = sizeof(LightingData);
+		sbDesc.ByteWidth = sizeof(LightingData);
+		lightingDataBuffer = std::make_unique<Buffer>(sbDesc);
+		lightingDataBuffer->CreateSRV(srvDesc);
+
+		sbDesc.StructureByteStride = sizeof(PBRData);
+		sbDesc.ByteWidth = sizeof(PBRData);
+		pbrDataBuffer = std::make_unique<Buffer>(sbDesc);
+		pbrDataBuffer->CreateSRV(srvDesc);
+	}
 
 	// Grab main texture to get resolution
 	// VR cannot use viewport->screenWidth/Height as it's the desktop preview window's resolution and not HMD
@@ -617,5 +642,19 @@ void State::UpdateSharedData(const RE::BSShader* a_shader, const uint32_t)
 			view = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY].depthSRV;
 			context->PSSetShaderResources(20, 1, &view);
 		}
+	}
+}
+
+void State::SetupFrame()
+{
+	{
+		auto context = RE::BSGraphics::Renderer::GetSingleton()->GetRuntimeData().context;
+		D3D11_MAPPED_SUBRESOURCE mapped;
+		DX::ThrowIfFailed(context->Map(pbrDataBuffer->resource.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped));
+		memcpy_s(mapped.pData, sizeof(PBRData), &pbrData, sizeof(PBRData));
+		context->Unmap(pbrDataBuffer->resource.get(), 0);
+
+		ID3D11ShaderResourceView* view = pbrDataBuffer->srv.get();
+		context->PSSetShaderResources(121, 1, &view);
 	}
 }

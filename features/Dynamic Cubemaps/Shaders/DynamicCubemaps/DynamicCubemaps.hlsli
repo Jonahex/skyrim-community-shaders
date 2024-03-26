@@ -1,4 +1,9 @@
+#include "DynamicCubemaps/Common.hlsli"
+
 TextureCube<float4> specularTexture : register(t64);
+TextureCube<float4> diffuseTexture : register(t65);
+
+StructuredBuffer<PerPassDynamicCubemaps> perPassDynamicCubemaps : register(t66);
 
 // https://www.unrealengine.com/en-US/blog/physically-based-shading-on-mobile
 half2 EnvBRDFApprox(half Roughness, half NoV)
@@ -21,7 +26,7 @@ struct CreatorSettingsCB
 	float4 CubemapColor;
 };
 
-StructuredBuffer<CreatorSettingsCB> perFrameCreator : register(t65);
+StructuredBuffer<CreatorSettingsCB> perFrameCreator : register(t67);
 #	endif
 
 float3 GetDynamicCubemap(float2 uv, float3 N, float3 VN, float3 V, float roughness, float3 F0, float3 diffuseColor, float distance)

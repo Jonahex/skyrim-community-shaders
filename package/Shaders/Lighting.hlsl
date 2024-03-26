@@ -1180,7 +1180,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #		if defined(TRUE_PBR) && !defined(LANDSCAPE) && !defined(LODLANDSCAPE) && !defined(PROJECTED_UV)
 	bool PBRParallax = false;
-	[branch] if ((PBRFlags & 16) != 0) {
+	[branch] if ((PBRFlags & TruePBR_HasDisplacement) != 0) {
 		PBRParallax = true;
 		displacementScale = PBRParams1.y;
 		mipLevel = GetMipLevel(uv, TexParallaxSampler);
@@ -1659,7 +1659,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float ao = 1;
 	float3 f0 = 0.04;
 	float3 subsurfaceColor = 0;
-	float subsurfaceOpacity = 1;
+	float thickness = 1;
 	
 	roughness = saturate(rawRMAOS.x);
 	metallic = saturate(rawRMAOS.y);
@@ -1669,16 +1669,16 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	f0 = lerp(f0, baseColor.xyz, metallic);
 	baseColor.xyz *= 1 - metallic;
 	
-	ao = AOMultiBounce(RGBToLuminanceAlternative(f0), rawRMAOS.z).y;
+	ao = rawRMAOS.z;
 	
 #		if !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
 	subsurfaceColor = PBRParams2.xyz;
-	subsurfaceOpacity = PBRParams2.w;
-	[branch] if ((PBRFlags & 2) != 0)
+	thickness = PBRParams2.w;
+	[branch] if ((PBRFlags & TruePBR_HasSubsurface) != 0)
 	{
 		float4 sampledSubsurfaceProperties = TexRimSoftLightWorldMapOverlaySampler.Sample(SampRimSoftLightWorldMapOverlaySampler, uv);
 		subsurfaceColor *= sampledSubsurfaceProperties.xyz;
-		subsurfaceOpacity *= sampledSubsurfaceProperties.w;
+		thickness *= sampledSubsurfaceProperties.w;
 	}
 #		endif
 	
@@ -1779,7 +1779,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	if defined(TRUE_PBR)
 	{
 		float3 dirDiffuseColor, dirTransmissionColor, dirSpecularColor;
-		GetDirectLightInputPBR(dirDiffuseColor, dirTransmissionColor, dirSpecularColor, modelNormal.xyz, viewDirection, DirLightDirection, sRGB2Lin(dirLightColor), roughness, f0, subsurfaceColor, subsurfaceOpacity, dirShadow, ao);
+		GetDirectLightInputPBR(dirDiffuseColor, dirTransmissionColor, dirSpecularColor, modelNormal.xyz, viewDirection, DirLightDirection, sRGB2Lin(dirLightColor), roughness, f0, subsurfaceColor, thickness);
 		lightsDiffuseColor += dirDiffuseColor;
 		transmissionColor += dirTransmissionColor;
 		specularColorPBR += dirSpecularColor;
@@ -1940,7 +1940,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #			if defined(TRUE_PBR)
 		{
 			float3 pointDiffuseColor, pointTransmissionColor, pointSpecularColor;
-			GetDirectLightInputPBR(pointDiffuseColor, pointTransmissionColor, pointSpecularColor, modelNormal.xyz, viewDirection, normalizedLightDirection, sRGB2Lin(lightColor), roughness, f0, subsurfaceColor, subsurfaceOpacity, lightShadow, ao);
+			GetDirectLightInputPBR(pointDiffuseColor, pointTransmissionColor, pointSpecularColor, modelNormal.xyz, viewDirection, normalizedLightDirection, sRGB2Lin(lightColor), roughness, f0, subsurfaceColor, thickness);
 			lightsDiffuseColor += pointDiffuseColor;
 			transmissionColor += pointTransmissionColor;
 			specularColorPBR += pointSpecularColor;
@@ -2061,7 +2061,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #			if defined(TRUE_PBR)
 		{
 			float3 pointDiffuseColor, pointTransmissionColor, pointSpecularColor;
-			GetDirectLightInputPBR(pointDiffuseColor, pointTransmissionColor, pointSpecularColor, worldSpaceNormal.xyz, worldSpaceViewDirection, normalizedLightDirection, sRGB2Lin(lightColor), roughness, f0, subsurfaceColor, subsurfaceOpacity, lightShadow, ao);
+			GetDirectLightInputPBR(pointDiffuseColor, pointTransmissionColor, pointSpecularColor, worldSpaceNormal.xyz, worldSpaceViewDirection, normalizedLightDirection, sRGB2Lin(lightColor), roughness, f0, subsurfaceColor, thickness);
 			lightsDiffuseColor += pointDiffuseColor;
 			transmissionColor += pointTransmissionColor;
 			specularColorPBR += pointSpecularColor;
@@ -2115,12 +2115,16 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	endif  // EYE
 
 	float3 emitColor = EmitColor;
-#if !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
-	[branch] if ((0x3F & (shaderDescriptors[0].PixelShaderDescriptor >> 24)) == _Glowmap || (PBRFlags & 0x1 != 0)) {
+#	if !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
+	bool hasEmissive = (0x3F & (shaderDescriptors[0].PixelShaderDescriptor >> 24)) == _Glowmap;
+#	if defined (TRUE_PBR)
+	hasEmissive = hasEmissive || (PBRFlags & TruePBR_HasEmissive != 0);
+#	endif
+	[branch] if (hasEmissive) {
 		float3 glowColor = TexGlowSampler.Sample(SampGlowSampler, uv).xyz;
 		emitColor *= glowColor;
 	}
-#endif
+#	endif
 	
 #if !defined(TRUE_PBR)
 	diffuseColor += emitColor.xyz;
@@ -2206,7 +2210,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	
 #	if defined(TRUE_PBR)
 	float3 diffuseIrradiance, specularIrradiance;
-	GetAmbientLightInputPBR(diffuseIrradiance, specularIrradiance, worldSpaceNormal.xyz, worldSpaceViewDirection, baseColor.xyz, roughness, f0, subsurfaceColor, ao);
+	GetAmbientLightInputPBR(diffuseIrradiance, specularIrradiance, worldSpaceNormal.xyz, worldSpaceViewDirection, baseColor.xyz, roughness, f0, subsurfaceColor, thickness, ao);
 	color.xyz += diffuseIrradiance;
 	specularColorPBR += specularIrradiance;
 	
@@ -2338,6 +2342,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	psout.Albedo.w = 0;
 #	else
 	float alpha = baseColor.w;
+#		if defined (CPM_AVAILABLE)
+	//alpha = TexColorSampler.Sample(SampColorSampler, uvOriginal).w;
+#		endif
 #		if !defined(ADDITIONAL_ALPHA_MASK)
 	alpha *= MaterialData.z;
 #		else

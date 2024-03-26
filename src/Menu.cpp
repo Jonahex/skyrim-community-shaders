@@ -403,7 +403,42 @@ void Menu::DrawSettings()
 			}
 			if (ImGui::TreeNodeEx("PBR", ImGuiTreeNodeFlags_DefaultOpen)) {
 				auto state = State::GetSingleton();
-				ImGui::Checkbox("Use Dynamic Cubemap", &state->pbrSettings.useDynamicCubemap);
+
+				{
+					static const char* diffuseModels[static_cast<size_t>(State::PBRDiffuseModelType::Total)] = {
+						"Lambert",
+						"Burley",
+						"OrenNayar",
+						"Gotanda",
+						"Chan",
+					};
+
+					if (ImGui::BeginCombo("Diffuse Model", diffuseModels[static_cast<size_t>(state->pbrData.diffuseModel)])) {
+						for (size_t modelIndex = 0; modelIndex < static_cast<size_t>(State::PBRDiffuseModelType::Total); ++modelIndex) {
+							if (ImGui::Selectable(diffuseModels[modelIndex], modelIndex == static_cast<size_t>(state->pbrData.diffuseModel))) {
+								state->pbrData.diffuseModel = static_cast<State::PBRDiffuseModelType>(modelIndex);
+							}
+						}
+						ImGui::EndCombo();
+					}
+				}
+				bool useMultipleScattering = state->pbrData.useMultipleScattering;
+				bool useMultiBounceAO = state->pbrData.useMultiBounceAO;
+				bool useDynamicCubemap = state->pbrData.useDynamicCubemap;
+				bool matchDynamicCubemapColorToAmbient = state->pbrData.matchDynamicCubemapColorToAmbient;
+				if (ImGui::Checkbox("Use Multiple Scattering", &useMultipleScattering)) {
+					state->pbrData.useMultipleScattering = useMultipleScattering;
+				}
+				if (ImGui::Checkbox("Use Multi-bounce AO", &useMultiBounceAO)) {
+					state->pbrData.useMultiBounceAO = useMultiBounceAO;
+				}
+				if (ImGui::Checkbox("Use Dynamic Cubemap", &useDynamicCubemap)) {
+					state->pbrData.useDynamicCubemap = useDynamicCubemap;
+				}
+				if (ImGui::Checkbox("Match Dynamic Cubemap Color To Ambient", &matchDynamicCubemapColorToAmbient)) {
+					state->pbrData.matchDynamicCubemapColorToAmbient = matchDynamicCubemapColorToAmbient;
+				}
+
 				ImGui::Checkbox("PBR LOD Land", &state->pbrSettings.pbrLodLand);
 				ImGui::SliderFloat("Light Color Multiplier", &state->pbrSettings.lightColorMultiplier, 1e-3f, 1e2f, "%.3f", ImGuiSliderFlags_Logarithmic);
 				ImGui::SliderFloat("Light Color Power", &state->pbrSettings.lightColorPower, 1e-3f, 1e2f, "%.3f", ImGuiSliderFlags_Logarithmic);

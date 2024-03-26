@@ -36,6 +36,7 @@ public:
 	void DrawPreProcess();
 	void Reset();
 	void Setup();
+	void SetupFrame();
 
 	void Load(bool a_test = false);
 	void Save(bool a_test = false);
@@ -116,7 +117,6 @@ public:
 
 	struct PBRSettings
 	{
-		bool useDynamicCubemap = true;
 		bool pbrLodLand = false;
 		float lightColorMultiplier = 1.f;
 		float lightColorPower = 1.f;
@@ -125,4 +125,35 @@ public:
 	} pbrSettings{};
 
 	RE::NiTransform pbrDirectionalAmbientTransform;
+
+	enum class PBRDiffuseModelType : uint32_t
+	{
+		Lambert,
+		Burley,
+		OrenNayar,
+		Gotanda,
+		Chan,
+
+		Total
+	};
+
+	enum class PBRFlags : uint32_t
+	{
+		EnableEnergyConservation,
+		UseDynamicCubemap,
+	};
+
+#pragma warning(push)
+#pragma warning(disable: 4324)
+	struct alignas(16) PBRData
+	{
+		PBRDiffuseModelType diffuseModel = PBRDiffuseModelType::Lambert;
+		uint32_t useMultipleScattering = true;
+		uint32_t useMultiBounceAO = true;
+		uint32_t useDynamicCubemap = true;
+		uint32_t matchDynamicCubemapColorToAmbient = true;
+	} pbrData{};
+#pragma warning(pop) 
+
+	std::unique_ptr<Buffer> pbrDataBuffer = nullptr;
 };

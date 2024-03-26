@@ -522,8 +522,6 @@ namespace Hooks
 				RE::BSLightingShaderMaterialBase* material = nullptr;
 				if (property->flags.any(kMenuScreen)) {
 					material = BSLightingShaderMaterialPBR::Make();
-					//property->flags.reset(kMenuScreen);
-					//property->AddExtraData("__PBR__", RE::NiExtraData::Create<RE::NiExtraData>());
 					isPbr = true;
 				} else {
 					material = RE::BSLightingShaderMaterialBase::CreateMaterial(feature);
@@ -562,10 +560,7 @@ namespace Hooks
 			if (isPbr)
 			{
 				auto pbrMaterial = static_cast<BSLightingShaderMaterialPBR*>(property->material);
-				if (property->flags.any(kSoftLighting))
-				{
-					pbrMaterial->pbrFlags.set(PBRFlags::TwoSidedFoliage);
-				} else if (property->flags.any(kRimLighting)) {
+				if (property->flags.any(kRimLighting)) {
 					pbrMaterial->pbrFlags.set(PBRFlags::Subsurface);
 				}
 				property->flags.set(kVertexLighting);
@@ -587,10 +582,7 @@ namespace Hooks
 
 			bool isPbr = false;
 
-			//const auto feature = property->material->GetFeature();
-			//if (feature == BSLightingShaderMaterialPBR::FEATURE || feature == BSLightingShaderMaterialPBRLandscape::FEATURE)
-			if (property->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kVertexLighting))
-			//if (property->HasExtraData("__PBR__"))
+			if (property->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kVertexLighting) && property->material->GetFeature() == RE::BSShaderMaterial::Feature::kDefault)
 			{
 				isPbr = true;
 			}
@@ -632,7 +624,6 @@ namespace Hooks
 			if (!(lightingType == LODLand || lightingType == LODLandNoise) && (lightingFlags & static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::TruePbr))) {
 				auto shadowState = RE::BSGraphics::RendererShadowState::GetSingleton();
 				auto renderer = RE::BSGraphics::Renderer::GetSingleton();
-				auto state = State::GetSingleton();
 
 				RE::BSGraphics::Renderer::PrepareVSConstantGroup(RE::BSGraphics::ConstantGroupLevel::PerMaterial);
 				RE::BSGraphics::Renderer::PreparePSConstantGroup(RE::BSGraphics::ConstantGroupLevel::PerMaterial);
@@ -686,10 +677,6 @@ namespace Hooks
 							{
 								flags |= (1 << textureIndex);
 							}
-						}
-						if (state->pbrSettings.useDynamicCubemap)
-						{
-							flags |= static_cast<uint32_t>(PBRShaderFlags::UseDynamicCubemap);
 						}
 						shadowState->SetPSConstant(flags, RE::BSGraphics::ConstantGroupLevel::PerMaterial, 36);
 					}
@@ -754,16 +741,11 @@ namespace Hooks
 					shadowState->SetPSTextureFilterMode(5, RE::BSGraphics::TextureFilterMode::kAnisotropic);
 
 					stl::enumeration<PBRShaderFlags> shaderFlags;
-					if (state->pbrSettings.useDynamicCubemap) {
-						shaderFlags.set(PBRShaderFlags::UseDynamicCubemap);
-					}
-					if (pbrMaterial->pbrFlags.any(PBRFlags::TwoSidedFoliage)) {
-						shaderFlags.set(PBRShaderFlags::TwoSidedFoliage);
-					} else if (pbrMaterial->pbrFlags.any(PBRFlags::Subsurface)) {
+					if (pbrMaterial->pbrFlags.any(PBRFlags::Subsurface)) {
 						shaderFlags.set(PBRShaderFlags::Subsurface);
 					}
 
-					const bool hasEmissive = pbrMaterial->emissiveTexture != nullptr && pbrMaterial->emissiveTexture != RE::BSGraphics::State::GetSingleton()->defaultTextureBlack;
+					const bool hasEmissive = pbrMaterial->emissiveTexture != nullptr && pbrMaterial->emissiveTexture != RE::BSGraphics::State::GetSingleton()->GetRuntimeData().defaultTextureBlack;
 					if (hasEmissive) {
 						shadowState->SetPSTexture(6, pbrMaterial->emissiveTexture->rendererTexture);
 						shadowState->SetPSTextureAddressMode(6, static_cast<RE::BSGraphics::TextureAddressMode>(pbrMaterial->textureClampMode));
@@ -772,7 +754,7 @@ namespace Hooks
 						shaderFlags.set(PBRShaderFlags::HasEmissive);
 					}
 
-					const bool hasDisplacement = pbrMaterial->displacementTexture != nullptr && pbrMaterial->displacementTexture != RE::BSGraphics::State::GetSingleton()->defaultTextureBlack;
+					const bool hasDisplacement = pbrMaterial->displacementTexture != nullptr && pbrMaterial->displacementTexture != RE::BSGraphics::State::GetSingleton()->GetRuntimeData().defaultTextureBlack;
 					if (hasDisplacement) {
 						shadowState->SetPSTexture(3, pbrMaterial->displacementTexture->rendererTexture);
 						shadowState->SetPSTextureAddressMode(3, static_cast<RE::BSGraphics::TextureAddressMode>(pbrMaterial->textureClampMode));
@@ -781,7 +763,7 @@ namespace Hooks
 						shaderFlags.set(PBRShaderFlags::HasDisplacement);
 					}
 
-					const bool hasSubsurface = pbrMaterial->subsurfaceTexture != nullptr && pbrMaterial->subsurfaceTexture != RE::BSGraphics::State::GetSingleton()->defaultTextureWhite;
+					const bool hasSubsurface = pbrMaterial->subsurfaceTexture != nullptr && pbrMaterial->subsurfaceTexture != RE::BSGraphics::State::GetSingleton()->GetRuntimeData().defaultTextureWhite;
 					if (hasSubsurface) {
 						shadowState->SetPSTexture(12, pbrMaterial->subsurfaceTexture->rendererTexture);
 						shadowState->SetPSTextureAddressMode(12, static_cast<RE::BSGraphics::TextureAddressMode>(pbrMaterial->textureClampMode));
@@ -1222,6 +1204,15 @@ namespace Hooks
 		ptr_InitDirectionalAmbient(directionalAmbientColors, ambientSpecularColor, ambientSpecularAlpha);
 	}
 
+	void hk_SetPerFrameBuffers(void* renderer);
+	decltype(&hk_SetPerFrameBuffers) ptr_SetPerFrameBuffers;
+
+	void hk_SetPerFrameBuffers(void* renderer)
+	{
+		ptr_SetPerFrameBuffers(renderer);
+		State::GetSingleton()->SetupFrame();
+	}
+
 	void Install()
 	{
 		SKSE::AllocTrampoline(14);
@@ -1284,5 +1275,8 @@ namespace Hooks
 
 		logger::info("Hooking InitDirectionalAmbient");
 		*(uintptr_t*)&ptr_InitDirectionalAmbient = Detours::X64::DetourFunction(REL::RelocationID(98989, 105643).address(), (uintptr_t)&hk_InitDirectionalAmbient);
+
+		logger::info("Hooking SetPerFrameBuffers");
+		*(uintptr_t*)&ptr_SetPerFrameBuffers = Detours::X64::DetourFunction(REL::RelocationID(75570, 77371).address(), (uintptr_t)&hk_SetPerFrameBuffers);
 	}
 }

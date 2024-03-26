@@ -180,6 +180,14 @@ void DynamicCubemaps::ClearShaderCache()
 		specularIrradianceCS->Release();
 		specularIrradianceCS = nullptr;
 	}
+	if (diffuseIrradianceCS) {
+		diffuseIrradianceCS->Release();
+		diffuseIrradianceCS = nullptr;
+	}
+	if (averageColorCS) {
+		averageColorCS->Release();
+		averageColorCS = nullptr;
+	}
 }
 
 ID3D11ComputeShader* DynamicCubemaps::GetComputeShaderUpdate()
@@ -216,6 +224,24 @@ ID3D11ComputeShader* DynamicCubemaps::GetComputeShaderSpecularIrradiance()
 		specularIrradianceCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\DynamicCubemaps\\SpecularIrradianceCS.hlsl", {}, "cs_5_0");
 	}
 	return specularIrradianceCS;
+}
+
+ID3D11ComputeShader* DynamicCubemaps::GetComputeShaderDiffuseIrradiance()
+{
+	if (!diffuseIrradianceCS) {
+		logger::debug("Compiling DiffuseIrradianceCS");
+		diffuseIrradianceCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\DynamicCubemaps\\DiffuseIrradianceCS.hlsl", {}, "cs_5_0");
+	}
+	return diffuseIrradianceCS;
+}
+
+ID3D11ComputeShader* DynamicCubemaps::GetComputeShaderAverageColor()
+{
+	if (!averageColorCS) {
+		logger::debug("Compiling AverageColorCS");
+		averageColorCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\DynamicCubemaps\\AverageColorCS.hlsl", {}, "cs_5_0");
+	}
+	return averageColorCS;
 }
 
 void DynamicCubemaps::UpdateCubemapCapture()
@@ -305,8 +331,10 @@ void DynamicCubemaps::UpdateCubemap()
 	//}
 
 	{
-		ID3D11ShaderResourceView* view = nullptr;
-		context->PSSetShaderResources(64, 1, &view);
+		ID3D11ShaderResourceView* views[4]{
+			nullptr, nullptr, nullptr, nullptr
+		};
+		context->PSSetShaderResources(64, 4, views);
 	}
 
 	if (nextTask == NextTask::kInferrence) {
@@ -378,6 +406,38 @@ void DynamicCubemaps::UpdateCubemap()
 				context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
 				context->Dispatch(numGroups, numGroups, 6);
 			}
+
+
+		}
+
+		// Diffuse irradiance map.
+		{
+			auto srv = envInferredTexture->srv.get();
+			context->CSSetShaderResources(0, 1, &srv);
+
+			context->CSSetSamplers(0, 1, &computeSampler);
+
+			auto* diffuseIrradianceUav = diffuseIrradianceTexture->uav.get();
+			context->CSSetUnorderedAccessViews(0, 1, &diffuseIrradianceUav, nullptr);
+
+			context->CSSetShader(GetComputeShaderDiffuseIrradiance(), nullptr, 0);
+
+			context->Dispatch(diffuseIrradianceTexture->desc.Width / 32, diffuseIrradianceTexture->desc.Height / 32, 6);
+		}
+
+		// Average color.
+		{
+			auto srv = envInferredTexture->srv.get();
+			context->CSSetShaderResources(0, 1, &srv);
+
+			auto uav = perPass->uav.get();
+			context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
+
+			context->CSSetSamplers(0, 1, &computeSampler);
+
+			context->CSSetShader(GetComputeShaderAverageColor(), nullptr, 0);
+
+			context->Dispatch(1, 1, 1);
 		}
 
 		ID3D11ShaderResourceView* nullSRV = { nullptr };
@@ -418,10 +478,12 @@ void DynamicCubemaps::Draw(const RE::BSShader* shader, const uint32_t)
 				context->Unmap(perFrameCreator->resource.get(), 0);
 			}
 
-			ID3D11ShaderResourceView* views[2];
+			ID3D11ShaderResourceView* views[4];
 			views[0] = envTexture->srv.get();
-			views[1] = enableCreator ? perFrameCreator->srv.get() : nullptr;
-			context->PSSetShaderResources(64, 2, views);
+			views[1] = diffuseIrradianceTexture->srv.get();
+			views[2] = perPass->srv.get();
+			views[3] = enableCreator ? perFrameCreator->srv.get() : nullptr;
+			context->PSSetShaderResources(64, 4, views);
 		}
 	}
 }
@@ -432,6 +494,8 @@ void DynamicCubemaps::SetupResources()
 	GetComputeShaderInferrence();
 	GetComputeShaderInferrenceReflections();
 	GetComputeShaderSpecularIrradiance();
+	GetComputeShaderDiffuseIrradiance();
+	GetComputeShaderAverageColor();
 
 	auto renderer = RE::BSGraphics::Renderer::GetSingleton();
 	auto device = renderer->GetRuntimeData().forwarder;
@@ -537,6 +601,63 @@ void DynamicCubemaps::SetupResources()
 
 	{
 		DirectX::CreateDDSTextureFromFile(device, L"Data\\Shaders\\DynamicCubemaps\\defaultcubemap.dds", nullptr, &defaultCubemap);
+	}
+
+	{
+		D3D11_TEXTURE2D_DESC texDesc;
+		texDesc.Width = 32;
+		texDesc.Height = 32;
+		texDesc.MipLevels = 1;
+		texDesc.ArraySize = 6;
+		texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+		texDesc.SampleDesc.Count = 1;
+		texDesc.Usage = D3D11_USAGE_DEFAULT;
+		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+		texDesc.MiscFlags = D3D11_RESOURCE_MISC_TEXTURECUBE;
+
+		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+		srvDesc.Format = texDesc.Format;
+		srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURECUBE;
+		srvDesc.TextureCube.MostDetailedMip = 0;
+		srvDesc.TextureCube.MipLevels = texDesc.MipLevels;
+
+		D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
+		uavDesc.Format = texDesc.Format;
+		uavDesc.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2DARRAY;
+		uavDesc.Texture2DArray.MipSlice = 0;
+		uavDesc.Texture2DArray.FirstArraySlice = 0;
+		uavDesc.Texture2DArray.ArraySize = texDesc.ArraySize;
+
+		diffuseIrradianceTexture = new Texture2D(texDesc);
+		diffuseIrradianceTexture->CreateSRV(srvDesc);
+		diffuseIrradianceTexture->CreateUAV(uavDesc);
+	}
+
+	{
+		D3D11_BUFFER_DESC sbDesc{};
+		sbDesc.Usage = D3D11_USAGE_DEFAULT;
+		sbDesc.CPUAccessFlags = 0;
+		sbDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+		sbDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
+		sbDesc.StructureByteStride = sizeof(PerPass);
+		sbDesc.ByteWidth = sizeof(PerPass);
+		perPass = std::make_unique<Buffer>(sbDesc);
+
+		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
+		srvDesc.Format = DXGI_FORMAT_UNKNOWN;
+		srvDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
+		srvDesc.Buffer.FirstElement = 0;
+		srvDesc.Buffer.NumElements = 1;
+
+		D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc{};
+		uavDesc.Format = DXGI_FORMAT_UNKNOWN;
+		uavDesc.ViewDimension = D3D11_UAV_DIMENSION_BUFFER;
+		uavDesc.Buffer.FirstElement = 0;
+		uavDesc.Buffer.NumElements = 1;
+		uavDesc.Buffer.Flags = 0;
+
+		perPass->CreateSRV(srvDesc);
+		perPass->CreateUAV(uavDesc);
 	}
 }
 
