@@ -29,7 +29,7 @@ float3 MultiBounceAO(float3 baseColor, float ao)
 	return max(ao, ((ao * a + b) * ao + c) * ao);
 }
 
-// [Lagarde et al 2014, "Moving Frostbite to Physically Based Rendering 3.0"]
+// [Lagarde et al. 2014, "Moving Frostbite to Physically Based Rendering 3.0"]
 float SpecularAOLagarde(float NdotV, float ao, float roughness) 
 {
     return saturate(pow(NdotV + ao, exp2(-16.0 * roughness - 1.0)) - 1.0 + ao);
@@ -43,7 +43,7 @@ float3 GetFresnelFactorSchlick(float3 specularColor, float VdotH)
 }
 
 // [Heitz 2014, "Understanding the Masking-Shadowing Function in Microfacet-Based BRDFs"]
-float GetGeometryFunctionSmithJointApprox(float roughness, float NdotV, float NdotL)
+float GetVisibilityFunctionSmithJointApprox(float roughness, float NdotV, float NdotL)
 {
 	float a = roughness * roughness;
 	float visSmithV = NdotL * (NdotV * (1 - a) + a);
@@ -51,18 +51,41 @@ float GetGeometryFunctionSmithJointApprox(float roughness, float NdotV, float Nd
 	return 0.5 * rcp(visSmithV + visSmithL);
 }
 
+// [Neubelt et al. 2013, "Crafting a Next-gen Material Pipeline for The Order: 1886"]
+float GetVisibilityFunctionNeubelt(float NdotV, float NdotL)
+{
+	return rcp(4 * (NdotL + NdotV - NdotL * NdotV));
+}
+
 // [Walter et al. 2007, "Microfacet models for refraction through rough surfaces"]
-float GetDistributionFunctionGGX(float roughness, float NdotH)
+float GetNormalDistributionFunctionGGX(float roughness, float NdotH)
 {
 	float a2 = pow(roughness, 4);
 	float d = max((NdotH * a2 - NdotH) * NdotH + 1, 1e-5);
 	return a2 / (PI * d * d);
 }
 
+// [Estevez et al. 2017, "Production Friendly Microfacet Sheen BRDF"]
+float GetNormalDistributionFunctionCharlie(float roughness, float NdotH) {
+    float invAlpha  = 1.0 / (roughness * roughness);
+    float cos2h = NdotH * NdotH;
+    float sin2h = max(1.0 - cos2h, 1e-5);
+    return (2.0 + invAlpha) * pow(sin2h, invAlpha * 0.5) / (2.0 * PI);
+}
+
 float3 GetSpecularDirectLightMultiplierMicrofacet(float roughness, float3 specularColor, float NdotL, float NdotV, float NdotH, float VdotH)
 {
-	float D = GetDistributionFunctionGGX(roughness, NdotH);
-	float G = GetGeometryFunctionSmithJointApprox(roughness, NdotV, NdotL);
+	float D = GetNormalDistributionFunctionGGX(roughness, NdotH);
+	float G = GetVisibilityFunctionSmithJointApprox(roughness, NdotV, NdotL);
+	float3 F = GetFresnelFactorSchlick(specularColor, VdotH);
+
+	return D * G * F;
+}
+
+float3 GetSpecularDirectLightMultiplierMicroflakes(float roughness, float3 specularColor, float NdotL, float NdotV, float NdotH, float VdotH)
+{
+	float D = GetNormalDistributionFunctionCharlie(roughness, NdotH);
+	float G = GetVisibilityFunctionNeubelt(NdotV, NdotL);
 	float3 F = GetFresnelFactorSchlick(specularColor, VdotH);
 
 	return D * G * F;
@@ -82,7 +105,7 @@ float3 GetDiffuseDirectLightMultiplierBurley(float roughness, float NdotV, float
 	return (1 / PI) * FdV * FdL;
 }
 
-// [Oren et al 1994, "Generalization of Lambert’s Reflectance Model"]
+// [Oren et al. 1994, "Generalization of Lambert’s Reflectance Model"]
 float3 GetDiffuseDirectLightMultiplierOrenNayar(float roughness, float3 N, float3 V, float3 L, float NdotV, float NdotL)
 {
 	float a = roughness * roughness * 0.25;
@@ -187,9 +210,10 @@ void GetDirectLightInputPBR(out float3 diffuse, out float3 transmission, out flo
 	diffuse += PI * diffuseMultiplier * lightColor * satNdotL;
 	specular += PI * GetSpecularDirectLightMultiplierMicrofacet(roughness, specularColor, satNdotL, satNdotV, satNdotH, satVdotH) * lightColor * satNdotL;
 	
+	float2 specularBRDF = 0;
 	[branch] if (pbrData[0].UseMultipleScattering)
 	{
-		float2 specularBRDF = GetEnvBRDFApproxLazarov(roughness, satNdotV);
+		specularBRDF = GetEnvBRDFApproxLazarov(roughness, satNdotV);
 		specular *= 1 + specularColor * (1 / (specularBRDF.x + specularBRDF.y) - 1);
 	}
 	
@@ -241,11 +265,11 @@ void GetAmbientLightInputPBR(out float3 diffuse, out float3 specular, float3 N, 
 	{
 		[branch] if (pbrData[0].MatchDynamicCubemapToAmbient)
 		{
-			ambientScale = sRGB2Lin(float3(DirectionalAmbient[0].w, DirectionalAmbient[1].w, DirectionalAmbient[2].w)) / perPassDynamicCubemaps[0].AverageColor;
+			ambientScale = sRGB2Lin(float3(DirectionalAmbient[0].w, DirectionalAmbient[1].w, DirectionalAmbient[2].w)) / (PI * perPassDynamicCubemaps[0].AverageColor);
 		}
 		
-		specularIrradiance += ambientScale * sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, R, specularLevel).xyz);
-		diffuseIrradiance += ambientScale * sRGB2Lin(diffuseTexture.SampleLevel(SampColorSampler, N, 0).xyz);
+		specularIrradiance += PI * ambientScale * sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, R, specularLevel).xyz);
+		diffuseIrradiance += PI * ambientScale * sRGB2Lin(diffuseTexture.SampleLevel(SampColorSampler, N, 0).xyz);
 	}
 	else
 #	endif
@@ -254,30 +278,13 @@ void GetAmbientLightInputPBR(out float3 diffuse, out float3 specular, float3 N, 
 		specularIrradiance += sRGB2Lin(mul(DirectionalAmbient, float4(R, 1.f)));
 	}
 
-	// [Fdez-Aguera 2019, "A Multiple-Scattering Microfacet Model for Real-Time Image Based Lighting"]
-	// Roughness dependent fresnel
-	float3 Fr = max(1 - roughness, specularColor) - specularColor;
-	float3 S = specularColor + Fr * pow(1.0 - NdotV, 5.0);
-	
     float2 specularBRDF = GetEnvBRDFApproxLazarov(roughness, NdotV);
-	float3 FssEss = S * specularBRDF.x + specularBRDF.y;
 	
-	float3 diffuseLobeWeight = diffuseColor;
-	float3 specularLobeWeight = FssEss;
-	
+	float3 specularLobeWeight = specularColor * specularBRDF.x + specularBRDF.y;
+	float3 diffuseLobeWeight = diffuseColor * (1 - specularLobeWeight);
 	[branch] if (pbrData[0].UseMultipleScattering)
 	{
-		// Multiple scattering
-		float Ess = specularBRDF.x + specularBRDF.y;
-		float Ems = 1 - Ess;
-		float3 Favg = specularColor + (1 - specularColor) / 21;
-		float3 Fms = FssEss * Favg /(1 - (1 - Ess) * Favg);
-		
-		// Dielectrics
-		float3 Edss = 1 - (FssEss + Fms * Ems);
-		float3 kD = diffuseColor * Edss;
-		
-		diffuseLobeWeight = kD + Fms * Ems;
+		specularLobeWeight *= 1 + specularColor * (1 / (specularBRDF.x + specularBRDF.y) - 1);
 	}
 	
 	diffuse += diffuseIrradiance * diffuseLobeWeight;
@@ -291,7 +298,7 @@ void GetAmbientLightInputPBR(out float3 diffuse, out float3 specular, float3 N, 
 		[branch] if (pbrData[0].UseDynamicCubemap)
 		{
 			float level = (levelCount - 1) * roughness * roughness + 1 + thickness;
-			subsurfaceSpecularIrradiance += ambientScale * sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, -V, level).xyz);
+			subsurfaceSpecularIrradiance += PI * ambientScale * sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, -V, level).xyz);
 		}
 		else
 #	endif

@@ -919,7 +919,7 @@ namespace Hooks
 		return RE::BSLightingShaderMaterialBase::CreateMaterial(feature);
 	}
 
-	bool IsPBRTexture(const RE::TESLandTexture* texture)
+	bool IsPBRTexture(const RE::TESForm* texture)
 	{
 		if (texture == nullptr)
 		{
@@ -1054,7 +1054,6 @@ namespace Hooks
 				shaderProperty->SetFlags(RE::BSShaderProperty::EShaderPropertyFlag8::kCastShadows, bDrawLandShadows);
 				shaderProperty->SetFlags(RE::BSShaderProperty::EShaderPropertyFlag8::kNoLODLandBlend, noLODLandBlend);
 
-				//shaderProperty->AddExtraData("__PBR__", RE::NiExtraData::Create<RE::NiExtraData>());
 				shaderProperty->SetFlags(RE::BSShaderProperty::EShaderPropertyFlag8::kVertexLighting, true);
 
 				const auto& children = land->loadedData->mesh[quadIndex]->GetChildren();
@@ -1213,6 +1212,41 @@ namespace Hooks
 		State::GetSingleton()->SetupFrame();
 	}
 
+	void hk_BSTempEffectSimpleDecal_SetupGeometry(RE::BSTempEffectSimpleDecal* decal, RE::BSGeometry* geometry, RE::BGSTextureSet* textureSet, bool blended);
+	decltype(&hk_BSTempEffectSimpleDecal_SetupGeometry) ptr_BSTempEffectSimpleDecal_SetupGeometry;
+
+	void hk_BSTempEffectSimpleDecal_SetupGeometry(RE::BSTempEffectSimpleDecal* decal, RE::BSGeometry* geometry, RE::BGSTextureSet* textureSet, bool blended)
+	{
+		ptr_BSTempEffectSimpleDecal_SetupGeometry(decal, geometry, textureSet, blended);
+
+		if (auto* shaderProperty = netimmerse_cast<RE::BSLightingShaderProperty*>(geometry->properties[1].get()); 
+			shaderProperty != nullptr && IsPBRTexture(textureSet)) {
+			{
+				BSLightingShaderMaterialPBR srcMaterial;
+				shaderProperty->LinkMaterial(&srcMaterial, true);
+			}
+
+			auto pbrMaterial = static_cast<BSLightingShaderMaterialPBR*>(shaderProperty->material);
+			pbrMaterial->OnLoadTextureSet(0, textureSet);
+
+			constexpr static RE::NiColor whiteColor(1.f, 1.f, 1.f);
+			*shaderProperty->emissiveColor = whiteColor;
+			const bool hasEmissive = pbrMaterial->emissiveTexture != nullptr && pbrMaterial->emissiveTexture != RE::BSGraphics::State::GetSingleton()->GetRuntimeData().defaultTextureBlack;
+			shaderProperty->emissiveMult = hasEmissive ? 1.f : 0.f;
+
+			{
+				using enum RE::BSShaderProperty::EShaderPropertyFlag8;
+				shaderProperty->SetFlags(kParallaxOcclusion, false);
+				shaderProperty->SetFlags(kParallax, false);
+				shaderProperty->SetFlags(kGlowMap, false);
+				shaderProperty->SetFlags(kEnvMap, false);
+				shaderProperty->SetFlags(kSpecular, false);
+
+				shaderProperty->SetFlags(kVertexLighting, true);
+			}
+		}
+	}
+
 	void Install()
 	{
 		SKSE::AllocTrampoline(14);
@@ -1272,11 +1306,16 @@ namespace Hooks
 		logger::info("Hooking TESLandTexture");
 		stl::write_vfunc<0x32, TESForm_GetFormEditorID>(RE::VTABLE_TESLandTexture[0]);
 		stl::write_vfunc<0x33, TESForm_SetFormEditorID>(RE::VTABLE_TESLandTexture[0]);
+		stl::write_vfunc<0x32, TESForm_GetFormEditorID>(RE::VTABLE_BGSTextureSet[0]);
+		stl::write_vfunc<0x33, TESForm_SetFormEditorID>(RE::VTABLE_BGSTextureSet[0]);
 
 		logger::info("Hooking InitDirectionalAmbient");
 		*(uintptr_t*)&ptr_InitDirectionalAmbient = Detours::X64::DetourFunction(REL::RelocationID(98989, 105643).address(), (uintptr_t)&hk_InitDirectionalAmbient);
 
 		logger::info("Hooking SetPerFrameBuffers");
 		*(uintptr_t*)&ptr_SetPerFrameBuffers = Detours::X64::DetourFunction(REL::RelocationID(75570, 77371).address(), (uintptr_t)&hk_SetPerFrameBuffers);
+
+		logger::info("Hooking BSTempEffectSimpleDecal");
+		*(uintptr_t*)&ptr_BSTempEffectSimpleDecal_SetupGeometry = Detours::X64::DetourFunction(REL::RelocationID(29253, 30108).address(), (uintptr_t)&hk_BSTempEffectSimpleDecal_SetupGeometry);
 	}
 }

@@ -88,6 +88,13 @@ void BSLightingShaderMaterialPBR::OnLoadTextureSet(std::uint64_t arg1, RE::BSTex
 			textureSet->SetTexture(EmissiveTexture, emissiveTexture);
 			textureSet->SetTexture(DisplacementTexture, displacementTexture);
 			textureSet->SetTexture(SubsurfaceTexture, subsurfaceTexture);
+
+			if (auto* bgsTextureSet = netimmerse_cast<RE::BGSTextureSet*>(inTextureSet); bgsTextureSet != nullptr && bgsTextureSet->decalData != nullptr)
+			{
+				specularColorScale = bgsTextureSet->decalData->data.shininess;
+				rimLightPower = bgsTextureSet->decalData->data.parallaxScale;
+				specularPower = (bgsTextureSet->decalData->data.parallaxPasses) / 256.f;
+			}
 		}
 
 		if (lock != nullptr) {
