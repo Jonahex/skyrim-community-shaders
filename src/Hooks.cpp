@@ -1247,6 +1247,51 @@ namespace Hooks
 		}
 	}
 
+	struct BSTempEffectGeometryDecal_Initialize
+	{
+		static void thunk(RE::BSTempEffectGeometryDecal* decal)
+		{
+			func(decal);
+
+			if (decal->decal != nullptr && IsPBRTexture(decal->texSet)) {
+				auto shaderProperty = static_cast<RE::BSLightingShaderProperty*>(RE::MemoryManager::GetSingleton()->Allocate(sizeof(RE::BSLightingShaderProperty), 0, false));
+				shaderProperty->Ctor();
+
+				{
+					BSLightingShaderMaterialPBR srcMaterial;
+					shaderProperty->LinkMaterial(&srcMaterial, true);
+				}
+
+				auto pbrMaterial = static_cast<BSLightingShaderMaterialPBR*>(shaderProperty->material);
+				pbrMaterial->OnLoadTextureSet(0, decal->texSet);
+
+				constexpr static RE::NiColor whiteColor(1.f, 1.f, 1.f);
+				*shaderProperty->emissiveColor = whiteColor;
+				const bool hasEmissive = pbrMaterial->emissiveTexture != nullptr && pbrMaterial->emissiveTexture != RE::BSGraphics::State::GetSingleton()->GetRuntimeData().defaultTextureBlack;
+				shaderProperty->emissiveMult = hasEmissive ? 1.f : 0.f;
+
+				{
+					using enum RE::BSShaderProperty::EShaderPropertyFlag8;
+
+					shaderProperty->SetFlags(kSkinned, true);
+					shaderProperty->SetFlags(kDynamicDecal, true);
+					shaderProperty->SetFlags(kZBufferTest, true);
+					shaderProperty->SetFlags(kZBufferWrite, false);
+
+					shaderProperty->SetFlags(kVertexLighting, true);
+				}
+
+				if (auto* alphaProperty = static_cast<RE::NiAlphaProperty*>(decal->decal->properties[0].get())) {
+					alphaProperty->alphaFlags = (alphaProperty->alphaFlags & ~0x1FE) | 0xED;
+				}
+
+				shaderProperty->SetupGeometry(decal->decal.get());
+				decal->decal->GetGeometryRuntimeData().properties[1] = RE::NiPointer(shaderProperty);
+			}
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
 	void Install()
 	{
 		SKSE::AllocTrampoline(14);
@@ -1317,5 +1362,8 @@ namespace Hooks
 
 		logger::info("Hooking BSTempEffectSimpleDecal");
 		*(uintptr_t*)&ptr_BSTempEffectSimpleDecal_SetupGeometry = Detours::X64::DetourFunction(REL::RelocationID(29253, 30108).address(), (uintptr_t)&hk_BSTempEffectSimpleDecal_SetupGeometry);
+
+		logger::info("Hooking BSTempEffectGeometryDecal");
+		stl::write_vfunc<0x25, BSTempEffectGeometryDecal_Initialize>(RE::VTABLE_BSTempEffectGeometryDecal[0]);
 	}
 }
