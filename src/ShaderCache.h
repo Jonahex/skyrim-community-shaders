@@ -243,6 +243,17 @@ namespace SIE
 			AdditionalAlphaMask = 1 << 23,
 		};
 
+		enum class GrassShaderTechniques
+		{
+			RenderDepth = 8,
+			TruePbr = 9,
+		};
+
+		enum class GrassShaderFlags
+		{
+			AlphaTest = 0x10000,
+		};
+
 		enum class WaterShaderTechniques
 		{
 			Underwater = 8,

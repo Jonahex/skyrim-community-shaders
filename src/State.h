@@ -16,6 +16,7 @@ public:
 	bool enabledClasses[RE::BSShader::Type::Total - 1];
 
 	bool updateShader = true;
+	bool isShaderSet = false;
 	RE::BSShader* currentShader = nullptr;
 
 	uint32_t currentVertexDescriptor = 0;

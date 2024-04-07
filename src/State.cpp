@@ -26,12 +26,14 @@ void State::Draw()
 				static RE::BSGraphics::VertexShader* vertexShader = nullptr;
 				static RE::BSGraphics::PixelShader* pixelShader = nullptr;
 
-				vertexShader = shaderCache.GetVertexShader(*currentShader, currentVertexDescriptor);
-				pixelShader = shaderCache.GetPixelShader(*currentShader, currentPixelDescriptor);
+				if (!isShaderSet) {
+					vertexShader = shaderCache.GetVertexShader(*currentShader, currentVertexDescriptor);
+					pixelShader = shaderCache.GetPixelShader(*currentShader, currentPixelDescriptor);
 
-				if (vertexShader && pixelShader) {
-					context->VSSetShader(vertexShader->shader, NULL, NULL);
-					context->PSSetShader(pixelShader->shader, NULL, NULL);
+					if (vertexShader && pixelShader) {
+						context->VSSetShader(vertexShader->shader, NULL, NULL);
+						context->PSSetShader(pixelShader->shader, NULL, NULL);
+					}
 				}
 
 				if (vertexShader && pixelShader) {
@@ -44,6 +46,7 @@ void State::Draw()
 			}
 		}
 	}
+	isShaderSet = false;
 	updateShader = false;
 }
 

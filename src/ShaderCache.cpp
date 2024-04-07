@@ -206,24 +206,16 @@ namespace SIE
 			defines[lastIndex] = { nullptr, nullptr };
 		}
 
-		enum class GrassShaderTechniques
-		{
-			RenderDepth = 8,
-		};
-
-		enum class GrassShaderFlags
-		{
-			AlphaTest = 0x10000,
-		};
-
 		static void GetGrassShaderDefines(uint32_t descriptor, D3D_SHADER_MACRO* defines)
 		{
 			const auto technique = descriptor & 0b1111;
 			int lastIndex = 0;
-			if (technique == static_cast<uint32_t>(GrassShaderTechniques::RenderDepth)) {
+			if (technique == static_cast<uint32_t>(ShaderCache::GrassShaderTechniques::RenderDepth)) {
 				defines[lastIndex++] = { "RENDER_DEPTH", nullptr };
+			} else if (technique == static_cast<uint32_t>(ShaderCache::GrassShaderTechniques::TruePbr)) {
+				defines[lastIndex++] = { "TRUE_PBR", nullptr };
 			}
-			if (descriptor & static_cast<uint32_t>(GrassShaderFlags::AlphaTest)) {
+			if (descriptor & static_cast<uint32_t>(ShaderCache::GrassShaderFlags::AlphaTest)) {
 				defines[lastIndex++] = { "DO_ALPHA_TEST", nullptr };
 			}
 
@@ -651,6 +643,14 @@ namespace SIE
 				{ "AlphaParam2", 12 },
 				{ "ScaleMask", 13 },
 				{ "ShadowClampValue", 14 },
+			};
+
+			auto& grassPS = result[static_cast<size_t>(RE::BSShader::Type::Grass)]
+								  [static_cast<size_t>(ShaderClass::Pixel)];
+			grassPS = {
+				{ "PBRFlags", 0 },
+				{ "PBRParams1", 1 },
+				{ "PBRParams2", 2 },
 			};
 
 			auto& particleVS = result[static_cast<size_t>(RE::BSShader::Type::Particle)]
