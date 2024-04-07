@@ -32,6 +32,13 @@ public:
 
 	float timer = 0;
 
+	enum ConfigMode
+	{
+		DEFAULT,
+		USER,
+		TEST
+	};
+
 	void Draw();
 	void DrawDeferred();
 	void DrawPreProcess();
@@ -39,8 +46,8 @@ public:
 	void Setup();
 	void SetupFrame();
 
-	void Load(bool a_test = false);
-	void Save(bool a_test = false);
+	void Load(ConfigMode a_configMode = ConfigMode::USER);
+	void Save(ConfigMode a_configMode = ConfigMode::USER);
 	void PostPostLoad();
 
 	bool ValidateCache(CSimpleIniA& a_ini);
@@ -85,6 +92,10 @@ public:
 	void SetupResources();
 	void ModifyShaderLookup(const RE::BSShader& a_shader, uint& a_vertexDescriptor, uint& a_pixelDescriptor);
 
+	void BeginPerfEvent(std::string_view title);
+	void EndPerfEvent();
+	void SetPerfMarker(std::string_view title);
+
 	struct PerShader
 	{
 		uint VertexShaderDescriptor;
@@ -113,6 +124,8 @@ public:
 
 	std::unique_ptr<Buffer> lightingDataBuffer = nullptr;
 
+	// Skyrim constants
+	bool isVR = false;
 	float screenWidth = 0;
 	float screenHeight = 0;
 
@@ -157,4 +170,11 @@ public:
 #pragma warning(pop) 
 
 	std::unique_ptr<Buffer> pbrDataBuffer = nullptr;
+
+	ID3D11DeviceContext* context = nullptr;
+	ID3D11Device* device = nullptr;
+	RE::BSGraphics::RendererShadowState* shadowState = nullptr;
+
+private:
+	std::shared_ptr<REX::W32::ID3DUserDefinedAnnotation> pPerf;
 };

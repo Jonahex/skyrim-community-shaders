@@ -44,9 +44,8 @@ void DynamicCubemaps::DrawSettings()
 				ImGui::ColorEdit3("Color", (float*)&cubemapColor);
 				ImGui::SliderFloat("Roughness", &cubemapColor.w, 0.0f, 1.0f, "%.2f");
 				if (ImGui::Button("Export")) {
-					auto renderer = RE::BSGraphics::Renderer::GetSingleton();
-					auto device = renderer->GetRuntimeData().forwarder;
-					auto context = renderer->GetRuntimeData().context;
+					auto& device = State::GetSingleton()->device;
+					auto& context = State::GetSingleton()->context;
 
 					D3D11_TEXTURE2D_DESC texDesc{};
 					texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -248,7 +247,7 @@ void DynamicCubemaps::UpdateCubemapCapture()
 {
 	auto renderer = RE::BSGraphics::Renderer::GetSingleton();
 
-	auto context = renderer->GetRuntimeData().context;
+	auto& context = State::GetSingleton()->context;
 
 	auto& depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
 	auto& snowSwap = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kSNOW_SWAP];
@@ -269,7 +268,7 @@ void DynamicCubemaps::UpdateCubemapCapture()
 	static float3 cameraPreviousPosAdjust = { 0, 0, 0 };
 	updateData.CameraPreviousPosAdjust = cameraPreviousPosAdjust;
 
-	auto state = RE::BSGraphics::RendererShadowState::GetSingleton();
+	auto& state = State::GetSingleton()->shadowState;
 	auto eyePosition = !REL::Module::IsVR() ?
 	                       state->GetRuntimeData().posAdjust.getEye(0) :
 	                       state->GetVRRuntimeData().posAdjust.getEye(0);
@@ -323,7 +322,7 @@ void DynamicCubemaps::DrawDeferred()
 void DynamicCubemaps::UpdateCubemap()
 {
 	auto renderer = RE::BSGraphics::Renderer::GetSingleton();
-	auto context = renderer->GetRuntimeData().context;
+	auto& context = State::GetSingleton()->context;
 
 	//if (!REL::Module::IsVR()) {
 	//	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
@@ -457,14 +456,13 @@ void DynamicCubemaps::Draw(const RE::BSShader* shader, const uint32_t)
 {
 	if (shader->shaderType.get() == RE::BSShader::Type::Lighting || shader->shaderType.get() == RE::BSShader::Type::Water) {
 		// During world cubemap generation we cannot use the cubemap
-		auto shadowState = RE::BSGraphics::RendererShadowState::GetSingleton();
+		auto& shadowState = State::GetSingleton()->shadowState;
 		auto cubeMapRenderTarget = !REL::Module::IsVR() ? shadowState->GetRuntimeData().cubeMapRenderTarget : shadowState->GetVRRuntimeData().cubeMapRenderTarget;
 		if (cubeMapRenderTarget != RE::RENDER_TARGETS_CUBEMAP::kREFLECTIONS && !renderedScreenCamera) {
 			UpdateCubemap();
 			renderedScreenCamera = true;
 
-			auto renderer = RE::BSGraphics::Renderer::GetSingleton();
-			auto context = renderer->GetRuntimeData().context;
+			auto& context = State::GetSingleton()->context;
 
 			if (enableCreator) {
 				CreatorSettingsCB data{};
@@ -498,7 +496,7 @@ void DynamicCubemaps::SetupResources()
 	GetComputeShaderAverageColor();
 
 	auto renderer = RE::BSGraphics::Renderer::GetSingleton();
-	auto device = renderer->GetRuntimeData().forwarder;
+	auto& device = State::GetSingleton()->device;
 
 	{
 		D3D11_SAMPLER_DESC samplerDesc = {};

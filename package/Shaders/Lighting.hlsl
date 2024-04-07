@@ -2303,7 +2303,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	endif
 
 #	if defined(WATER_CAUSTICS)
-	color.xyz *= ComputeWaterCaustics(waterHeight, input.WorldPosition.xyz, worldSpaceNormal);
+	if (perPassWaterCaustics[0].EnableWaterCaustics)
+		color.xyz *= ComputeWaterCaustics(waterHeight, input.WorldPosition.xyz, worldSpaceNormal);
 #	endif
 	
 #	if defined(TRUE_PBR)

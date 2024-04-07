@@ -351,7 +351,7 @@ void hk_BSGraphics_SetDirtyStates(bool isCompute)
 	(ptr_BSGraphics_SetDirtyStates)(isCompute);
 
 	{
-		auto context = RE::BSGraphics::Renderer::GetSingleton()->GetRuntimeData().context;
+		auto context = State::GetSingleton()->context;
 		for (uint32_t textureIndex = 0; textureIndex < ExtendedRendererState::NumPSTextures; ++textureIndex) {
 			if (extendedRendererState.PSResourceModifiedBits & (1 << textureIndex)) {
 				context->PSSetShaderResources(ExtendedRendererState::FirstPSTexture + textureIndex, 1, &extendedRendererState.PSTexture[textureIndex]);
@@ -489,9 +489,9 @@ namespace Hooks
 
 			auto manager = RE::BSGraphics::Renderer::GetSingleton();
 
-			auto context = manager->GetRuntimeData().context;
-			auto swapchain = manager->GetRuntimeData().renderWindows->swapChain;
-			auto device = manager->GetRuntimeData().forwarder;
+			auto context = reinterpret_cast<ID3D11DeviceContext*>(manager->GetRuntimeData().context);
+			auto swapchain = reinterpret_cast<IDXGISwapChain*>(manager->GetRuntimeData().renderWindows->swapChain);
+			auto device = reinterpret_cast<ID3D11Device*>(manager->GetRuntimeData().forwarder);
 
 			logger::info("Detouring virtual function tables");
 
