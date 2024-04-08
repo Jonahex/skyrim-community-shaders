@@ -765,7 +765,12 @@ namespace Hooks
 				} 
 				else if (lightingType == None || lightingType == TreeAnim) {
 					auto* pbrMaterial = static_cast<const BSLightingShaderMaterialPBR*>(material);
-					shadowState->SetPSTexture(0, pbrMaterial->diffuseTexture->rendererTexture);
+					if (pbrMaterial->diffuseRenderTargetSourceIndex != -1) {
+						shadowState->SetPSTexture(0, renderer->GetRuntimeData().renderTargets[pbrMaterial->diffuseRenderTargetSourceIndex]);
+					}
+					else {
+						shadowState->SetPSTexture(0, pbrMaterial->diffuseTexture->rendererTexture);
+					}
 					shadowState->SetPSTextureAddressMode(0, static_cast<RE::BSGraphics::TextureAddressMode>(pbrMaterial->textureClampMode));
 					shadowState->SetPSTextureFilterMode(0, RE::BSGraphics::TextureFilterMode::kAnisotropic);
 
