@@ -581,9 +581,9 @@ namespace Hooks
 
 			{
 				RE::NiColor emissiveColor{};
-				stream.iStr->read(&property->emissiveColor->red, 1);
-				stream.iStr->read(&property->emissiveColor->green, 1);
-				stream.iStr->read(&property->emissiveColor->blue, 1);
+				stream.iStr->read(&emissiveColor.red, 1);
+				stream.iStr->read(&emissiveColor.green, 1);
+				stream.iStr->read(&emissiveColor.blue, 1);
 
 				if (property->emissiveColor != nullptr && property->flags.any(kOwnEmit)) {
 					*property->emissiveColor = emissiveColor;
