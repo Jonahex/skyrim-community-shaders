@@ -128,23 +128,6 @@ cbuffer cb8 : register(b8)
 	float4 cb8[240];
 }
 
-#	ifdef VR
-cbuffer cb13 : register(b13)
-{
-	float4 cb13[3];
-}
-#	endif  // VR
-
-#	define M_PI 3.1415925  // PI
-#	define M_2PI 6.283185  // PI * 2
-
-const static float4x4 M_IdentityMatrix = {
-	{ 1, 0, 0, 0 },
-	{ 0, 1, 0, 0 },
-	{ 0, 0, 1, 0 },
-	{ 0, 0, 0, 1 }
-};
-
 float4 GetMSPosition(VS_INPUT input, float windTimer, float3x3 world3x3)
 {
 	float windAngle = 0.4 * ((input.InstanceData1.x + input.InstanceData1.y) * -0.0078125 + windTimer);
@@ -173,18 +156,17 @@ VS_OUTPUT main(VS_INPUT input)
 {
 	VS_OUTPUT vsout;
 
-#	if !defined(VR)
-	uint eyeIndex = 0;
-#	else
-	float4 r0, r1, r2, r3, r4, r5, r6;
-	uint eyeIndex = cb13[0].y * (input.InstanceID.x & 1);
-#	endif  // VR
+	uint eyeIndex = GetEyeIndexVS(
+#if defined(VR)
+		input.InstanceID
+#endif
+	);
 
 	float3x3 world3x3 = float3x3(input.InstanceData2.xyz, input.InstanceData3.xyz, float3(input.InstanceData4.x, input.InstanceData2.w, input.InstanceData3.w));
 
 	float4 msPosition = GetMSPosition(input, WindTimer, world3x3);
 
-#	ifdef GRASS_COLLISION
+#ifdef GRASS_COLLISION
 	float3 displacement = GetDisplacedPosition(msPosition.xyz, input.Color.w, eyeIndex);
 	msPosition.xyz += displacement;
 #	endif
@@ -224,23 +206,11 @@ VS_OUTPUT main(VS_INPUT input)
 
 	vsout.PreviousWorldPosition = mul(PreviousWorld[eyeIndex], previousMsPosition);
 #	if defined(VR)
-	if (0 < cb13[0].y) {
-		r0.yz = dot(projSpacePosition, cb13[eyeIndex + 1].xyzw);
-	} else {
-		r0.yz = float2(1, 1);
-	}
-
-	r0.w = 2 + -cb13[0].y;
-	r0.x = dot(cb13[0].zw, M_IdentityMatrix[eyeIndex + 0].xy);
-	r0.xw = r0.xw * projSpacePosition.wx;
-	r0.x = cb13[0].y * r0.x;
-
-	vsout.HPosition.x = r0.w * 0.5 + r0.x;
-	vsout.HPosition.yzw = projSpacePosition.yzw;
-
-	vsout.ClipDistance.x = r0.z;
-	vsout.CullDistance.x = r0.y;
-#	endif  // !VR
+	VR_OUTPUT VRout = GetVRVSOutput(projSpacePosition, eyeIndex);
+	vsout.HPosition = VRout.VRPosition;
+	vsout.ClipDistance.x = VRout.ClipDistance;
+	vsout.CullDistance.x = VRout.CullDistance;
+#endif  // !VR
 
 	// Vertex normal needs to be transformed to world-space for lighting calculations.
 	vsout.VertexNormal.xyz = mul(world3x3, input.Normal.xyz * 2.0 - 1.0);
@@ -283,31 +253,19 @@ Texture2D<float4> TexRMAOSSampler : register(t3);
 Texture2D<float4> TexSubsurfaceSampler : register(t4);
 #endif
 
-#	ifdef VR
-struct PerEye
+cbuffer PerFrame : register(b0)
 {
-	row_major float4x4 ScreenProj;
-	row_major float4x4 PreviousScreenProj;
-};
-
-cbuffer cb0 : register(b0)
-{
-	float4 cb0[10];
+	float4 cb0_1[2] : packoffset(c0);
+	float4 VPOSOffset : packoffset(c2);
+	float4 cb0_2[7] : packoffset(c3);
 }
 
-#	endif  // VR
-
-cbuffer AlphaTestRefCB :
-	register(
-#	if !defined(VR)
-		b11
-#	else
-		b13
-#	endif  // !VR
-	)
+#if !defined(VR)
+cbuffer AlphaTestRefCB : register(b11)
 {
 	float AlphaTestRefRS : packoffset(c0);
 }
+#	endif  // VR
 
 #	if defined(TRUE_PBR)
 cbuffer PerMaterial : register(b1)
@@ -427,14 +385,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		endif
 	float4 shadowColor = TexShadowMaskSampler.Load(int3(input.HPosition.xy, 0));
 
-#		if !defined(VR)
-	uint eyeIndex = 0;
-#		else
-	float stereoUV = input.HPosition.x * cb0[2].xy + cb0[2].zw;
-	stereoUV = stereoUV * DynamicResolutionParams2.x;
-
-	uint eyeIndex = (stereoUV >= 0.5) ? 1 : 0;
-#		endif  // !VR
+	uint eyeIndex = GetEyeIndexPS(input.HPosition, VPOSOffset);
 
 	psout.MotionVectors = GetSSMotionVector(input.WorldPosition, input.PreviousWorldPosition, eyeIndex);
 

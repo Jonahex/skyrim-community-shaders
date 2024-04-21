@@ -96,6 +96,8 @@ public:
 	void EndPerfEvent();
 	void SetPerfMarker(std::string_view title);
 
+	bool extendedFrameAnnotations = false;
+
 	struct PerShader
 	{
 		uint VertexShaderDescriptor;

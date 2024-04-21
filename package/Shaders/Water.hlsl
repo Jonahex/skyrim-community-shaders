@@ -115,30 +115,15 @@ cbuffer PerGeometry : register(b2)
 #	endif  // VR
 };
 
-#	ifdef VR
-cbuffer VRValues : register(b13)
-{
-	float AlphaThreshold : packoffset(c0);
-	float StereoEnabled : packoffset(c0.y);
-	float2 EyeOffsetScale : packoffset(c0.z);
-	float4 EyeClipEdge[2] : packoffset(c1);
-}
-#	endif  // VR
-
-const static float4x4 M_IdentityMatrix = {
-	{ 1, 0, 0, 0 }, { 0, 1, 0, 0 }, { 0, 0, 1, 0 }, { 0, 0, 0, 1 }
-};
-
 VS_OUTPUT main(VS_INPUT input)
 {
 	VS_OUTPUT vsout;
 
-#	if !defined(VR)
-	uint eyeIndex = 0;
-#	else   // VR
-	uint eyeIndex = StereoEnabled * (input.InstanceID.x & 1);
-#	endif  // VR
-
+	uint eyeIndex = GetEyeIndexVS(
+#	if defined(VR)
+		input.InstanceID
+#	endif
+	);
 	vsout.NormalsScale = NormalsScale;
 
 	float4 inputPosition = float4(input.Position.xyz, 1.0);
@@ -243,27 +228,11 @@ VS_OUTPUT main(VS_INPUT input)
 #	endif
 
 #	ifdef VR
-	float4 r0;
-	float4 projSpacePosition = vsout.HPosition;
-	r0.xyzw = 0;
-	if (0 < StereoEnabled) {
-		r0.yz = dot(projSpacePosition, EyeClipEdge[eyeIndex]);  // projSpacePosition is clipPos
-	} else {
-		r0.yz = float2(1, 1);
-	}
-
-	r0.w = 2 + -StereoEnabled;
-	r0.x = dot(EyeOffsetScale, M_IdentityMatrix[eyeIndex].xy);
-	r0.xw = r0.xw * projSpacePosition.wx;
-	r0.x = StereoEnabled * r0.x;
-
-	vsout.HPosition.x = r0.w * 0.5 + r0.x;
-	vsout.HPosition.yzw = projSpacePosition.yzw;
-
-	vsout.ClipDistance.x = r0.z;
-	vsout.CullDistance.x = r0.y;
+	VR_OUTPUT VRout = GetVRVSOutput(vsout.HPosition, eyeIndex);
+	vsout.HPosition = VRout.VRPosition;
+	vsout.ClipDistance.x = VRout.ClipDistance;
+	vsout.CullDistance.x = VRout.CullDistance;
 #	endif  // VR
-
 	return vsout;
 }
 
@@ -364,14 +333,6 @@ cbuffer PerGeometry : register(b2)
 }
 
 #	ifdef VR
-cbuffer VRValues : register(b13)
-{
-	float AlphaThreshold : packoffset(c0);
-	float StereoEnabled : packoffset(c0.y);
-	float2 EyeOffsetScale : packoffset(c0.z);
-	float4 EyeClipEdge[2] : packoffset(c1);
-}
-
 float GetStencil(float2 uv)
 {
 	return DepthTex.Load(int3(uv * lightingData[0].BufferDim * DynamicResolutionParams1.xy, 0)).g;
@@ -482,7 +443,7 @@ float3 GetWaterNormal(PS_INPUT input, float distanceFactor, float normalsDepthFa
 #			else
 	float3 flowmapNormal0 = GetFlowmapNormal(input, uvShift.xx, 9.92, 0, a_eyeIndex);
 	float3 flowmapNormal1 = GetFlowmapNormal(input, float2(0, uvShift), 10.64, 0.27, a_eyeIndex);
-	float3 flowmapNormal2 = GetFlowmapNormal(input, 0.0.xx, 8, 0);
+	float3 flowmapNormal2 = GetFlowmapNormal(input, 0.0.xx, 8, 0, a_eyeIndex);
 	float3 flowmapNormal3 = GetFlowmapNormal(input, float2(uvShift, 0), 8.48, 0.62, a_eyeIndex);
 #			endif
 
@@ -540,7 +501,7 @@ float3 GetWaterNormal(PS_INPUT input, float distanceFactor, float normalsDepthFa
 		normalMul.y * ((1 - normalMul.x) * flowmapNormal3.z + normalMul.x * flowmapNormal2.z) +
 		(1 - normalMul.y) * (normalMul.x * flowmapNormal1.z + (1 - normalMul.x) * flowmapNormal0.z);
 	finalNormal = normalize(lerp(normals1 + float3(0, 0, 1), normalize(lerp(finalNormal, flowmapNormal, normalBlendFactor)), distanceFactor));
-#				if defined(WATER_CAUSTICS)
+#				if defined(WATER_CAUSTICS) && !defined(VR)
 	caustics = lerp(blendedCaustics, flowmapCausticsWeighted, normalBlendFactor);
 #				endif
 #			endif
@@ -668,11 +629,7 @@ float3 GetWaterDiffuseColor(PS_INPUT input, float3 normal, float3 viewDirection,
 	float depth = GetScreenDepthWater(screenPosition);
 	float2 refractionScreenPosition = DynamicResolutionParams1.xy * (refractionUvRaw / VPOSOffset.xy);
 	float refractionDepth = GetScreenDepthWater(refractionScreenPosition);
-#				if !defined(VR)
 	float refractionDepthMul = length(float3((((VPOSOffset.zw + refractionUvRaw) * 2 - 1)) * refractionDepth / ProjData.xy, refractionDepth));
-#				else
-	float refractionDepthMul = calculateDepthMultfromUV(ConvertFromStereoUV(VPOSOffset.zw + refractionUvRaw, a_eyeIndex, 1), refractionDepth, a_eyeIndex);
-#				endif  //VR
 
 	float3 refractionDepthAdjustedViewDirection = -viewDirection * refractionDepthMul;
 	float refractionViewSurfaceAngle = dot(refractionDepthAdjustedViewDirection, ReflectPlane[a_eyeIndex].xyz);
@@ -739,16 +696,7 @@ PS_OUTPUT main(PS_INPUT input)
 {
 	PS_OUTPUT psout;
 
-#	if !defined(VR)
-	uint eyeIndex = 0;
-#	else
-	float4 r0, r1, r3, stereoUV;
-	stereoUV.xy = input.HPosition.xy * VPOSOffset.xy + VPOSOffset.zw;
-	stereoUV.x = DynamicResolutionParams2.x * stereoUV.x;
-	stereoUV.x = (stereoUV.x >= 0.5);
-	uint eyeIndex = (uint)(((int)((uint)StereoEnabled)) * (int)stereoUV.x);
-#	endif
-
+	uint eyeIndex = GetEyeIndexPS(input.HPosition, VPOSOffset);
 #	if defined(SIMPLE) || defined(UNDERWATER) || defined(LOD) || defined(SPECULAR)
 	float3 viewDirection = normalize(input.WPosition.xyz);
 
