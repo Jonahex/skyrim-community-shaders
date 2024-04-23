@@ -619,7 +619,7 @@ namespace Hooks
 
 			bool isPbr = false;
 
-			if (property->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kVertexLighting) && property->material->GetFeature() == RE::BSShaderMaterial::Feature::kDefault)
+			if (property->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kVertexLighting) && (property->material->GetFeature() == RE::BSShaderMaterial::Feature::kDefault || property->material->GetFeature() == RE::BSShaderMaterial::Feature::kMultiTexLandLODBlend))
 			{
 				isPbr = true;
 			}
