@@ -889,15 +889,6 @@ namespace Hooks
 		return RE::BSLightingShaderMaterialBase::CreateMaterial(feature);
 	}
 
-	bool IsPBRTexture(const RE::TESForm* texture)
-	{
-		if (texture == nullptr)
-		{
-			return false;
-		}
-		return std::string_view(texture->GetFormEditorID()).find("_PBR") != std::string_view::npos;
-	}
-
 	void SetupLandscapeTexture(BSLightingShaderMaterialPBRLandscape& material, RE::TESLandTexture& landTexture, uint32_t textureIndex)
 	{
 		if (textureIndex >= 6)
@@ -911,25 +902,17 @@ namespace Hooks
 			return;
 		}
 
-		const bool isPbr = IsPBRTexture(&landTexture);
+		auto* textureSetData = State::GetSingleton()->GetPBRTextureSetData(landTexture.textureSet);
+		const bool isPbr = textureSetData != nullptr;
 
 		textureSet->SetTexture(BSLightingShaderMaterialPBRLandscape::BcdTexture, textureIndex == 0 ? material.diffuseTexture : material.landscapeBCDTextures[textureIndex - 1]);
 		textureSet->SetTexture(BSLightingShaderMaterialPBRLandscape::NormalTexture, textureIndex == 0 ? material.normalTexture : material.landscapeNormalTextures[textureIndex - 1]);
 
 		if (isPbr) {
 			textureSet->SetTexture(BSLightingShaderMaterialPBRLandscape::RmaosTexture, material.landscapeRMAOSTextures[textureIndex]);
-			if (textureSet->decalData != nullptr)
-			{
-				material.displacementScales[textureIndex] = textureSet->decalData->data.parallaxScale;
-				material.roughnessScales[textureIndex] = textureSet->decalData->data.shininess;
-				material.specularLevels[textureIndex] = textureSet->decalData->data.decalMinWidth;
-			}
-			else
-			{
-				material.displacementScales[textureIndex] = 1.f;
-				material.roughnessScales[textureIndex] = 1.f;
-				material.specularLevels[textureIndex] = 0.04f;
-			}
+			material.displacementScales[textureIndex] = textureSetData->displacementScale;
+			material.roughnessScales[textureIndex] = textureSetData->roughnessScale;
+			material.specularLevels[textureIndex] = textureSetData->specularLevel;
 		}
 		material.isPbr[textureIndex] = isPbr;
 
@@ -949,17 +932,23 @@ namespace Hooks
 
 	bool hk_TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land)
 	{
+		auto* state = State::GetSingleton();
+
 		bool isPbr = false;
 		if (land->loadedData != nullptr) {
 			for (uint32_t quadIndex = 0; quadIndex < 4; ++quadIndex) {
-				if (IsPBRTexture(land->loadedData->defQuadTextures[quadIndex])) {
-					isPbr = true;
-					break;
-				}
-				for (uint32_t textureIndex = 0; textureIndex < 6; ++textureIndex) {
-					if (IsPBRTexture(land->loadedData->quadTextures[quadIndex][textureIndex])) {
+				if (land->loadedData->defQuadTextures[quadIndex] != nullptr) {
+					if (state->IsPBRTextureSet(land->loadedData->defQuadTextures[quadIndex]->textureSet)) {
 						isPbr = true;
 						break;
+					}
+				}
+				for (uint32_t textureIndex = 0; textureIndex < 6; ++textureIndex) {
+					if (land->loadedData->quadTextures[quadIndex][textureIndex] != nullptr) {
+						if (state->IsPBRTextureSet(land->loadedData->quadTextures[quadIndex][textureIndex]->textureSet)) {
+							isPbr = true;
+							break;
+						}
 					}
 				}
 			}
@@ -1160,8 +1149,8 @@ namespace Hooks
 	{
 		ptr_BSTempEffectSimpleDecal_SetupGeometry(decal, geometry, textureSet, blended);
 
-		if (auto* shaderProperty = netimmerse_cast<RE::BSLightingShaderProperty*>(geometry->GetGeometryRuntimeData().properties[1].get()); 
-			shaderProperty != nullptr && IsPBRTexture(textureSet)) {
+		if (auto* shaderProperty = netimmerse_cast<RE::BSLightingShaderProperty*>(geometry->GetGeometryRuntimeData().properties[1].get());
+			shaderProperty != nullptr && State::GetSingleton()->IsPBRTextureSet(textureSet)) {
 			{
 				BSLightingShaderMaterialPBR srcMaterial;
 				shaderProperty->LinkMaterial(&srcMaterial, true);
@@ -1194,7 +1183,7 @@ namespace Hooks
 		{
 			func(decal);
 
-			if (decal->decal != nullptr && IsPBRTexture(decal->texSet)) {
+			if (decal->decal != nullptr && State::GetSingleton()->IsPBRTextureSet(decal->texSet)) {
 				auto shaderProperty = static_cast<RE::BSLightingShaderProperty*>(RE::MemoryManager::GetSingleton()->Allocate(sizeof(RE::BSLightingShaderProperty), 0, false));
 				shaderProperty->Ctor();
 

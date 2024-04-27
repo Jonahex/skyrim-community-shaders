@@ -170,6 +170,21 @@ public:
 	ID3D11Device* device = nullptr;
 	RE::BSGraphics::RendererShadowState* shadowState = nullptr;
 
+	struct PBRTextureSetData
+	{
+		float roughnessScale = 1.f;
+		float displacementScale = 1.f;
+		float specularLevel = 0.04f;
+		RE::NiColor subsurfaceColor;
+		float subsurfaceOpacity = 0.f;
+	};
+
+	void SetupTextureSetData();
+	State::PBRTextureSetData* GetPBRTextureSetData(const RE::TESForm* textureSet);
+	bool IsPBRTextureSet(const RE::TESForm* textureSet);
+
+	std::unordered_map<std::string, PBRTextureSetData> pbrTextureSets;
+
 private:
 	std::shared_ptr<REX::W32::ID3DUserDefinedAnnotation> pPerf;
 };

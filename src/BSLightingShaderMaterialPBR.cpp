@@ -1,5 +1,7 @@
 #include "BSLightingShaderMaterialPBR.h"
 
+#include "State.h"
+
 BSLightingShaderMaterialPBR::~BSLightingShaderMaterialPBR()
 {}
 
@@ -89,11 +91,14 @@ void BSLightingShaderMaterialPBR::OnLoadTextureSet(std::uint64_t arg1, RE::BSTex
 			textureSet->SetTexture(DisplacementTexture, displacementTexture);
 			textureSet->SetTexture(SubsurfaceTexture, subsurfaceTexture);
 
-			if (auto* bgsTextureSet = netimmerse_cast<RE::BGSTextureSet*>(inTextureSet); bgsTextureSet != nullptr && bgsTextureSet->decalData != nullptr)
-			{
-				specularColorScale = bgsTextureSet->decalData->data.shininess;
-				rimLightPower = bgsTextureSet->decalData->data.parallaxScale;
-				specularPower = (bgsTextureSet->decalData->data.parallaxPasses) / 256.f;
+			if (auto* bgsTextureSet = netimmerse_cast<RE::BGSTextureSet*>(inTextureSet); bgsTextureSet != nullptr) {
+				if (auto* textureSetData = State::GetSingleton()->GetPBRTextureSetData(bgsTextureSet)) {
+					specularColorScale = textureSetData->roughnessScale;
+					specularPower = textureSetData->specularLevel;
+					rimLightPower = textureSetData->displacementScale;
+					specularColor = textureSetData->subsurfaceColor;
+					subSurfaceLightRolloff = textureSetData->subsurfaceOpacity;
+				}
 			}
 		}
 

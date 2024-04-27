@@ -178,6 +178,7 @@ void State::Reset()
 
 void State::Setup()
 {
+	SetupTextureSetData();
 	SetupResources();
 	for (auto* feature : Feature::GetFeatureList())
 		if (feature->loaded)
@@ -699,4 +700,88 @@ void State::SetupFrame()
 		ID3D11ShaderResourceView* view = pbrDataBuffer->srv.get();
 		context->PSSetShaderResources(121, 1, &view);
 	}
+}
+
+void State::SetupTextureSetData()
+{
+	pbrTextureSets.clear();
+
+	if (std::filesystem::exists("Data\\PBRTextureSets")) {
+		logger::info("[TruePBR] loading PBR texture set configs");
+
+		auto configs = clib_util::distribution::get_configs("Data\\PBRTextureSets", "", ".json");
+
+		if (configs.empty()) {
+			logger::warn("[TruePBR] no .json files were found within the Data\\PBRTextureSets folder, aborting...");
+			return;
+		}
+
+		logger::info("[TruePBR] {} matching jsons found", configs.size());
+
+		for (auto& path : configs) {
+			logger::info("[TruePBR] loading json : {}", path);
+
+			std::ifstream fileStream(path);
+			if (!fileStream.is_open()) {
+				logger::error("[TruePBR] failed to read {}", path);
+				continue;
+			}
+
+			json config;
+			try {
+				fileStream >> config;
+			} catch (const nlohmann::json::parse_error& e) {
+				logger::error("[TruePBR] failed to parse {} : {}", path, e.what());
+				continue;
+			}
+
+			const auto editorId = std::filesystem::path(path).stem().string();
+
+			PBRTextureSetData textureSetData;
+
+			if (config["roughnessScale"].is_number_float()) {
+				textureSetData.roughnessScale = config["roughnessScale"];
+			}
+			if (config["displacementScale"].is_number_float()) {
+				textureSetData.displacementScale = config["displacementScale"];
+			}
+			if (config["specularLevel"].is_number_float()) {
+				textureSetData.specularLevel = config["specularLevel"];
+			}
+			{
+				const auto& subsurfaceColor = config["subsurfaceColor"];
+				if (subsurfaceColor.is_array() && subsurfaceColor.size() == 3 && 
+					subsurfaceColor[0].is_number_float() && subsurfaceColor[1].is_number_float() && 
+					subsurfaceColor[2].is_number_float()) {
+					textureSetData.subsurfaceColor.red = subsurfaceColor[0];
+					textureSetData.subsurfaceColor.green = subsurfaceColor[1];
+					textureSetData.subsurfaceColor.blue = subsurfaceColor[1];
+				}
+			}
+			if (config["subsurfaceOpacity"].is_number_float()) {
+				textureSetData.subsurfaceOpacity = config["subsurfaceOpacity"];
+			}
+
+			pbrTextureSets.insert_or_assign(editorId, textureSetData);
+		}
+	}
+}
+
+State::PBRTextureSetData* State::GetPBRTextureSetData(const RE::TESForm* textureSet)
+{
+	if (textureSet == nullptr) {
+		return nullptr;
+	}
+
+	logger::info("{}", textureSet->GetFormEditorID());
+	auto it = pbrTextureSets.find(textureSet->GetFormEditorID());
+	if (it == pbrTextureSets.end()) {
+		return nullptr;
+	}
+	return &it->second;
+}
+
+bool State::IsPBRTextureSet(const RE::TESForm* textureSet)
+{
+	return GetPBRTextureSetData(textureSet) != nullptr;
 }
