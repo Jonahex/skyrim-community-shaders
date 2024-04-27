@@ -7,12 +7,12 @@ struct LightGrid
 
 struct StructuredLight
 {
-	float3 color;
-	float3 pbrColor;
-	float radius;
-	float4 positionWS[2];
-	float4 positionVS[2];
-	uint firstPersonShadow;
+    float3 color;
+    float radius;
+    float4 positionWS[2];
+    float4 positionVS[2];
+    uint firstPersonShadow;
+    float pad0[3];
 };
 
 struct PerPassLLF

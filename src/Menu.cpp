@@ -440,11 +440,10 @@ void Menu::DrawSettings()
 					state->pbrData.matchDynamicCubemapColorToAmbient = matchDynamicCubemapColorToAmbient;
 				}
 
-				ImGui::Checkbox("PBR LOD Land", &state->pbrSettings.pbrLodLand);
-				ImGui::SliderFloat("Light Color Multiplier", &state->pbrSettings.lightColorMultiplier, 1e-3f, 1e2f, "%.3f", ImGuiSliderFlags_Logarithmic);
-				ImGui::SliderFloat("Light Color Power", &state->pbrSettings.lightColorPower, 1e-3f, 1e2f, "%.3f", ImGuiSliderFlags_Logarithmic);
-				ImGui::SliderFloat("Ambient Light Color Multiplier", &state->pbrSettings.ambientLightColorMultiplier, 1e-3f, 1e2f, "%.3f", ImGuiSliderFlags_Logarithmic);
-				ImGui::SliderFloat("Ambient Light Color Power", &state->pbrSettings.ambientLightColorPower, 1e-3f, 1e2f, "%.3f", ImGuiSliderFlags_Logarithmic);
+				ImGui::SliderFloat("Light Color Multiplier", &state->pbrData.lightColorMultiplier, 1e-3f, 1e2f, "%.3f", ImGuiSliderFlags_Logarithmic);
+				ImGui::SliderFloat("Light Color Power", &state->pbrData.lightColorPower, 1e-3f, 1e2f, "%.3f", ImGuiSliderFlags_Logarithmic);
+				ImGui::SliderFloat("Ambient Light Color Multiplier", &state->pbrData.ambientLightColorMultiplier, 1e-3f, 1e2f, "%.3f", ImGuiSliderFlags_Logarithmic);
+				ImGui::SliderFloat("Ambient Light Color Power", &state->pbrData.ambientLightColorPower, 1e-3f, 1e2f, "%.3f", ImGuiSliderFlags_Logarithmic);
 				ImGui::TreePop();
 			}
 		}

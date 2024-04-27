@@ -131,17 +131,6 @@ public:
 	float screenWidth = 0;
 	float screenHeight = 0;
 
-	struct PBRSettings
-	{
-		bool pbrLodLand = false;
-		float lightColorMultiplier = 1.f;
-		float lightColorPower = 1.f;
-		float ambientLightColorMultiplier = 1.f;
-		float ambientLightColorPower = 1.f;
-	} pbrSettings{};
-
-	RE::NiTransform pbrDirectionalAmbientTransform;
-
 	enum class PBRDiffuseModelType : uint32_t
 	{
 		Lambert,
@@ -163,6 +152,10 @@ public:
 #pragma warning(disable: 4324)
 	struct alignas(16) PBRData
 	{
+		float lightColorMultiplier = 1.f;
+		float lightColorPower = 1.f;
+		float ambientLightColorMultiplier = 1.f;
+		float ambientLightColorPower = 1.f;
 		PBRDiffuseModelType diffuseModel = PBRDiffuseModelType::Lambert;
 		uint32_t useMultipleScattering = true;
 		uint32_t useMultiBounceAO = true;

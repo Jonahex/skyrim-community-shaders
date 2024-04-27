@@ -127,18 +127,14 @@ namespace Permutations
 		constexpr std::array projectedUvFlags{ VC, WorldMap };
 		constexpr std::array treeFlags{ VC, Skinned };
 		constexpr std::array landFlags{ VC };
-		constexpr std::array lodLandFlags{ VC, WorldMap };
 
 		constexpr uint32_t defaultConstantFlags = static_cast<uint32_t>(TruePbr);
 		constexpr uint32_t projectedUvConstantFlags = static_cast<uint32_t>(TruePbr) | static_cast<uint32_t>(ProjectedUV);
-		constexpr uint32_t landNoiseConstantFlags = static_cast<uint32_t>(TruePbr) | static_cast<uint32_t>(ModelSpaceNormals);
 
 		const std::unordered_set<uint32_t> defaultFlagValues = GenerateFlagPermutations(defaultFlags, defaultConstantFlags);
 		const std::unordered_set<uint32_t> projectedUvFlagValues = GenerateFlagPermutations(projectedUvFlags, projectedUvConstantFlags);
 		const std::unordered_set<uint32_t> treeFlagValues = GenerateFlagPermutations(treeFlags, defaultConstantFlags);
 		const std::unordered_set<uint32_t> landFlagValues = GenerateFlagPermutations(landFlags, defaultConstantFlags);
-		const std::unordered_set<uint32_t> lodLandFlagValues = GenerateFlagPermutations(lodLandFlags, defaultConstantFlags);
-		const std::unordered_set<uint32_t> lodLandNoiseFlagValues = GenerateFlagPermutations(landFlags, landNoiseConstantFlags);
 
 		std::unordered_set<uint32_t> result;
 		AddLightingShaderDescriptors(SIE::ShaderCache::LightingShaderTechniques::None, defaultFlagValues, result);
@@ -146,8 +142,6 @@ namespace Permutations
 		AddLightingShaderDescriptors(SIE::ShaderCache::LightingShaderTechniques::TreeAnim, treeFlagValues, result);
 		AddLightingShaderDescriptors(SIE::ShaderCache::LightingShaderTechniques::MTLand, landFlagValues, result);
 		AddLightingShaderDescriptors(SIE::ShaderCache::LightingShaderTechniques::MTLandLODBlend, landFlagValues, result);
-		AddLightingShaderDescriptors(SIE::ShaderCache::LightingShaderTechniques::LODLand, lodLandFlagValues, result);
-		AddLightingShaderDescriptors(SIE::ShaderCache::LightingShaderTechniques::LODLandNoise, lodLandNoiseFlagValues, result);
 		return result;
 	}
 
@@ -159,19 +153,15 @@ namespace Permutations
 		constexpr std::array projectedUvFlags{ DoAlphaTest, AdditionalAlphaMask, Snow, BaseObjectIsSnow };
 		constexpr std::array lodObjectsFlags{ WorldMap, DoAlphaTest, AdditionalAlphaMask, ProjectedUV };
 		constexpr std::array treeFlags{ Skinned, DoAlphaTest, AdditionalAlphaMask };
-		constexpr std::array lodLandFlags{ WorldMap };
 
 		constexpr uint32_t defaultConstantFlags = static_cast<uint32_t>(TruePbr) | static_cast<uint32_t>(VC);
 		constexpr uint32_t projectedUvConstantFlags = static_cast<uint32_t>(TruePbr) | static_cast<uint32_t>(VC) | static_cast<uint32_t>(ProjectedUV);
-		constexpr uint32_t lodLandNoiseConstantFlags = static_cast<uint32_t>(TruePbr) | static_cast<uint32_t>(VC) | static_cast<uint32_t>(ModelSpaceNormals);
 
 		const std::unordered_set<uint32_t> defaultFlagValues = GenerateFlagPermutations(defaultFlags, defaultConstantFlags);
 		const std::unordered_set<uint32_t> projectedUvFlagValues = GenerateFlagPermutations(projectedUvFlags, projectedUvConstantFlags);
 		const std::unordered_set<uint32_t> lodObjectsFlagValues = GenerateFlagPermutations(lodObjectsFlags, defaultConstantFlags);
 		const std::unordered_set<uint32_t> treeFlagValues = GenerateFlagPermutations(treeFlags, defaultConstantFlags);
 		const std::unordered_set<uint32_t> landFlagValues = { defaultConstantFlags };
-		const std::unordered_set<uint32_t> lodLandFlagValues = GenerateFlagPermutations(lodLandFlags, defaultConstantFlags);
-		const std::unordered_set<uint32_t> lodLandNoiseFlagValues = GenerateFlagPermutations(lodLandFlags, lodLandNoiseConstantFlags);
 
 		std::unordered_set<uint32_t> result;
 		AddLightingShaderDescriptors(SIE::ShaderCache::LightingShaderTechniques::None, defaultFlagValues, result);
@@ -181,8 +171,6 @@ namespace Permutations
 		AddLightingShaderDescriptors(SIE::ShaderCache::LightingShaderTechniques::TreeAnim, treeFlagValues, result);
 		AddLightingShaderDescriptors(SIE::ShaderCache::LightingShaderTechniques::MTLand, landFlagValues, result);
 		AddLightingShaderDescriptors(SIE::ShaderCache::LightingShaderTechniques::MTLandLODBlend, landFlagValues, result);
-		AddLightingShaderDescriptors(SIE::ShaderCache::LightingShaderTechniques::LODLand, lodLandFlagValues, result);
-		AddLightingShaderDescriptors(SIE::ShaderCache::LightingShaderTechniques::LODLandNoise, lodLandNoiseFlagValues, result);
 		return result;
 	}
 
@@ -623,10 +611,6 @@ namespace Hooks
 			{
 				isPbr = true;
 			}
-			else if (property->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kLODLandscape) && State::GetSingleton()->pbrSettings.pbrLodLand)
-			{
-				isPbr = true;
-			}
 
 			auto currentPass = renderPasses->head;
 			while (currentPass != nullptr) {
@@ -728,30 +712,6 @@ namespace Hooks
 							PBRParams[2] = pbrMaterial->specularLevels[textureIndex];
 							shadowState->SetPSConstant(PBRParams, RE::BSGraphics::ConstantGroupLevel::PerMaterial, PBRParamsStartIndex + textureIndex);
 						}
-					}
-
-					{
-						std::array<float, 4> lodTexParams;
-						lodTexParams[0] = pbrMaterial->terrainTexOffsetX;
-						lodTexParams[1] = pbrMaterial->terrainTexOffsetY;
-						lodTexParams[2] = 1.f;
-						lodTexParams[3] = pbrMaterial->terrainTexFade;
-						shadowState->SetPSConstant(lodTexParams, RE::BSGraphics::ConstantGroupLevel::PerMaterial, 24);
-					}
-				} 
-				else if (lightingType == LODLand || lightingType == LODLandNoise) {
-					auto* pbrMaterial = static_cast<const RE::BSLightingShaderMaterialLODLandscape*>(material);
-
-					shadowState->SetPSTexture(0, pbrMaterial->diffuseTexture->rendererTexture);
-					shadowState->SetPSTextureAddressMode(0, static_cast<RE::BSGraphics::TextureAddressMode>(pbrMaterial->textureClampMode));
-
-					shadowState->SetPSTexture(1, pbrMaterial->normalTexture->rendererTexture);
-					shadowState->SetPSTextureAddressMode(1, static_cast<RE::BSGraphics::TextureAddressMode>(pbrMaterial->textureClampMode));
-
-					if (lightingType == LODLandNoise && pbrMaterial->landscapeNoiseTexture != nullptr) {
-						shadowState->SetPSTexture(15, pbrMaterial->landscapeNoiseTexture->rendererTexture);
-						shadowState->SetPSTextureAddressMode(15, RE::BSGraphics::TextureAddressMode::kWrapSWrapT);
-						shadowState->SetPSTextureFilterMode(15, RE::BSGraphics::TextureFilterMode::kBilinear);
 					}
 
 					{
@@ -885,26 +845,8 @@ namespace Hooks
 		{
 			const uint32_t originalExtraFlags = shader->currentRawTechnique & 0b111000u;
 
-			RE::NiTransform originalDirectionalAmbient;
-
 			if ((shader->currentRawTechnique & static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::TruePbr)) != 0) {
 				shader->currentRawTechnique |= static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::AmbientSpecular);
-
-				auto state = State::GetSingleton();
-				const float mult = state->pbrSettings.lightColorMultiplier;
-				const float power = state->pbrSettings.lightColorPower;
-
-				for (uint32_t lightIndex = 0; lightIndex < pass->numLights; ++lightIndex) {
-					auto& color = pass->sceneLights[lightIndex]->light->GetLightRuntimeData().diffuse;
-
-					color.red = mult * pow(color.red, power);
-					color.green = mult * pow(color.green, power);
-					color.blue = mult * pow(color.blue, power);
-				}
-
-				auto& shaderManagerState = RE::BSShaderManager::State::GetSingleton();
-				originalDirectionalAmbient = shaderManagerState.directionalAmbientTransform;
-				shaderManagerState.directionalAmbientTransform = state->pbrDirectionalAmbientTransform;
 			}
 
 			shader->currentRawTechnique &= ~0b111000u;
@@ -917,20 +859,6 @@ namespace Hooks
 
 			if ((shader->currentRawTechnique & static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::TruePbr)) != 0) {
 				shader->currentRawTechnique &= ~static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::AmbientSpecular);
-
-				auto state = State::GetSingleton();
-				const float mult = 1.f / state->pbrSettings.lightColorMultiplier;
-				const float power = 1.f / state->pbrSettings.lightColorPower;
-				for (uint32_t lightIndex = 0; lightIndex < pass->numLights; ++lightIndex) {
-					auto& color = pass->sceneLights[lightIndex]->light->GetLightRuntimeData().diffuse;
-
-					color.red = pow(mult * color.red, power);
-					color.green = pow(mult * color.green, power);
-					color.blue = pow(mult * color.blue, power);
-				}
-
-				auto& shaderManagerState = RE::BSShaderManager::State::GetSingleton();
-				shaderManagerState.directionalAmbientTransform = originalDirectionalAmbient;
 			}
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
@@ -1215,35 +1143,6 @@ namespace Hooks
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
-
-	void hk_InitDirectionalAmbient(RE::NiColor (&directionalAmbientColors)[3][2], RE::NiColor* ambientSpecularColor, float ambientSpecularAlpha);
-	decltype(&hk_InitDirectionalAmbient) ptr_InitDirectionalAmbient;
-
-	void hk_InitDirectionalAmbient(RE::NiColor (&directionalAmbientColors)[3][2], RE::NiColor* ambientSpecularColor, float ambientSpecularAlpha)
-	{
-		{
-			auto state = State::GetSingleton();
-			const float mult = state->pbrSettings.ambientLightColorMultiplier;
-			const float power = state->pbrSettings.ambientLightColorPower;
-
-			RE::NiColor pbrDirectionalAmbientColors[3][2];
-			for (size_t i = 0; i < 3; ++i) {
-				for (size_t j = 0; j < 2; ++j) {
-					auto color = directionalAmbientColors[i][j];
-					color.red = mult * pow(color.red, power);
-					color.green = mult * pow(color.green, power);
-					color.blue = mult * pow(color.blue, power);
-					pbrDirectionalAmbientColors[i][j] = color;
-				}
-			}
-
-			auto& shaderManagerState = RE::BSShaderManager::State::GetSingleton();
-			ptr_InitDirectionalAmbient(pbrDirectionalAmbientColors, ambientSpecularColor, ambientSpecularAlpha);
-			state->pbrDirectionalAmbientTransform = shaderManagerState.directionalAmbientTransform;
-		}
-
-		ptr_InitDirectionalAmbient(directionalAmbientColors, ambientSpecularColor, ambientSpecularAlpha);
-	}
 
 	void hk_SetPerFrameBuffers(void* renderer);
 	decltype(&hk_SetPerFrameBuffers) ptr_SetPerFrameBuffers;
@@ -1571,9 +1470,6 @@ namespace Hooks
 		stl::write_vfunc<0x33, TESForm_SetFormEditorID>(RE::VTABLE_TESLandTexture[0]);
 		stl::write_vfunc<0x32, TESForm_GetFormEditorID>(RE::VTABLE_BGSTextureSet[0]);
 		stl::write_vfunc<0x33, TESForm_SetFormEditorID>(RE::VTABLE_BGSTextureSet[0]);
-
-		logger::info("Hooking InitDirectionalAmbient");
-		*(uintptr_t*)&ptr_InitDirectionalAmbient = Detours::X64::DetourFunction(REL::RelocationID(98989, 105643).address(), (uintptr_t)&hk_InitDirectionalAmbient);
 
 		logger::info("Hooking SetPerFrameBuffers");
 		*(uintptr_t*)&ptr_SetPerFrameBuffers = Detours::X64::DetourFunction(REL::RelocationID(75570, 77371).address(), (uintptr_t)&hk_SetPerFrameBuffers);

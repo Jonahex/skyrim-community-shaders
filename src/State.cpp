@@ -299,20 +299,17 @@ void State::Load(ConfigMode a_configMode)
 			pbrData.diffuseModel = pbr["Diffuse Model"];
 		}
 
-		if (pbr["PBR LOD Land"].is_boolean()) {
-			pbrSettings.pbrLodLand = pbr["PBR LOD Land"];
-		}
 		if (pbr["Light Color Multiplier"].is_number_float()) {
-			pbrSettings.lightColorMultiplier = pbr["Light Color Multiplier"];
+			pbrData.lightColorMultiplier = pbr["Light Color Multiplier"];
 		}
 		if (pbr["Light Color Power"].is_number_float()) {
-			pbrSettings.lightColorPower = pbr["Light Color Power"];
+			pbrData.lightColorPower = pbr["Light Color Power"];
 		}
 		if (pbr["Ambient Light Color Multiplier"].is_number_float()) {
-			pbrSettings.ambientLightColorMultiplier = pbr["Ambient Light Color Multiplier"];
+			pbrData.ambientLightColorMultiplier = pbr["Ambient Light Color Multiplier"];
 		}
 		if (pbr["Ambient Light Color Power"].is_number_float()) {
-			pbrSettings.ambientLightColorPower = pbr["Ambient Light Color Power"];
+			pbrData.ambientLightColorPower = pbr["Ambient Light Color Power"];
 		}
 	}
 
@@ -359,11 +356,10 @@ void State::Save(ConfigMode a_configMode)
 		pbr["Use Multi-bounce AO"] = pbrData.useMultiBounceAO;
 		pbr["Diffuse Model"] = pbrData.diffuseModel;
 
-		pbr["PBR LOD Land"] = pbrSettings.pbrLodLand;
-		pbr["Light Color Multiplier"] = pbrSettings.lightColorMultiplier;
-		pbr["Light Color Power"] = pbrSettings.lightColorPower;
-		pbr["Ambient Light Color Multiplier"] = pbrSettings.ambientLightColorMultiplier;
-		pbr["Ambient Light Color Power"] = pbrSettings.ambientLightColorPower;
+		pbr["Light Color Multiplier"] = pbrData.lightColorMultiplier;
+		pbr["Light Color Power"] = pbrData.lightColorPower;
+		pbr["Ambient Light Color Multiplier"] = pbrData.ambientLightColorMultiplier;
+		pbr["Ambient Light Color Power"] = pbrData.ambientLightColorPower;
 		settings["PBR"] = pbr;
 	}
 

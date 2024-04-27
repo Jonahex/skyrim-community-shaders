@@ -378,9 +378,9 @@ typedef VS_OUTPUT PS_INPUT;
 
 struct PS_OUTPUT
 {
-	float4 Albedo : SV_Target0;
-	float4 MotionVectors : SV_Target1;
-	float4 ScreenSpaceNormals : SV_Target2;
+    float4 Albedo : SV_Target0;
+    float4 MotionVectors : SV_Target1;
+    float4 ScreenSpaceNormals : SV_Target2;
 #if defined(SNOW)
 	float4 SnowParameters : SV_Target3;
 #endif
@@ -883,7 +883,7 @@ float GetSnowParameterY(float texProjTmp, float alpha)
 #	endif
 }
 
-#	if defined(WATER_CAUSTICS)
+#if defined(WATER_CAUSTICS)
 #		include "WaterCaustics/WaterCaustics.hlsli"
 #	endif
 
@@ -1413,18 +1413,18 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	}
 
 #		if defined(LOD_LAND_BLEND)
-	float4 lodBlendColor = TexLandLodBlend1Sampler.Sample(SampLandLodBlend1Sampler, input.TexCoord0.zw);
-	float lodBlendTmp = GetLodLandBlendParameter(lodBlendColor.xyz);
+	float4 lodLandColor = TexLandLodBlend1Sampler.Sample(SampLandLodBlend1Sampler, input.TexCoord0.zw);
+	float lodBlendParameter = GetLodLandBlendParameter(lodLandColor.xyz);
 	float lodBlendMask = TexLandLodBlend2Sampler.Sample(SampLandLodBlend2Sampler, 3.0.xx * input.TexCoord0.zw).x;
-	float lodBlendMul1 = GetLodLandBlendMultiplier(lodBlendTmp, lodBlendMask);
-	float lodBlendMul2 = LODTexParams.z * input.LandBlendWeights2.w;
+	float lodLandFadeFactor = GetLodLandBlendMultiplier(lodBlendParameter, lodBlendMask);
+	float lodLandBlendFactor = LODTexParams.z * input.LandBlendWeights2.w;
+#		endif
+
+#		if defined(LOD_LAND_BLEND) && !defined(TRUE_PBR)
 	baseColor.w = 0;
-	baseColor = lerp(baseColor, lodBlendColor * lodBlendMul1, lodBlendMul2);
-	normal.xyz = lerp(normal.xyz, float3(0, 0, 1), lodBlendMul2);
-	glossiness = lerp(glossiness, 0, lodBlendMul2);
-#			if defined(TRUE_PBR)
-	rawRMAOS = lerp(rawRMAOS, float4(1, 0, 1, 1), lodBlendMul2);
-#			endif
+	baseColor = lerp(baseColor, lodLandColor * lodLandFadeFactor, lodLandBlendFactor);
+	normal.xyz = lerp(normal.xyz, float3(0, 0, 1), lodLandBlendFactor);
+	glossiness = lerp(glossiness, 0, lodLandBlendFactor);
 #		endif  // LOD_LAND_BLEND
 
 #		if defined(SNOW)
@@ -1663,14 +1663,19 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 	float3 lightsDiffuseColor = 0.0.xxx;
 	float3 lightsSpecularColor = 0.0.xxx;
+	
+	float3 lodLandDiffuseColor = 0;
 
 #	if defined(TRUE_PBR)
 	{
 		float3 dirDiffuseColor, dirTransmissionColor, dirSpecularColor;
-		GetDirectLightInputPBR(dirDiffuseColor, dirTransmissionColor, dirSpecularColor, modelNormal.xyz, viewDirection, DirLightDirection, sRGB2Lin(dirLightColor), roughness, f0, subsurfaceColor, thickness);
+		GetDirectLightInputPBR(dirDiffuseColor, dirTransmissionColor, dirSpecularColor, modelNormal.xyz, viewDirection, DirLightDirection, AdjustDirectLightColorForPBR(dirLightColor), roughness, f0, subsurfaceColor, thickness);
 		lightsDiffuseColor += dirDiffuseColor;
 		transmissionColor += dirTransmissionColor;
 		specularColorPBR += dirSpecularColor;
+#		if defined(LOD_LAND_BLEND)
+		lodLandDiffuseColor += dirLightColor * saturate(dot(modelNormal.xyz, DirLightDirection.xyz));
+#		endif
 	}
 #	else
 	float dirLightAngle = dot(modelNormal.xyz, DirLightDirection.xyz);
@@ -1828,7 +1833,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #			if defined(TRUE_PBR)
 		{
 			float3 pointDiffuseColor, pointTransmissionColor, pointSpecularColor;
-			GetDirectLightInputPBR(pointDiffuseColor, pointTransmissionColor, pointSpecularColor, modelNormal.xyz, viewDirection, normalizedLightDirection, sRGB2Lin(lightColor), roughness, f0, subsurfaceColor, thickness);
+			GetDirectLightInputPBR(pointDiffuseColor, pointTransmissionColor, pointSpecularColor, modelNormal.xyz, viewDirection, normalizedLightDirection, AdjustDirectLightColorForPBR(lightColor), roughness, f0, subsurfaceColor, thickness);
 			lightsDiffuseColor += pointDiffuseColor;
 			transmissionColor += pointTransmissionColor;
 			specularColorPBR += pointSpecularColor;
@@ -1949,7 +1954,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #			if defined(TRUE_PBR)
 		{
 			float3 pointDiffuseColor, pointTransmissionColor, pointSpecularColor;
-			GetDirectLightInputPBR(pointDiffuseColor, pointTransmissionColor, pointSpecularColor, worldSpaceNormal.xyz, worldSpaceViewDirection, normalizedLightDirection, sRGB2Lin(lightColor), roughness, f0, subsurfaceColor, thickness);
+			GetDirectLightInputPBR(pointDiffuseColor, pointTransmissionColor, pointSpecularColor, worldSpaceNormal.xyz, worldSpaceViewDirection, normalizedLightDirection, AdjustDirectLightColorForPBR(lightColor), roughness, f0, subsurfaceColor, thickness);
 			lightsDiffuseColor += pointDiffuseColor;
 			transmissionColor += pointTransmissionColor;
 			specularColorPBR += pointSpecularColor;
@@ -1995,7 +2000,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 			CharacterLightParams.y * saturate(dot(float2(0.164398998, -0.986393988), modelNormal.yz));
 		float charLightColor = min(CharacterLightParams.w, max(0, CharacterLightParams.z * TexCharacterLightProjNoiseSampler.Sample(SampCharacterLightProjNoiseSampler, baseShadowUV).x));
 #		if defined(TRUE_PBR)
-		charLightColor = sRGB2Lin(charLightColor);
+		charLightColor = AdjustDirectLightColorForPBR(charLightColor);
 #		endif
 		diffuseColor += (charLightMul * charLightColor).xxx;
 	}
@@ -2017,17 +2022,25 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	}
 #	endif
 	
-#if !defined(TRUE_PBR)
+#	if !defined(TRUE_PBR)
 	diffuseColor += emitColor.xyz;
-	
-	float3 directionalAmbientColor = mul(DirectionalAmbient, modelNormal);
-#	if defined(CLOUD_SHADOWS)
-	if (perPassCloudShadow[0].EnableCloudShadows)
-		directionalAmbientColor *= lerp(1.0, cloudShadowMult, perPassCloudShadow[0].AbsorptionAmbient);
 #	endif
 
+	float directionalAmbientShadowFactor = 1.f;
+#	if defined(CLOUD_SHADOWS)
+	if (perPassCloudShadow[0].EnableCloudShadows)
+		directionalAmbientShadowFactor = lerp(1.0, cloudShadowMult, perPassCloudShadow[0].AbsorptionAmbient);
+#	endif
+	
+#	if !defined(TRUE_PBR) || defined(LOD_LAND_BLEND)
+	float3 directionalAmbientColor = mul(DirectionalAmbient, modelNormal) * directionalAmbientShadowFactor;
+
+#		if defined(TRUE_PBR) && defined(LOD_LAND_BLEND)
+	lodLandDiffuseColor += directionalAmbientColor;
+#		else
 	diffuseColor += directionalAmbientColor;
-#endif
+#		endif
+#	endif
 
 #	if defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX) || defined(EYE)
 	float envMaskColor = TexEnvMaskSampler.Sample(SampEnvMaskSampler, uv).x;
@@ -2199,6 +2212,22 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	endif
 
 	color.xyz = Lin2sRGB(color.xyz);
+
+#	if defined(LOD_LAND_BLEND) && defined(TRUE_PBR)
+	{
+		float3 litLodLandColor = input.Color.xyz * lodLandColor * lodLandFadeFactor * lodLandDiffuseColor;
+
+		float3 foggedLitLodLandColor = lerp(litLodLandColor, input.FogParam.xyz, input.FogParam.w);
+		foggedLitLodLandColor = litLodLandColor - foggedLitLodLandColor * FogColor.w;
+
+		float3 lodLandTmpColor = foggedLitLodLandColor * FrameParams.y;
+		foggedLitLodLandColor = lodLandTmpColor + ColourOutputClamp.xxx;
+		foggedLitLodLandColor = min(litLodLandColor, foggedLitLodLandColor);
+
+		color.xyz = lerp(color.xyz, foggedLitLodLandColor, lodLandBlendFactor);
+		tmpColor = lerp(tmpColor, lodLandTmpColor, lodLandBlendFactor);
+	}
+#	endif  // defined(LOD_LAND_BLEND) && defined(TRUE_PBR)
 
 #	if defined(SPECULAR) || defined(SPARKLE)
 	float3 specularTmp = lerp(color.xyz, input.FogParam.xyz, input.FogParam.w);

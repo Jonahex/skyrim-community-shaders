@@ -1,5 +1,9 @@
 struct PBRData
 {
+    float DirectColorMultiplier;
+    float DirectColorPower;
+    float AmbientColorMultiplier;
+    float AmbientColorPower;
 	uint DiffuseModel;
 	bool UseMultipleScattering;
 	bool UseMultiBounceAO;
@@ -19,6 +23,16 @@ struct PBRData
 #define TruePBR_HasDisplacement (1 << 4)
 	
 StructuredBuffer<PBRData> pbrData : register(t121);
+
+float3 AdjustDirectLightColorForPBR(float3 lightColor)
+{
+    return pbrData[0].DirectColorMultiplier * pow(sRGB2Lin(lightColor), pbrData[0].DirectColorPower);
+}
+
+float3 AdjustAmbientLightColorForPBR(float3 lightColor)
+{
+    return pbrData[0].AmbientColorMultiplier * pow(sRGB2Lin(lightColor), pbrData[0].AmbientColorPower);
+}
 
 // [Jimenez et al. 2016, "Practical Realtime Strategies for Accurate Indirect Occlusion"]
 float3 MultiBounceAO(float3 baseColor, float ao)
@@ -265,18 +279,18 @@ void GetAmbientLightInputPBR(out float3 diffuse, out float3 specular, float3 N, 
 	{
 		[branch] if (pbrData[0].MatchDynamicCubemapToAmbient)
 		{
-			ambientScale = sRGB2Lin(float3(DirectionalAmbient[0].w, DirectionalAmbient[1].w, DirectionalAmbient[2].w)) / (PI * perPassDynamicCubemaps[0].AverageColor);
+			ambientScale = AdjustAmbientLightColorForPBR(float3(DirectionalAmbient[0].w, DirectionalAmbient[1].w, DirectionalAmbient[2].w)) / (PI * perPassDynamicCubemaps[0].AverageColor);
 		}
 		
-		specularIrradiance += PI * ambientScale * sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, R, specularLevel).xyz);
-		diffuseIrradiance += PI * ambientScale * sRGB2Lin(diffuseTexture.SampleLevel(SampColorSampler, N, 0).xyz);
+		specularIrradiance += PI * ambientScale * AdjustAmbientLightColorForPBR(specularTexture.SampleLevel(SampColorSampler, R, specularLevel).xyz);
+		diffuseIrradiance += PI * ambientScale * AdjustAmbientLightColorForPBR(diffuseTexture.SampleLevel(SampColorSampler, N, 0).xyz);
 	}
 	else
 #	endif
 	{
-		diffuseIrradiance += sRGB2Lin(mul(DirectionalAmbient, float4(N, 1.f)));
-		specularIrradiance += sRGB2Lin(mul(DirectionalAmbient, float4(R, 1.f)));
-	}
+        diffuseIrradiance += AdjustAmbientLightColorForPBR(mul(DirectionalAmbient, float4(N, 1.f)));
+        specularIrradiance += AdjustAmbientLightColorForPBR(mul(DirectionalAmbient, float4(R, 1.f)));
+    }
 
     float2 specularBRDF = GetEnvBRDFApproxLazarov(roughness, NdotV);
 	
@@ -298,13 +312,13 @@ void GetAmbientLightInputPBR(out float3 diffuse, out float3 specular, float3 N, 
 		[branch] if (pbrData[0].UseDynamicCubemap)
 		{
 			float level = (levelCount - 1) * roughness * roughness + 1 + thickness;
-			subsurfaceSpecularIrradiance += PI * ambientScale * sRGB2Lin(specularTexture.SampleLevel(SampColorSampler, -V, level).xyz);
+			subsurfaceSpecularIrradiance += PI * ambientScale * AdjustAmbientLightColorForPBR(specularTexture.SampleLevel(SampColorSampler, -V, level).xyz);
 		}
 		else
 #	endif
 		{
-			subsurfaceSpecularIrradiance += sRGB2Lin(mul(DirectionalAmbient, float4(-V, 1.f)));
-		}
+            subsurfaceSpecularIrradiance += AdjustAmbientLightColorForPBR(mul(DirectionalAmbient, float4(-V, 1.f)));
+        }
 		
 		float attenuation = (1.0 - thickness) / (2.0 * PI);
 		diffuse += subsurfaceColor * (diffuseIrradiance + subsurfaceSpecularIrradiance) * attenuation;

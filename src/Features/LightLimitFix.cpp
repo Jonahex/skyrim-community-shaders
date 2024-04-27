@@ -283,8 +283,6 @@ void LightLimitFix::BSLightingShader_SetupGeometry_GeometrySetupConstantPointLig
 	auto accumulator = RE::BSGraphics::BSShaderAccumulator::GetCurrentAccumulator();
 	bool inWorld = accumulator->GetRuntimeData().activeShadowSceneNode == RE::BSShaderManager::State::GetSingleton().shadowSceneNode[0];
 
-	auto csState = State::GetSingleton();
-
 	strictLightDataTemp.NumLights = a_pass->numLights - 1;
 	for (uint32_t i = 0; i < strictLightDataTemp.NumLights; i++) {
 		auto bsLight = a_pass->sceneLights[i + 1];
@@ -294,17 +292,8 @@ void LightLimitFix::BSLightingShader_SetupGeometry_GeometrySetupConstantPointLig
 
 		LightData light{};
 		light.color = { runtimeData.diffuse.red, runtimeData.diffuse.green, runtimeData.diffuse.blue };
-
-		float fade = 1.f;
-		fade *= runtimeData.fade;
-		fade *= bsLight->lodDimmer;
-
-		light.pbrColor.x = csState->pbrSettings.lightColorMultiplier * pow(light.color.x, csState->pbrSettings.lightColorPower);
-		light.pbrColor.y = csState->pbrSettings.lightColorMultiplier * pow(light.color.y, csState->pbrSettings.lightColorPower);
-		light.pbrColor.z = csState->pbrSettings.lightColorMultiplier * pow(light.color.z, csState->pbrSettings.lightColorPower);
-
-		light.color *= fade;
-		light.pbrColor *= fade;
+		light.color *= runtimeData.fade;
+		light.color *= bsLight->lodDimmer;
 
 		light.radius = runtimeData.radius.x;
 
@@ -499,7 +488,7 @@ std::optional<LightLimitFix::ConfigPair> LightLimitFix::GetParticleLightConfigs(
 	if (settings.EnableParticleLights) {
 		if (auto shaderProperty = netimmerse_cast<RE::BSEffectShaderProperty*>(a_pass->shaderProperty)) {
 			if (!shaderProperty->lightData) {
-				if (auto material = static_cast<RE::BSEffectShaderMaterial*>(shaderProperty->GetMaterial())) {
+				if (auto material = shaderProperty->GetMaterial()) {
 					if (!material->sourceTexturePath.empty()) {
 						std::string textureName = ExtractTextureStem(material->sourceTexturePath.c_str());
 						if (textureName.size() < 1)
@@ -662,7 +651,6 @@ void LightLimitFix::AddCachedParticleLights(eastl::vector<LightData>& lightsData
 
 	float distance = CalculateLightDistance(light.positionWS[0].data, light.radius);
 
-	float fade = 1.f;
 	float dimmer = 0.0f;
 
 	if (distance < lightFadeStart || lightFadeEnd == 0.0f) {
@@ -673,7 +661,7 @@ void LightLimitFix::AddCachedParticleLights(eastl::vector<LightData>& lightsData
 		dimmer = 0.0f;
 	}
 
-	fade *= dimmer;
+	light.color *= dimmer;
 
 	float distantLightFadeStart = lightsFar * lightsFar * (lightFadeStart / lightFadeEnd);
 	float distantLightFadeEnd = lightsFar * lightsFar;
@@ -686,15 +674,7 @@ void LightLimitFix::AddCachedParticleLights(eastl::vector<LightData>& lightsData
 		dimmer = 0.0f;
 	}
 
-	fade *= dimmer;
-
-	auto csState = State::GetSingleton();
-	light.pbrColor.x = csState->pbrSettings.lightColorMultiplier * pow(light.color.x, csState->pbrSettings.lightColorPower);
-	light.pbrColor.y = csState->pbrSettings.lightColorMultiplier * pow(light.color.y, csState->pbrSettings.lightColorPower);
-	light.pbrColor.z = csState->pbrSettings.lightColorMultiplier * pow(light.color.z, csState->pbrSettings.lightColorPower);
-
-	light.color *= fade;
-	light.pbrColor *= fade;
+	light.color *= dimmer;
 
 	if ((light.color.x + light.color.y + light.color.z) > 1e-4 && light.radius > 1e-4) {
 		if (a_geometry && a_config && a_config->flicker) {
@@ -752,8 +732,7 @@ void LightLimitFix::UpdateLights()
 	lightsFar = std::min(16384.0f, accumulator->kCamera->GetRuntimeData2().viewFrustum.fFar);
 
 	auto shadowSceneNode = RE::BSShaderManager::State::GetSingleton().shadowSceneNode[0];
-	auto csState = State::GetSingleton();
-	auto& state = csState->shadowState;
+	auto& state = State::GetSingleton()->shadowState;
 
 	// Cache data since cameraData can become invalid in first-person
 
@@ -802,14 +781,8 @@ void LightLimitFix::UpdateLights()
 
 					LightData light{};
 					light.color = { runtimeData.diffuse.red, runtimeData.diffuse.green, runtimeData.diffuse.blue };
-
-					light.pbrColor.x = csState->pbrSettings.lightColorMultiplier * pow(light.color.x, csState->pbrSettings.lightColorPower);
-					light.pbrColor.y = csState->pbrSettings.lightColorMultiplier * pow(light.color.y, csState->pbrSettings.lightColorPower);
-					light.pbrColor.z = csState->pbrSettings.lightColorMultiplier * pow(light.color.z, csState->pbrSettings.lightColorPower);
-
-					float fade = 1.f;
-					fade *= runtimeData.fade;
-					fade *= bsLight->lodDimmer;
+					light.color *= runtimeData.fade;
+					light.color *= bsLight->lodDimmer;
 
 					light.radius = runtimeData.radius.x;
 
@@ -833,10 +806,7 @@ void LightLimitFix::UpdateLights()
 						dimmer = 0.0f;
 					}
 
-					fade *= dimmer;
-
-					light.color *= fade;
-					light.pbrColor *= fade;
+					light.color *= dimmer;
 
 					if ((light.color.x + light.color.y + light.color.z) > 1e-4 && light.radius > 1e-4) {
 						light.firstPersonShadow = bsLight == firstPersonLight || bsLight == thirdPersonLight || niLight == refLight || niLight == magicLight;
