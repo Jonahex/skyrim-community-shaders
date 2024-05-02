@@ -504,6 +504,17 @@ void State::SetupResources()
 		pbrDataBuffer->CreateSRV(srvDesc);
 	}
 
+	{
+		D3D11_BUFFER_DESC ibDesc{};
+		ibDesc.Usage = D3D11_USAGE_DYNAMIC;
+		ibDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+		ibDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+		ibDesc.MiscFlags = 0;
+		ibDesc.StructureByteStride = sizeof(UtilityPerInstanceData);
+		ibDesc.ByteWidth = sizeof(UtilityPerInstanceData) * MaxInstanceCount;
+		instanceBuffer = std::make_unique<Buffer>(ibDesc);
+	}
+
 	// Grab main texture to get resolution
 	// VR cannot use viewport->screenWidth/Height as it's the desktop preview window's resolution and not HMD
 	D3D11_TEXTURE2D_DESC texDesc{};

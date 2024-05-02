@@ -401,6 +401,9 @@ void Menu::DrawSettings()
 				ImGui::Text(std::format("Shader Compiler : {}", shaderCache.GetShaderStatsString()).c_str());
 				ImGui::TreePop();
 			}
+			ImGui::Checkbox("Automatic Instancing", &State::GetSingleton()->automaticInstancing);
+			ImGui::SliderInt("Min Instances", &State::GetSingleton()->minInstanceCount, 2, static_cast<int32_t>(State::MaxInstanceCount));
+			ImGui::SliderInt("Max Instances", &State::GetSingleton()->maxInstanceCount, 2, static_cast<int32_t>(State::MaxInstanceCount));
 			ImGui::Checkbox("Extended Frame Annotations", &State::GetSingleton()->extendedFrameAnnotations);
 			if (ImGui::TreeNodeEx("PBR", ImGuiTreeNodeFlags_DefaultOpen)) {
 				auto state = State::GetSingleton();

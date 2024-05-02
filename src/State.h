@@ -131,6 +131,24 @@ public:
 	float screenWidth = 0;
 	float screenHeight = 0;
 
+	static constexpr size_t MaxInstanceCount = 256;
+
+	struct UtilityPerInstanceData
+	{
+		DirectX::XMMATRIX world;
+		DirectX::XMVECTOR treeParams;
+	};
+
+	bool automaticInstancing = false;
+	int32_t minInstanceCount = 2;
+	int32_t maxInstanceCount = static_cast<int32_t>(MaxInstanceCount);
+
+	bool isInstancedPass = false;
+	uint32_t instanceCount = 0;
+
+	std::unordered_map<uint32_t, winrt::com_ptr<ID3D11InputLayout>> instancedInputLayouts;
+	std::unique_ptr<Buffer> instanceBuffer;
+
 	enum class PBRDiffuseModelType : uint32_t
 	{
 		Lambert,

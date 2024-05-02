@@ -386,6 +386,7 @@ namespace SIE
 			LodObject = 1 << 27,
 			LocalMapFogOfWar = 1 << 28,
 			OpaqueEffect = 1 << 29,
+			Instanced = 1 << 30,
 		};
 
 		uint blockedKeyIndex = (uint)-1;  // index in shaderMap; negative value indicates disabled

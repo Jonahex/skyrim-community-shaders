@@ -889,7 +889,7 @@ namespace FrameAnnotations
 		stl::write_vfunc<0xA, BSShadowParabolicLight_RenderShadowmaps>(
 			RE::VTABLE_BSShadowParabolicLight[0]);
 
-		*(uintptr_t*)&ptr_BSBatchRenderer_RenderBatches = Detours::X64::DetourFunction(REL::RelocationID(100852, 107642).address(), (uintptr_t)&hk_BSBatchRenderer_RenderBatches);
+		//*(uintptr_t*)&ptr_BSBatchRenderer_RenderBatches = Detours::X64::DetourFunction(REL::RelocationID(100852, 107642).address(), (uintptr_t)&hk_BSBatchRenderer_RenderBatches);
 		*(uintptr_t*)&ptr_Main_RenderDepth = Detours::X64::DetourFunction(REL::RelocationID(100421, 107139).address(), (uintptr_t)&hk_Main_RenderDepth);
 		*(uintptr_t*)&ptr_Main_RenderShadowmasks = Detours::X64::DetourFunction(REL::RelocationID(100422, 107140).address(), (uintptr_t)&hk_Main_RenderShadowmasks);
 		*(uintptr_t*)&ptr_Main_RenderWorld = Detours::X64::DetourFunction(REL::RelocationID(100424, 107142).address(), (uintptr_t)&hk_Main_RenderWorld);

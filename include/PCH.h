@@ -142,6 +142,7 @@ using json = nlohmann::json;
 #include <EASTL/array.h>
 #include <EASTL/bitset.h>
 #include <EASTL/bonus/fixed_ring_buffer.h>
+#include <EASTL/fixed_hash_map.h>
 #include <EASTL/fixed_list.h>
 #include <EASTL/fixed_slist.h>
 #include <EASTL/fixed_vector.h>

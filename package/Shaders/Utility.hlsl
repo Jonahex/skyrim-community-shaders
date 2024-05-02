@@ -26,6 +26,14 @@ struct VS_INPUT
 	float4 BoneWeights : BLENDWEIGHT0;
 	float4 BoneIndices : BLENDINDICES0;
 #endif
+	
+#	if defined(INSTANCED)
+    float4 World0 : INSTANCEPOS0;
+    float4 World1 : INSTANCEPOS1;
+    float4 World2 : INSTANCEPOS2;
+    float4 World3 : INSTANCEPOS3;
+    float4 TreeParams : INSTANCEPOS4;
+#endif
 };
 
 struct VS_OUTPUT
@@ -98,6 +106,14 @@ float2 SmoothSaturate(float2 value)
 VS_OUTPUT main(VS_INPUT input)
 {
 	VS_OUTPUT vsout;
+	
+#	if defined(INSTANCED)
+    row_major float4x4 world = float4x4(input.World0, input.World1, input.World2, input.World3);
+	float4 treeParams = input.TreeParams;
+#	else
+	row_major float4x4 world = World;
+	float4 treeParams = TreeParams;
+#	endif
 
 	uint eyeIndex = GetEyeIndexVS(
 #	if defined(VR)
@@ -127,13 +143,13 @@ VS_OUTPUT main(VS_INPUT input)
 #		endif
 
 #		if defined(VC) && defined(NORMALS) && defined(TREE_ANIM)
-	float2 treeTmp1 = SmoothSaturate(abs(2 * frac(float2(0.1, 0.25) * (TreeParams.w * TreeParams.y * TreeParams.x) + dot(input.PositionMS.xyz, 1.0.xxx) + 0.5) - 1));
-	float normalMult = (treeTmp1.x + 0.1 * treeTmp1.y) * (input.Color.w * TreeParams.z);
+	float2 treeTmp1 = SmoothSaturate(abs(2 * frac(float2(0.1, 0.25) * (treeParams.w * treeParams.y * treeParams.x) + dot(input.PositionMS.xyz, 1.0.xxx) + 0.5) - 1));
+	float normalMult = (treeTmp1.x + 0.1 * treeTmp1.y) * (input.Color.w * treeParams.z);
 	positionMS.xyz += normalMS.xyz * normalMult;
 #		endif
 
 #		if defined(LOD_LANDSCAPE)
-	positionMS = AdjustLodLandscapeVertexPositionMS(positionMS, World, HighDetailRange);
+	positionMS = AdjustLodLandscapeVertexPositionMS(positionMS, world, HighDetailRange);
 #		endif
 
 #		if defined(SKINNED)
@@ -144,7 +160,7 @@ VS_OUTPUT main(VS_INPUT input)
 
 	positionCS = mul(CameraViewProj[eyeIndex], positionWS);
 #		else
-	precise float4x4 modelViewProj = mul(CameraViewProj[eyeIndex], World);
+	precise float4x4 modelViewProj = mul(CameraViewProj[eyeIndex], world);
 	positionCS = mul(modelViewProj, positionMS);
 #		endif
 
@@ -171,7 +187,7 @@ VS_OUTPUT main(VS_INPUT input)
 	normalMS = normalize(mul(normalMS, transpose(boneRSMatrix)));
 	normalVS = mul(CameraView[eyeIndex], float4(normalMS, 0)).xyz;
 #			else
-	normalVS = mul(mul(CameraView[eyeIndex], World), float4(normalMS, 0)).xyz;
+	normalVS = mul(mul(CameraView[eyeIndex], world), float4(normalMS, 0)).xyz;
 #			endif
 #			if defined(RENDER_NORMAL_CLAMP)
 	normalVS = max(min(normalVS, 0.1), -0.1);

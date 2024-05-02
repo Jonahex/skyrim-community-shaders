@@ -432,6 +432,11 @@ namespace SIE
 		{
 			using enum ShaderCache::UtilityShaderFlags;
 
+			if (descriptor & static_cast<uint32_t>(Instanced)) {
+				defines[0] = { "INSTANCED", nullptr };
+				++defines;
+			}
+
 			if (descriptor & static_cast<uint32_t>(Vc)) {
 				defines[0] = { "VC", nullptr };
 				++defines;

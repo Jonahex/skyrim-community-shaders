@@ -11,6 +11,22 @@
 
 #include "ShaderTools/BSShaderHooks.h"
 
+namespace RE
+{
+	class BSLeafAnimNode
+	{
+	public:
+		uint64_t parents[43];
+
+		float unk158;
+		float leafAmplitude;
+		float leafFrequency;
+		float unk164;
+		float unk168;
+	};
+	static_assert(sizeof(BSLeafAnimNode) == 0x170);
+}
+
 std::unordered_map<void*, std::pair<std::unique_ptr<uint8_t[]>, size_t>> ShaderBytecodeMap;
 
 void RegisterShaderBytecode(void* Shader, const void* Bytecode, size_t BytecodeLength)
@@ -1398,6 +1414,515 @@ namespace Hooks
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
+	winrt::com_ptr<ID3D11InputLayout> CreateInputLayout(const RE::BSGraphics::VertexDesc& vertexDesc)
+	{
+		using enum RE::BSGraphics::Vertex::Attribute;
+
+		D3D11_INPUT_ELEMENT_DESC inputElements[32];
+		UINT elementIndex = 0;
+
+		auto addElement = [&vertexDesc, &inputElements, &elementIndex](RE::BSGraphics::Vertex::Attribute attribute, LPCSTR semanticName, UINT semanticIndex, DXGI_FORMAT format, UINT offset, D3D11_INPUT_CLASSIFICATION inputClass) {
+			UINT inputSlot = std::numeric_limits<UINT>::max();
+			if ((vertexDesc.GetFlags() & (1 << attribute)) != 0) {
+				inputSlot = 0;
+			} else if ((vertexDesc.GetFlags() & (1 << (attribute + VA_COUNT))) != 0) {
+				inputSlot = 1;
+			}
+			if (attribute == VA_POSITION) {
+				inputElements[elementIndex++] = { semanticName, semanticIndex, format, inputSlot, 0, inputClass, static_cast<UINT>(inputClass) };
+			} else if (inputSlot != -1) {
+				inputElements[elementIndex++] = { semanticName, semanticIndex, format, inputSlot, vertexDesc.GetAttributeOffset(attribute) + offset, inputClass, static_cast<UINT>(inputClass) };
+			}
+		};
+
+		addElement(VA_POSITION, "POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_INPUT_PER_VERTEX_DATA);
+		addElement(VA_TEXCOORD0, "TEXCOORD", 0, DXGI_FORMAT_R16G16_FLOAT, 0, D3D11_INPUT_PER_VERTEX_DATA);
+		addElement(VA_TEXCOORD1, "TEXCOORD", 1, DXGI_FORMAT_R16G16B16A16_FLOAT, 0, D3D11_INPUT_PER_VERTEX_DATA);
+		addElement(VA_NORMAL, "NORMAL", 0, DXGI_FORMAT_R8G8B8A8_UNORM, 0, D3D11_INPUT_PER_VERTEX_DATA);
+		addElement(VA_BINORMAL, "BINORMAL", 0, DXGI_FORMAT_R8G8B8A8_UNORM, 0, D3D11_INPUT_PER_VERTEX_DATA);
+		addElement(VA_COLOR, "COLOR", 0, DXGI_FORMAT_R8G8B8A8_UNORM, 0, D3D11_INPUT_PER_VERTEX_DATA);
+		addElement(VA_SKINNING, "BLENDWEIGHT", 0, DXGI_FORMAT_R16G16B16A16_FLOAT, 0, D3D11_INPUT_PER_VERTEX_DATA);
+		addElement(VA_SKINNING, "BLENDINDICES", 0, DXGI_FORMAT_R8G8B8A8_UNORM, 8, D3D11_INPUT_PER_VERTEX_DATA);
+		addElement(VA_LANDDATA, "TEXCOORD", 2, DXGI_FORMAT_R8G8B8A8_UNORM, 0, D3D11_INPUT_PER_VERTEX_DATA);
+		addElement(VA_LANDDATA, "TEXCOORD", 3, DXGI_FORMAT_R8G8B8A8_UNORM, 4, D3D11_INPUT_PER_VERTEX_DATA);
+		addElement(VA_EYEDATA, "COLOR", 0, DXGI_FORMAT_R8G8B8A8_UNORM, 0, D3D11_INPUT_PER_VERTEX_DATA);
+		//addElement(VA_INSTANCEDATA, "TEXCOORD", 4, DXGI_FORMAT_R16G16B16A16_FLOAT, 0, D3D11_INPUT_PER_INSTANCE_DATA);
+		//addElement(VA_INSTANCEDATA, "TEXCOORD", 5, DXGI_FORMAT_R16G16B16A16_FLOAT, 8, D3D11_INPUT_PER_INSTANCE_DATA);
+		//addElement(VA_INSTANCEDATA, "TEXCOORD", 6, DXGI_FORMAT_R16G16B16A16_FLOAT, 16, D3D11_INPUT_PER_INSTANCE_DATA);
+		//addElement(VA_INSTANCEDATA, "TEXCOORD", 7, DXGI_FORMAT_R16G16B16A16_FLOAT, 24, D3D11_INPUT_PER_INSTANCE_DATA);
+
+		inputElements[elementIndex++] = { "INSTANCEPOS", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 0, D3D11_INPUT_PER_INSTANCE_DATA, 1 };
+		inputElements[elementIndex++] = { "INSTANCEPOS", 1, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 16, D3D11_INPUT_PER_INSTANCE_DATA, 1 };
+		inputElements[elementIndex++] = { "INSTANCEPOS", 2, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 32, D3D11_INPUT_PER_INSTANCE_DATA, 1 };
+		inputElements[elementIndex++] = { "INSTANCEPOS", 3, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 48, D3D11_INPUT_PER_INSTANCE_DATA, 1 };
+		inputElements[elementIndex++] = { "INSTANCEPOS", 4, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 64, D3D11_INPUT_PER_INSTANCE_DATA, 1 };
+
+		winrt::com_ptr<ID3D11InputLayout> result;
+		State::GetSingleton()->device->CreateInputLayout(inputElements, elementIndex, State::GetSingleton()->shadowState->GetRuntimeData().currentVertexShader->rawBytecode, State::GetSingleton()->shadowState->GetRuntimeData().currentVertexShader->byteCodeSize, result.put());
+		return result;
+	}
+
+	void GetXMFromNi(DirectX::XMMATRIX& matrix, const RE::NiTransform& transform)
+	{
+		using func_t = decltype(&GetXMFromNi);
+		static REL::Relocation<func_t> func{ RELOCATION_ID(99814, 106462) };
+		func(matrix, transform);
+	}
+
+	void SetupInstances(RE::BSRenderPass* firstPass, uint32_t instanceCount)
+	{
+		static auto* csState = State::GetSingleton();
+
+		auto* buffer = csState->instanceBuffer->resource.get();
+
+		D3D11_MAPPED_SUBRESOURCE mappedBuffer;
+		csState->context->Map(buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedBuffer);
+
+		auto* pass = firstPass;
+		for (uint32_t instanceIndex = 0; instanceIndex < instanceCount; ++instanceIndex) {
+			auto& perInstance = static_cast<State::UtilityPerInstanceData*>(mappedBuffer.pData)[instanceIndex];
+			GetXMFromNi(perInstance.world, pass->geometry->world);
+			perInstance.world = DirectX::XMMatrixTranspose(perInstance.world);
+			pass = pass->passGroupNext;
+		}
+
+		csState->context->Unmap(buffer, 0);
+	}
+
+	float FastRSqrt(float number)
+	{
+		union
+		{
+			float f;
+			uint32_t i;
+		} conv;
+
+		const float x2 = number * 0.5f;
+		conv.f = number;
+		conv.i = 0x5f3759df - (conv.i >> 1);
+		conv.f = conv.f * (1.5f - (x2 * conv.f * conv.f));
+		return conv.f;
+	}
+
+	void SetupInstances(RE::BSRenderPass* const * passes, uint32_t instanceCount, stl::enumeration<SIE::ShaderCache::UtilityShaderFlags> technique)
+	{
+		static auto* csState = State::GetSingleton();
+		static auto& shaderManager = RE::BSShaderManager::State::GetSingleton();
+
+		auto* buffer = csState->instanceBuffer->resource.get();
+
+		D3D11_MAPPED_SUBRESOURCE mappedBuffer;
+		csState->context->Map(buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedBuffer);
+
+		const bool isTree = technique.any(SIE::ShaderCache::UtilityShaderFlags::TreeAnim);
+
+		for (uint32_t instanceIndex = 0; instanceIndex < instanceCount; ++instanceIndex) {
+			auto& perInstance = static_cast<State::UtilityPerInstanceData*>(mappedBuffer.pData)[instanceIndex];
+			GetXMFromNi(perInstance.world, passes[instanceIndex]->geometry->world);
+			perInstance.world = DirectX::XMMatrixTranspose(perInstance.world);
+
+			if (isTree)
+			{
+				float a = 0.f, b = 0.f;
+				if (auto leafAnimNode = passes[instanceIndex]->shaderProperty->fadeNode->AsLeafAnimNode())
+				{
+					perInstance.treeParams.m128_f32[0] = leafAnimNode->unk164 * 6.f;
+					perInstance.treeParams.m128_f32[1] = shaderManager.shadowSceneNode[0]->GetRuntimeData().unk304;
+					a = leafAnimNode->unk158 * FastRSqrt(leafAnimNode->unk158);
+					b = leafAnimNode->leafAmplitude;
+					perInstance.treeParams.m128_f32[3] = leafAnimNode->leafFrequency;
+				}
+				else
+				{
+					perInstance.treeParams.m128_f32[0] = 0.f;
+					perInstance.treeParams.m128_f32[1] = 0.f;
+					a = 0.f;
+					b = 1.f;
+					perInstance.treeParams.m128_f32[3] = 1.f;
+				}
+				perInstance.treeParams.m128_f32[2] = std::clamp((1.f - (a - shaderManager.leafAnimDampenDistStartSPU) / (shaderManager.leafAnimDampenDistEndSPU - shaderManager.leafAnimDampenDistStartSPU)) * b, 0.f, b);
+			}
+		}
+
+		csState->context->Unmap(buffer, 0);
+	}
+
+	void hk_Renderer_DrawTriShape(RE::BSGraphics::Renderer* renderer, RE::BSGraphics::TriShape* shape, uint32_t startIndex, uint32_t count);
+	decltype(&hk_Renderer_DrawTriShape) ptr_Renderer_DrawTriShape;
+	void hk_Renderer_DrawTriShape([[maybe_unused]] RE::BSGraphics::Renderer* renderer, RE::BSGraphics::TriShape* shape, uint32_t startIndex, uint32_t count)
+	{
+		static auto* csState = State::GetSingleton();
+		static auto* shadowState = csState->shadowState;
+		static auto* context = csState->context;
+
+		shadowState->SetVertexDesc(shape->vertexDesc);
+		shadowState->SetTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+		hk_BSGraphics_SetDirtyStates(false);
+		context->IASetIndexBuffer(reinterpret_cast<ID3D11Buffer*>(shape->indexBuffer), DXGI_FORMAT_R16_UINT, 0);
+
+		if (csState->isInstancedPass) {
+			winrt::com_ptr<ID3D11InputLayout> instancedLayout;
+			const uint32_t currentTechnique = RE::BSBatchRenderer::GetCurrentTechnique();
+			if (auto it = csState->instancedInputLayouts.find(currentTechnique); it != csState->instancedInputLayouts.end())
+			{
+				instancedLayout = it->second;
+			}
+			else
+			{
+				instancedLayout = CreateInputLayout(shape->vertexDesc);
+				csState->instancedInputLayouts.insert_or_assign(currentTechnique, instancedLayout);
+			}
+
+			context->IASetInputLayout(instancedLayout.get());
+
+			ID3D11Buffer* vertexBuffers[2]{ reinterpret_cast<ID3D11Buffer*>(shape->vertexBuffer), csState->instanceBuffer->resource.get() };
+			const UINT strides[2]{ shape->vertexDesc.GetStride(), sizeof(State::UtilityPerInstanceData) };
+			const UINT offsets[2]{ 0, 0 };
+			context->IASetVertexBuffers(0, 2, vertexBuffers, strides, offsets);
+
+			context->DrawIndexedInstanced(3 * count, csState->instanceCount, startIndex, 0, 0);
+		} else {
+			const uint32_t stride = shape->vertexDesc.GetStride();
+			const uint32_t offset = 0;
+			context->IASetVertexBuffers(0, 1, reinterpret_cast<ID3D11Buffer**>(&shape->vertexBuffer), &stride, &offset);
+			context->DrawIndexed(3 * count, startIndex, 0);
+		}
+	}
+
+	bool CompareRenderPasses(const RE::BSRenderPass* first, const RE::BSRenderPass* second)
+	{
+		const auto materialOrder = first->shaderProperty->material <=> second->shaderProperty->material;
+		if (materialOrder == std::strong_ordering::less) {
+			return true;
+		}
+		if (materialOrder == std::strong_ordering::equal) {
+			return first->geometry->GetGeometryRuntimeData().rendererData < second->geometry->GetGeometryRuntimeData().rendererData;
+		}
+		return false;
+	}
+
+	bool hk_BSBatchRenderer_RenderBatches(RE::BSBatchRenderer* batchRenderer, uint32_t& technique, uint32_t& bucketIndex, RE::BSSimpleList<uint32_t>** passIndexList, uint32_t renderFlags);
+	decltype(&hk_BSBatchRenderer_RenderBatches) ptr_BSBatchRenderer_RenderBatches;
+	bool hk_BSBatchRenderer_RenderBatches(RE::BSBatchRenderer* batchRenderer, uint32_t& technique, uint32_t& bucketIndex, RE::BSSimpleList<uint32_t>** passIndexList, uint32_t renderFlags)
+	{
+		auto* csState = State::GetSingleton();
+		auto* shadowState = csState->shadowState;
+
+		if (csState->extendedFrameAnnotations) {
+			State::GetSingleton()->BeginPerfEvent(std::format("BSBatchRenderer::RenderBatches ({:X})[{}] <{}>", technique, bucketIndex,
+				renderFlags));
+		}
+
+		uint32_t passGroupIndex = 0;
+		if (auto it = batchRenderer->techniqueToPassGroupIndex.find(technique); it != batchRenderer->techniqueToPassGroupIndex.end()) {
+			passGroupIndex = it->second;
+		}
+
+		auto& passGroup = batchRenderer->passGroups[passGroupIndex];
+
+		bool canInstance = csState->automaticInstancing;
+		uint32_t instancedTechnique = technique;
+		auto utilityTechnique = stl::enumeration(static_cast<SIE::ShaderCache::UtilityShaderFlags>(technique - 0x2B));
+
+		/*static std::array<RE::BSRenderPass*, 8192> tmpArray;
+
+		struct PassRange
+		{
+			uint32_t begin;
+			uint32_t end;
+		};
+
+		static std::array<PassRange, 1024> instancedSubBatches;
+		uint32_t instancedSubBatchCount = 0;
+		static std::array<PassRange, 1024> normalSubBatches;
+		uint32_t normalSubBatchCount = 0;*/
+
+		struct SubBatch
+		{
+			std::array<RE::BSRenderPass*, 256> passes;
+			uint32_t passCount = 0;
+		};
+		static eastl::fixed_hash_map<RE::BSGraphics::TriShape*, SubBatch, 1024> subBatches;
+
+		subBatches.clear();
+
+		if (canInstance) {
+			if (auto* firstPass = passGroup.passes[bucketIndex]) {
+				if (firstPass->shader->shaderType != RE::BSShader::Type::Utility)
+				{
+					canInstance = false;
+				}
+				using enum SIE::ShaderCache::UtilityShaderFlags;
+				if (utilityTechnique.any(Skinned)) {
+					canInstance = false;
+				}
+
+				if (canInstance) {
+					utilityTechnique.set(Instanced);
+					instancedTechnique = 0x2B + static_cast<uint32_t>(utilityTechnique.underlying());
+
+					for (auto* pass = firstPass; pass; pass = pass->passGroupNext)
+					{
+						const bool instanceable = pass->geometry->GetGeometryRuntimeData().skinInstance == nullptr && (pass->geometry->flags02 & 0x8) == 0;
+						
+						RE::BSGraphics::TriShape* rendererData = pass->geometry->GetGeometryRuntimeData().rendererData;
+						if (!instanceable)
+						{
+							rendererData = nullptr;
+						}
+						if (auto it = subBatches.find(rendererData); it != subBatches.end()) {
+							it->second.passes[it->second.passCount++] = pass;
+						} else {
+							subBatches.insert_or_assign(rendererData, SubBatch{ { pass }, 1 });
+						}
+					}
+
+					/*auto* pass = firstPass;
+					uint32_t passCount = 0;
+					while (pass != nullptr) {
+						tmpArray[passCount] = pass;
+						pass = pass->passGroupNext;
+						++passCount;
+					}
+					tmpArray[passCount] = nullptr;
+
+					canInstance = passCount >= static_cast<uint32_t>(csState->minInstanceCount);
+					if (canInstance) {
+						eastl::sort(&tmpArray[0], &tmpArray[passCount], &CompareRenderPasses);
+						for (uint32_t index = 0; index < passCount; ++index) {
+							tmpArray[index]->passGroupNext = tmpArray[index + 1];
+						}
+						passGroup.passes[bucketIndex] = tmpArray[0];
+
+						uint32_t index = 0;
+						while (index < passCount)
+						{
+							const bool instanceable = tmpArray[index]->geometry->GetGeometryRuntimeData().skinInstance == nullptr && (tmpArray[index]->geometry->flags02 & 0x8) == 0;
+							if (instanceable)
+							{
+								uint32_t instanceIndex = index + 1;
+								while (instanceIndex < passCount)
+								{
+									if (tmpArray[instanceIndex]->geometry->GetGeometryRuntimeData().rendererData != tmpArray[index]->geometry->GetGeometryRuntimeData().rendererData)
+									{
+										break;
+									}
+									++instanceIndex;
+								}
+
+								const uint32_t subBatchSize = instanceIndex - index;
+								if (subBatchSize >= static_cast<uint32_t>(csState->minInstanceCount))
+								{
+									instancedSubBatches[instancedSubBatchCount++] = { index, index + subBatchSize };
+								}
+
+								index = instanceIndex;
+								continue;
+							}
+							++index;
+						}
+
+						if (instancedSubBatchCount > 0) {
+							normalSubBatches[normalSubBatchCount++] = { 0, instancedSubBatches[0].begin };
+							for (uint32_t subBatchIndex = 0; subBatchIndex < instancedSubBatchCount - 1; ++subBatchIndex) {
+								normalSubBatches[normalSubBatchCount++] = { instancedSubBatches[subBatchIndex].end, instancedSubBatches[subBatchIndex + 1].begin };
+							}
+							normalSubBatches[normalSubBatchCount++] = {instancedSubBatches[instancedSubBatchCount - 1].end, passCount };
+						}
+						else {
+							normalSubBatches[normalSubBatchCount++] = { 0, passCount };
+						}
+					}*/
+				}
+			}
+		}
+
+		bool alphaTest = false;
+		{
+			static const REL::Relocation<bool*> enableAlphaToCoverage{ RELOCATION_ID(527661, 414575) };
+
+			const bool forceCullMode = (renderFlags & 0x108) == 0;
+
+			using enum RE::BSBatchRenderer::PassGroup::Bucket;
+			switch (static_cast<RE::BSBatchRenderer::PassGroup::Bucket>(bucketIndex)) {
+			case Default:
+				if (forceCullMode) {
+					shadowState->SetCullMode(RE::BSGraphics::RASTER_STATE_CULL_MODE_BACK);
+				}
+				shadowState->SetAlphaTestEnabled(false);
+				shadowState->SetAlphaBlendAlphaToCoverage(false);
+				break;
+
+			case AlphaTest:
+				if (forceCullMode) {
+					shadowState->SetCullMode(RE::BSGraphics::RASTER_STATE_CULL_MODE_BACK);
+				}
+				shadowState->SetAlphaTestEnabled(true);
+				if (*enableAlphaToCoverage) {
+					shadowState->SetAlphaBlendAlphaToCoverage(true);
+				}
+				alphaTest = true;
+				break;
+
+			case TwoSided:
+				if (forceCullMode) {
+					shadowState->SetCullMode(RE::BSGraphics::RASTER_STATE_CULL_MODE_NO_CULLING);
+				}
+				shadowState->SetAlphaTestEnabled(false);
+				shadowState->SetAlphaBlendAlphaToCoverage(false);
+				break;
+
+			case TwoSidedAlphaTest:
+				if (forceCullMode) {
+					shadowState->SetCullMode(RE::BSGraphics::RASTER_STATE_CULL_MODE_NO_CULLING);
+				}
+				shadowState->SetAlphaTestEnabled(true);
+				if (*enableAlphaToCoverage) {
+					shadowState->SetAlphaBlendAlphaToCoverage(true);
+				}
+				alphaTest = true;
+				break;
+
+			case AlphaTestNoAlphaToCoverage:
+				if (forceCullMode) {
+					shadowState->SetCullMode(RE::BSGraphics::RASTER_STATE_CULL_MODE_BACK);
+				}
+				shadowState->SetAlphaTestEnabled(true);
+				shadowState->SetAlphaBlendAlphaToCoverage(false);
+				alphaTest = true;
+				break;
+			}
+		}
+
+		/*if (canInstance) {
+			for (uint32_t subBatchIndex = 0; subBatchIndex < normalSubBatchCount; ++subBatchIndex) {
+				for (uint32_t passIndex = normalSubBatches[subBatchIndex].begin; passIndex < normalSubBatches[subBatchIndex].end; ++passIndex) {
+					RE::BSBatchRenderer::RenderPassImmediately(tmpArray[passIndex], technique, alphaTest, renderFlags);
+				}
+			}
+			if (instancedSubBatchCount > 0) {
+				csState->isInstancedPass = true;
+
+				RE::BSShaderManager::State::GetSingleton().currentShaderTechnique = technique;
+				batchRenderer->EndPass();
+				if (tmpArray[instancedSubBatches[0].begin]->shader->SetupTechnique(instancedTechnique)) {
+					RE::BSBatchRenderer::GetCurrentShader() = tmpArray[instancedSubBatches[0].begin]->shader;
+					RE::BSBatchRenderer::GetCurrentTechnique() = instancedTechnique;
+
+					for (uint32_t subBatchIndex = 0; subBatchIndex < instancedSubBatchCount; ++subBatchIndex) {
+						const uint32_t firstPassIndex = instancedSubBatches[subBatchIndex].begin;
+						const uint32_t lastPassIndex = instancedSubBatches[subBatchIndex].end;
+						auto* firstPass = tmpArray[firstPassIndex];
+						csState->instanceCount = lastPassIndex - firstPassIndex;
+
+						auto* material = firstPass->shaderProperty->material;
+						if (material != RE::BSBatchRenderer::GetCurrentMaterial()) {
+							if (material != nullptr) {
+								firstPass->shader->SetupMaterial(material);
+							}
+							RE::BSBatchRenderer::GetCurrentMaterial() = material;
+						}
+
+						RE::BSBatchRenderer::SetupGeometry(firstPass, firstPass->shader, alphaTest || RE::BSGraphics::State::GetSingleton()->useEarlyZ, renderFlags);
+						SetupInstances(firstPass, csState->instanceCount);
+						RE::BSBatchRenderer::Draw(firstPass);
+						firstPass->shader->RestoreGeometry(firstPass, renderFlags);
+
+						csState->instanceCount = 0;
+					}
+				} else {
+					RE::BSBatchRenderer::GetCurrentShader() = nullptr;
+					RE::BSBatchRenderer::GetCurrentTechnique() = 0;
+				}
+
+				csState->isInstancedPass = false;
+			}
+		}
+		else
+		{
+			for (auto currentPass = passGroup.passes[bucketIndex]; currentPass; currentPass = currentPass->passGroupNext)
+			{
+				RE::BSBatchRenderer::RenderPassImmediately(currentPass, technique, alphaTest, renderFlags);
+			}
+		}*/
+
+		if (!subBatches.empty()) {
+			bool hasInstanced = false;
+			for (const auto& [rendererData, data] : subBatches)
+			{
+				if (rendererData == nullptr || data.passCount < static_cast<uint32_t>(csState->minInstanceCount)) {
+					for (uint32_t passIndex = 0; passIndex < data.passCount; ++passIndex) {
+						RE::BSBatchRenderer::RenderPassImmediately(data.passes[passIndex], technique, alphaTest, renderFlags);
+					}
+				}
+				else
+				{
+					hasInstanced = true;
+				}
+			}
+			if (hasInstanced) {
+				csState->isInstancedPass = true;
+
+				RE::BSShaderManager::State::GetSingleton().currentShaderTechnique = technique;
+				batchRenderer->EndPass();
+				auto* defaultShader = subBatches.begin()->second.passes[0]->shader;
+				if (defaultShader->SetupTechnique(instancedTechnique)) {
+					RE::BSBatchRenderer::GetCurrentShader() = defaultShader;
+					RE::BSBatchRenderer::GetCurrentTechnique() = instancedTechnique;
+
+					for (const auto& [rendererData, data] : subBatches) {
+						if (rendererData != nullptr && data.passCount >= static_cast<uint32_t>(csState->minInstanceCount)) {
+							auto* firstPass = data.passes[0];
+							csState->instanceCount = data.passCount;
+
+							auto* material = firstPass->shaderProperty->material;
+							if (material != RE::BSBatchRenderer::GetCurrentMaterial()) {
+								if (material != nullptr) {
+									firstPass->shader->SetupMaterial(material);
+								}
+								RE::BSBatchRenderer::GetCurrentMaterial() = material;
+							}
+
+							RE::BSBatchRenderer::SetupGeometry(firstPass, firstPass->shader, alphaTest || RE::BSGraphics::State::GetSingleton()->useEarlyZ, renderFlags);
+							SetupInstances(data.passes.data(), data.passCount, utilityTechnique);
+							RE::BSBatchRenderer::Draw(firstPass);
+							firstPass->shader->RestoreGeometry(firstPass, renderFlags);
+
+							csState->instanceCount = 0;
+						}
+					}
+				} else {
+					RE::BSBatchRenderer::GetCurrentShader() = nullptr;
+					RE::BSBatchRenderer::GetCurrentTechnique() = 0;
+				}
+
+				csState->isInstancedPass = false;
+			}
+		} else {
+			for (auto currentPass = passGroup.passes[bucketIndex]; currentPass; currentPass = currentPass->passGroupNext) {
+				RE::BSBatchRenderer::RenderPassImmediately(currentPass, technique, alphaTest, renderFlags);
+			}
+		}
+
+		if (batchRenderer->autoClearPasses) {
+			passGroup.validBuckets &= ~(1 << bucketIndex);
+			passGroup.passes[bucketIndex] = nullptr;
+		}
+
+		batchRenderer->EndPass();
+
+		shadowState->SetAlphaBlendAlphaToCoverage(false);
+
+		++bucketIndex;
+		const auto result = batchRenderer->GetFirstOrNextNonEmptyTechniqueAndBucket(technique, bucketIndex, passIndexList);
+
+		if (csState->extendedFrameAnnotations) {
+			State::GetSingleton()->EndPerfEvent();
+		}
+
+		return result;
+	}
+
 	void Install()
 	{
 		SKSE::AllocTrampoline(14);
@@ -1478,5 +2003,8 @@ namespace Hooks
 		logger::info("Hooking BSGrassShader");
 		stl::write_vfunc<0x2, BSGrassShader_SetupTechnique>(RE::VTABLE_BSGrassShader[0]);
 		stl::write_vfunc<0x4, BSGrassShader_SetupMaterial>(RE::VTABLE_BSGrassShader[0]);
+
+		*(uintptr_t*)&ptr_Renderer_DrawTriShape = Detours::X64::DetourFunction(REL::RelocationID(75477, 77263).address(), (uintptr_t)&hk_Renderer_DrawTriShape);
+		*(uintptr_t*)&ptr_BSBatchRenderer_RenderBatches = Detours::X64::DetourFunction(REL::RelocationID(100852, 107642).address(), (uintptr_t)&hk_BSBatchRenderer_RenderBatches);
 	}
 }
