@@ -512,7 +512,18 @@ void State::SetupResources()
 		ibDesc.MiscFlags = 0;
 		ibDesc.StructureByteStride = sizeof(UtilityPerInstanceData);
 		ibDesc.ByteWidth = sizeof(UtilityPerInstanceData) * MaxInstanceCount;
-		instanceBuffer = std::make_unique<Buffer>(ibDesc);
+		utilityInstanceBuffer = std::make_unique<Buffer>(ibDesc);
+	}
+
+	{
+		D3D11_BUFFER_DESC ibDesc{};
+		ibDesc.Usage = D3D11_USAGE_DYNAMIC;
+		ibDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+		ibDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+		ibDesc.MiscFlags = 0;
+		ibDesc.StructureByteStride = sizeof(LightingPerInstanceData);
+		ibDesc.ByteWidth = sizeof(LightingPerInstanceData) * MaxInstanceCount;
+		lightingInstanceBuffer = std::make_unique<Buffer>(ibDesc);
 	}
 
 	// Grab main texture to get resolution

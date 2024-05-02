@@ -133,21 +133,32 @@ public:
 
 	static constexpr size_t MaxInstanceCount = 256;
 
+	bool automaticInstancing = false;
+	int32_t minInstanceCount = 2;
+	int32_t maxInstanceCount = static_cast<int32_t>(MaxInstanceCount);
+
+	bool isInstancedPass = false;
+	RE::BSShader::Type instancedShaderType = RE::BSShader::Type::None;
+	uint32_t instanceCount = 0;
+
+	std::array<std::unordered_map<uint32_t, winrt::com_ptr<ID3D11InputLayout>>, RE::BSShader::Type::Total> instancedInputLayouts;
+
 	struct UtilityPerInstanceData
 	{
 		DirectX::XMMATRIX world;
 		DirectX::XMVECTOR treeParams;
 	};
 
-	bool automaticInstancing = false;
-	int32_t minInstanceCount = 2;
-	int32_t maxInstanceCount = static_cast<int32_t>(MaxInstanceCount);
+	std::unique_ptr<Buffer> utilityInstanceBuffer;
 
-	bool isInstancedPass = false;
-	uint32_t instanceCount = 0;
+	struct LightingPerInstanceData
+	{
+		DirectX::XMFLOAT3X4 world;
+		DirectX::XMFLOAT3X4 previousWorld;
+		DirectX::XMVECTOR treeParams;
+	};
 
-	std::unordered_map<uint32_t, winrt::com_ptr<ID3D11InputLayout>> instancedInputLayouts;
-	std::unique_ptr<Buffer> instanceBuffer;
+	std::unique_ptr<Buffer> lightingInstanceBuffer;
 
 	enum class PBRDiffuseModelType : uint32_t
 	{

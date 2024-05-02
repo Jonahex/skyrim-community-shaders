@@ -283,6 +283,12 @@ decltype(&hk_BSShader_BeginTechnique) ptr_BSShader_BeginTechnique;
 bool hk_BSShader_BeginTechnique(RE::BSShader* shader, uint32_t vertexDescriptor, uint32_t pixelDescriptor, bool skipPixelShader)
 {
 	auto state = State::GetSingleton();
+
+	if (state->isInstancedPass && shader->shaderType == RE::BSShader::Type::Lighting)
+	{
+		vertexDescriptor |= static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::Instanced);
+	}
+
 	state->currentShader = shader;
 	state->currentVertexDescriptor = vertexDescriptor;
 	state->currentPixelDescriptor = pixelDescriptor;
@@ -1418,6 +1424,8 @@ namespace Hooks
 	{
 		using enum RE::BSGraphics::Vertex::Attribute;
 
+		static auto* csState = State::GetSingleton();
+
 		D3D11_INPUT_ELEMENT_DESC inputElements[32];
 		UINT elementIndex = 0;
 
@@ -1451,45 +1459,86 @@ namespace Hooks
 		//addElement(VA_INSTANCEDATA, "TEXCOORD", 6, DXGI_FORMAT_R16G16B16A16_FLOAT, 16, D3D11_INPUT_PER_INSTANCE_DATA);
 		//addElement(VA_INSTANCEDATA, "TEXCOORD", 7, DXGI_FORMAT_R16G16B16A16_FLOAT, 24, D3D11_INPUT_PER_INSTANCE_DATA);
 
-		inputElements[elementIndex++] = { "INSTANCEPOS", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 0, D3D11_INPUT_PER_INSTANCE_DATA, 1 };
-		inputElements[elementIndex++] = { "INSTANCEPOS", 1, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 16, D3D11_INPUT_PER_INSTANCE_DATA, 1 };
-		inputElements[elementIndex++] = { "INSTANCEPOS", 2, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 32, D3D11_INPUT_PER_INSTANCE_DATA, 1 };
-		inputElements[elementIndex++] = { "INSTANCEPOS", 3, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 48, D3D11_INPUT_PER_INSTANCE_DATA, 1 };
-		inputElements[elementIndex++] = { "INSTANCEPOS", 4, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 64, D3D11_INPUT_PER_INSTANCE_DATA, 1 };
+		if (csState->instancedShaderType == RE::BSShader::Type::Utility) {
+			inputElements[elementIndex++] = { "INSTANCEPOS", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 0, D3D11_INPUT_PER_INSTANCE_DATA, 1 };
+			inputElements[elementIndex++] = { "INSTANCEPOS", 1, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 16, D3D11_INPUT_PER_INSTANCE_DATA, 1 };
+			inputElements[elementIndex++] = { "INSTANCEPOS", 2, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 32, D3D11_INPUT_PER_INSTANCE_DATA, 1 };
+			inputElements[elementIndex++] = { "INSTANCEPOS", 3, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 48, D3D11_INPUT_PER_INSTANCE_DATA, 1 };
+			inputElements[elementIndex++] = { "INSTANCEPOS", 4, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 64, D3D11_INPUT_PER_INSTANCE_DATA, 1 };
+		} else if (csState->instancedShaderType == RE::BSShader::Type::Lighting) {
+			inputElements[elementIndex++] = { "INSTANCEPOS", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 0, D3D11_INPUT_PER_INSTANCE_DATA, 1 };
+			inputElements[elementIndex++] = { "INSTANCEPOS", 1, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 16, D3D11_INPUT_PER_INSTANCE_DATA, 1 };
+			inputElements[elementIndex++] = { "INSTANCEPOS", 2, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 32, D3D11_INPUT_PER_INSTANCE_DATA, 1 };
+			inputElements[elementIndex++] = { "INSTANCEPOS", 3, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 48, D3D11_INPUT_PER_INSTANCE_DATA, 1 };
+			inputElements[elementIndex++] = { "INSTANCEPOS", 4, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 64, D3D11_INPUT_PER_INSTANCE_DATA, 1 };
+			inputElements[elementIndex++] = { "INSTANCEPOS", 5, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 80, D3D11_INPUT_PER_INSTANCE_DATA, 1 };
+			inputElements[elementIndex++] = { "INSTANCEPOS", 6, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 96, D3D11_INPUT_PER_INSTANCE_DATA, 1 };
+		}
 
 		winrt::com_ptr<ID3D11InputLayout> result;
 		State::GetSingleton()->device->CreateInputLayout(inputElements, elementIndex, State::GetSingleton()->shadowState->GetRuntimeData().currentVertexShader->rawBytecode, State::GetSingleton()->shadowState->GetRuntimeData().currentVertexShader->byteCodeSize, result.put());
 		return result;
 	}
 
-	void GetXMFromNi(DirectX::XMMATRIX& matrix, const RE::NiTransform& transform)
+	DirectX::XMMATRIX GetXMFromNiPosAdjust(const RE::NiTransform& transform, const RE::NiPoint3& posAdjust)
 	{
-		using func_t = decltype(&GetXMFromNi);
-		static REL::Relocation<func_t> func{ RELOCATION_ID(99814, 106462) };
-		func(matrix, transform);
+		DirectX::XMMATRIX temp;
+
+		const RE::NiMatrix3& m = transform.rotate;
+		const float scale = transform.scale;
+
+		temp.r[0] = DirectX::XMVectorScale(DirectX::XMVectorSet(
+									  m.entry[0][0],
+									  m.entry[1][0],
+									  m.entry[2][0],
+									  0.0f),
+			scale);
+
+		temp.r[1] = DirectX::XMVectorScale(DirectX::XMVectorSet(
+									  m.entry[0][1],
+									  m.entry[1][1],
+									  m.entry[2][1],
+									  0.0f),
+			scale);
+
+		temp.r[2] = DirectX::XMVectorScale(DirectX::XMVectorSet(
+									  m.entry[0][2],
+									  m.entry[1][2],
+									  m.entry[2][2],
+									  0.0f),
+			scale);
+
+		temp.r[3] = DirectX::XMVectorSet(
+			transform.translate.x - posAdjust.x,
+			transform.translate.y - posAdjust.y,
+			transform.translate.z - posAdjust.z,
+			1.0f);
+
+		return temp;
 	}
 
-	void SetupInstances(RE::BSRenderPass* firstPass, uint32_t instanceCount)
+	DirectX::XMMATRIX GetXMFromNi(const RE::NiTransform& transform)
 	{
-		static auto* csState = State::GetSingleton();
-
-		auto* buffer = csState->instanceBuffer->resource.get();
-
-		D3D11_MAPPED_SUBRESOURCE mappedBuffer;
-		csState->context->Map(buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedBuffer);
-
-		auto* pass = firstPass;
-		for (uint32_t instanceIndex = 0; instanceIndex < instanceCount; ++instanceIndex) {
-			auto& perInstance = static_cast<State::UtilityPerInstanceData*>(mappedBuffer.pData)[instanceIndex];
-			GetXMFromNi(perInstance.world, pass->geometry->world);
-			perInstance.world = DirectX::XMMatrixTranspose(perInstance.world);
-			pass = pass->passGroupNext;
-		}
-
-		csState->context->Unmap(buffer, 0);
+		return GetXMFromNiPosAdjust(transform, State::GetSingleton()->shadowState->GetRuntimeData().posAdjust.getEye(0));
 	}
 
-	float FastRSqrt(float number)
+	void TransposeStoreMatrix3x4(float* Dest, const DirectX::XMMATRIX& Source)
+	{
+		DirectX::XMMATRIX transposed = DirectX::XMMatrixTranspose(Source);
+
+		_mm_store_ps(&Dest[0], transposed.r[0]);
+		_mm_store_ps(&Dest[4], transposed.r[1]);
+		_mm_store_ps(&Dest[8], transposed.r[2]);
+	}
+
+	void GeometrySetupConstantWorld(float* data, const RE::NiTransform& transform, const RE::NiPoint3* posAdjust)
+	{
+		DirectX::XMMATRIX projMatrix;
+		projMatrix = posAdjust ? GetXMFromNiPosAdjust(transform, *posAdjust) : GetXMFromNi(transform);
+		TransposeStoreMatrix3x4(data, projMatrix);
+	}
+
+	float FastInvSqrt(float number)
 	{
 		union
 		{
@@ -1504,43 +1553,78 @@ namespace Hooks
 		return conv.f;
 	}
 
-	void SetupInstances(RE::BSRenderPass* const * passes, uint32_t instanceCount, stl::enumeration<SIE::ShaderCache::UtilityShaderFlags> technique)
+	void SetupTreeParams(RE::BSFadeNode* fadeNode, DirectX::XMVECTOR& treeParams)
+	{
+		float invDistToCamera = 0.0f;
+		float leafAmplitude = 1.0f;
+		float leafFrequency = 1.0f;
+		float windTimer = 0.f;
+
+		if (auto* leafAnimNode = fadeNode->AsLeafAnimNode()) {
+			//invDistToCamera = 1.0f / std::sqrt(leafAnimNode->unk158);
+			invDistToCamera = FastInvSqrt(leafAnimNode->unk158);
+			leafAmplitude = leafAnimNode->leafAmplitude;
+			leafFrequency = leafAnimNode->leafFrequency;
+			windTimer = leafAnimNode->unk164 * 6.f;
+		}
+
+		static auto& shaderManager = RE::BSShaderManager::State::GetSingleton();
+		const float dampenStart = shaderManager.leafAnimDampenDistStartSPU;
+		const float dampenEnd = shaderManager.leafAnimDampenDistEndSPU;
+		const float clampedAmplitude = std::min(leafAmplitude, std::max((1.0f - ((invDistToCamera - dampenStart) / (dampenEnd - dampenStart))) * leafAmplitude, 0.0f));
+
+		treeParams.m128_f32[0] = windTimer;
+		treeParams.m128_f32[1] = shaderManager.shadowSceneNode[0]->GetRuntimeData().unk304;
+		treeParams.m128_f32[2] = clampedAmplitude;
+		treeParams.m128_f32[3] = leafFrequency;
+	}
+
+	void SetupInstancesUtility(RE::BSRenderPass* const * passes, uint32_t instanceCount, stl::enumeration<SIE::ShaderCache::UtilityShaderFlags> flags)
 	{
 		static auto* csState = State::GetSingleton();
 		static auto& shaderManager = RE::BSShaderManager::State::GetSingleton();
 
-		auto* buffer = csState->instanceBuffer->resource.get();
+		auto* buffer = csState->utilityInstanceBuffer->resource.get();
 
 		D3D11_MAPPED_SUBRESOURCE mappedBuffer;
 		csState->context->Map(buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedBuffer);
 
-		const bool isTree = technique.any(SIE::ShaderCache::UtilityShaderFlags::TreeAnim);
+		const bool isTree = flags.any(SIE::ShaderCache::UtilityShaderFlags::TreeAnim);
 
 		for (uint32_t instanceIndex = 0; instanceIndex < instanceCount; ++instanceIndex) {
 			auto& perInstance = static_cast<State::UtilityPerInstanceData*>(mappedBuffer.pData)[instanceIndex];
-			GetXMFromNi(perInstance.world, passes[instanceIndex]->geometry->world);
-			perInstance.world = DirectX::XMMatrixTranspose(perInstance.world);
+			perInstance.world = DirectX::XMMatrixTranspose(GetXMFromNi(passes[instanceIndex]->geometry->world));
 
 			if (isTree)
 			{
-				float a = 0.f, b = 0.f;
-				if (auto leafAnimNode = passes[instanceIndex]->shaderProperty->fadeNode->AsLeafAnimNode())
-				{
-					perInstance.treeParams.m128_f32[0] = leafAnimNode->unk164 * 6.f;
-					perInstance.treeParams.m128_f32[1] = shaderManager.shadowSceneNode[0]->GetRuntimeData().unk304;
-					a = leafAnimNode->unk158 * FastRSqrt(leafAnimNode->unk158);
-					b = leafAnimNode->leafAmplitude;
-					perInstance.treeParams.m128_f32[3] = leafAnimNode->leafFrequency;
-				}
-				else
-				{
-					perInstance.treeParams.m128_f32[0] = 0.f;
-					perInstance.treeParams.m128_f32[1] = 0.f;
-					a = 0.f;
-					b = 1.f;
-					perInstance.treeParams.m128_f32[3] = 1.f;
-				}
-				perInstance.treeParams.m128_f32[2] = std::clamp((1.f - (a - shaderManager.leafAnimDampenDistStartSPU) / (shaderManager.leafAnimDampenDistEndSPU - shaderManager.leafAnimDampenDistStartSPU)) * b, 0.f, b);
+				SetupTreeParams(passes[instanceIndex]->shaderProperty->fadeNode, perInstance.treeParams);
+			}
+		}
+
+		csState->context->Unmap(buffer, 0);
+	}
+
+	void SetupInstancesLighting(RE::BSRenderPass* const* passes, uint32_t instanceCount, SIE::ShaderCache::LightingShaderTechniques technique, [[maybe_unused]] stl::enumeration<SIE::ShaderCache::LightingShaderFlags> flags)
+	{
+		static auto* csState = State::GetSingleton();
+		static auto& shaderManager = RE::BSShaderManager::State::GetSingleton();
+
+		auto* buffer = csState->lightingInstanceBuffer->resource.get();
+
+		D3D11_MAPPED_SUBRESOURCE mappedBuffer;
+		csState->context->Map(buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedBuffer);
+
+		const bool isTree = technique == SIE::ShaderCache::LightingShaderTechniques::TreeAnim;
+		const RE::NiPoint3 previousPosAdjust = csState->shadowState->GetRuntimeData().previousPosAdjust.getEye(0);
+
+		for (uint32_t instanceIndex = 0; instanceIndex < instanceCount; ++instanceIndex) {
+			auto& perInstance = static_cast<State::LightingPerInstanceData*>(mappedBuffer.pData)[instanceIndex];
+
+			GeometrySetupConstantWorld(perInstance.world.f, passes[instanceIndex]->geometry->world, nullptr);
+			GeometrySetupConstantWorld(perInstance.previousWorld.f, passes[instanceIndex]->geometry->previousWorld, &previousPosAdjust);
+
+			if (isTree) {
+				SetupTreeParams(passes[instanceIndex]->shaderProperty->fadeNode, perInstance.treeParams);
 			}
 		}
 
@@ -1562,21 +1646,23 @@ namespace Hooks
 
 		if (csState->isInstancedPass) {
 			winrt::com_ptr<ID3D11InputLayout> instancedLayout;
+
+			auto& instancedInputLayouts = csState->instancedInputLayouts[csState->instancedShaderType];
 			const uint32_t currentTechnique = RE::BSBatchRenderer::GetCurrentTechnique();
-			if (auto it = csState->instancedInputLayouts.find(currentTechnique); it != csState->instancedInputLayouts.end())
+			if (auto it = instancedInputLayouts.find(currentTechnique); it != instancedInputLayouts.end())
 			{
 				instancedLayout = it->second;
 			}
 			else
 			{
 				instancedLayout = CreateInputLayout(shape->vertexDesc);
-				csState->instancedInputLayouts.insert_or_assign(currentTechnique, instancedLayout);
+				instancedInputLayouts.insert_or_assign(currentTechnique, instancedLayout);
 			}
 
 			context->IASetInputLayout(instancedLayout.get());
 
-			ID3D11Buffer* vertexBuffers[2]{ reinterpret_cast<ID3D11Buffer*>(shape->vertexBuffer), csState->instanceBuffer->resource.get() };
-			const UINT strides[2]{ shape->vertexDesc.GetStride(), sizeof(State::UtilityPerInstanceData) };
+			ID3D11Buffer* vertexBuffers[2]{ reinterpret_cast<ID3D11Buffer*>(shape->vertexBuffer), csState->instancedShaderType == RE::BSShader::Type::Utility ? csState->utilityInstanceBuffer->resource.get() : csState->lightingInstanceBuffer->resource.get() };
+			const UINT strides[2]{ shape->vertexDesc.GetStride(), csState->instancedShaderType == RE::BSShader::Type::Utility ? sizeof(State::UtilityPerInstanceData) : sizeof(State::LightingPerInstanceData) };
 			const UINT offsets[2]{ 0, 0 };
 			context->IASetVertexBuffers(0, 2, vertexBuffers, strides, offsets);
 
@@ -1601,6 +1687,16 @@ namespace Hooks
 		return false;
 	}
 
+	template <typename Tval>
+	struct PointerHash
+	{
+		size_t operator()(const Tval* val) const
+		{
+			static const size_t shift = static_cast<size_t>(std::log2(1 + sizeof(Tval)));
+			return reinterpret_cast<size_t>(val) >> shift;
+		}
+	};
+
 	bool hk_BSBatchRenderer_RenderBatches(RE::BSBatchRenderer* batchRenderer, uint32_t& technique, uint32_t& bucketIndex, RE::BSSimpleList<uint32_t>** passIndexList, uint32_t renderFlags);
 	decltype(&hk_BSBatchRenderer_RenderBatches) ptr_BSBatchRenderer_RenderBatches;
 	bool hk_BSBatchRenderer_RenderBatches(RE::BSBatchRenderer* batchRenderer, uint32_t& technique, uint32_t& bucketIndex, RE::BSSimpleList<uint32_t>** passIndexList, uint32_t renderFlags)
@@ -1622,117 +1718,65 @@ namespace Hooks
 
 		bool canInstance = csState->automaticInstancing;
 		uint32_t instancedTechnique = technique;
-		auto utilityTechnique = stl::enumeration(static_cast<SIE::ShaderCache::UtilityShaderFlags>(technique - 0x2B));
-
-		/*static std::array<RE::BSRenderPass*, 8192> tmpArray;
-
-		struct PassRange
-		{
-			uint32_t begin;
-			uint32_t end;
-		};
-
-		static std::array<PassRange, 1024> instancedSubBatches;
-		uint32_t instancedSubBatchCount = 0;
-		static std::array<PassRange, 1024> normalSubBatches;
-		uint32_t normalSubBatchCount = 0;*/
+		RE::BSShader::Type instancedShaderType = RE::BSShader::Type::None;
+		auto utilityFlags = stl::enumeration(static_cast<SIE::ShaderCache::UtilityShaderFlags>(technique - 0x2B));
+		const auto lightingTechnique = static_cast<SIE::ShaderCache::LightingShaderTechniques>(0x3F & ((technique - 0x4800002D) >> 24));
+		auto lightingFlags = stl::enumeration(static_cast<SIE::ShaderCache::LightingShaderFlags>(technique - 0x4800002D));
 
 		struct SubBatch
 		{
 			std::array<RE::BSRenderPass*, 256> passes;
 			uint32_t passCount = 0;
 		};
-		static eastl::fixed_hash_map<RE::BSGraphics::TriShape*, SubBatch, 1024> subBatches;
+		static eastl::fixed_hash_map<RE::BSGraphics::TriShape*, SubBatch, 1024, 1025, false, PointerHash<RE::BSGraphics::TriShape>> subBatches;
+
+		static std::array<RE::BSRenderPass*, 8192> nonInstanceablePasses;
+		uint32_t nonInstanceablePassCount = 0;
 
 		subBatches.clear();
 
 		if (canInstance) {
 			if (auto* firstPass = passGroup.passes[bucketIndex]) {
-				if (firstPass->shader->shaderType != RE::BSShader::Type::Utility)
-				{
-					canInstance = false;
+				if (firstPass->shader->shaderType == RE::BSShader::Type::Utility) {
+					using enum SIE::ShaderCache::UtilityShaderFlags;
+					if (utilityFlags.any(Skinned)) {
+						canInstance = false;
+					}
+					instancedShaderType = RE::BSShader::Type::Utility;
+					utilityFlags.set(Instanced);
+					instancedTechnique = 0x2B + static_cast<uint32_t>(utilityFlags.underlying());
+				} else if (firstPass->shader->shaderType == RE::BSShader::Type::Lighting) {
+					using enum SIE::ShaderCache::LightingShaderFlags;
+					if (lightingFlags.any(Skinned)) {
+						canInstance = false;
+					}
+					if (lightingTechnique != SIE::ShaderCache::LightingShaderTechniques::None && lightingTechnique != SIE::ShaderCache::LightingShaderTechniques::TreeAnim && lightingTechnique != SIE::ShaderCache::LightingShaderTechniques::Glowmap && lightingTechnique != SIE::ShaderCache::LightingShaderTechniques::Envmap) {
+						canInstance = false;
+					}
+					instancedShaderType = RE::BSShader::Type::Lighting;
+					lightingFlags.set(Instanced);
+					instancedTechnique = 0x4800002D + static_cast<uint32_t>(lightingFlags.underlying());
 				}
-				using enum SIE::ShaderCache::UtilityShaderFlags;
-				if (utilityTechnique.any(Skinned)) {
+				else
+				{
 					canInstance = false;
 				}
 
 				if (canInstance) {
-					utilityTechnique.set(Instanced);
-					instancedTechnique = 0x2B + static_cast<uint32_t>(utilityTechnique.underlying());
-
-					for (auto* pass = firstPass; pass; pass = pass->passGroupNext)
-					{
-						const bool instanceable = pass->geometry->GetGeometryRuntimeData().skinInstance == nullptr && (pass->geometry->flags02 & 0x8) == 0;
-						
-						RE::BSGraphics::TriShape* rendererData = pass->geometry->GetGeometryRuntimeData().rendererData;
-						if (!instanceable)
-						{
-							rendererData = nullptr;
-						}
-						if (auto it = subBatches.find(rendererData); it != subBatches.end()) {
-							it->second.passes[it->second.passCount++] = pass;
+					for (auto* pass = firstPass; pass; pass = pass->passGroupNext) {
+						auto& geometryData = pass->geometry->GetGeometryRuntimeData();
+						const bool instanceable = geometryData.skinInstance == nullptr && pass->geometry->GetType() == RE::BSGeometry::Type::kTriShape && (pass->geometry->flags02 & 0x8) == 0;
+						if (!instanceable) {
+							nonInstanceablePasses[nonInstanceablePassCount++] = pass;
 						} else {
-							subBatches.insert_or_assign(rendererData, SubBatch{ { pass }, 1 });
+							RE::BSGraphics::TriShape* rendererData = geometryData.rendererData;
+							if (auto it = subBatches.find(rendererData); it != subBatches.end()) {
+								it->second.passes[it->second.passCount++] = pass;
+							} else {
+								subBatches.insert_or_assign(rendererData, SubBatch{ { pass }, 1 });
+							}
 						}
 					}
-
-					/*auto* pass = firstPass;
-					uint32_t passCount = 0;
-					while (pass != nullptr) {
-						tmpArray[passCount] = pass;
-						pass = pass->passGroupNext;
-						++passCount;
-					}
-					tmpArray[passCount] = nullptr;
-
-					canInstance = passCount >= static_cast<uint32_t>(csState->minInstanceCount);
-					if (canInstance) {
-						eastl::sort(&tmpArray[0], &tmpArray[passCount], &CompareRenderPasses);
-						for (uint32_t index = 0; index < passCount; ++index) {
-							tmpArray[index]->passGroupNext = tmpArray[index + 1];
-						}
-						passGroup.passes[bucketIndex] = tmpArray[0];
-
-						uint32_t index = 0;
-						while (index < passCount)
-						{
-							const bool instanceable = tmpArray[index]->geometry->GetGeometryRuntimeData().skinInstance == nullptr && (tmpArray[index]->geometry->flags02 & 0x8) == 0;
-							if (instanceable)
-							{
-								uint32_t instanceIndex = index + 1;
-								while (instanceIndex < passCount)
-								{
-									if (tmpArray[instanceIndex]->geometry->GetGeometryRuntimeData().rendererData != tmpArray[index]->geometry->GetGeometryRuntimeData().rendererData)
-									{
-										break;
-									}
-									++instanceIndex;
-								}
-
-								const uint32_t subBatchSize = instanceIndex - index;
-								if (subBatchSize >= static_cast<uint32_t>(csState->minInstanceCount))
-								{
-									instancedSubBatches[instancedSubBatchCount++] = { index, index + subBatchSize };
-								}
-
-								index = instanceIndex;
-								continue;
-							}
-							++index;
-						}
-
-						if (instancedSubBatchCount > 0) {
-							normalSubBatches[normalSubBatchCount++] = { 0, instancedSubBatches[0].begin };
-							for (uint32_t subBatchIndex = 0; subBatchIndex < instancedSubBatchCount - 1; ++subBatchIndex) {
-								normalSubBatches[normalSubBatchCount++] = { instancedSubBatches[subBatchIndex].end, instancedSubBatches[subBatchIndex + 1].begin };
-							}
-							normalSubBatches[normalSubBatchCount++] = {instancedSubBatches[instancedSubBatchCount - 1].end, passCount };
-						}
-						else {
-							normalSubBatches[normalSubBatchCount++] = { 0, passCount };
-						}
-					}*/
 				}
 			}
 		}
@@ -1794,63 +1838,14 @@ namespace Hooks
 			}
 		}
 
-		/*if (canInstance) {
-			for (uint32_t subBatchIndex = 0; subBatchIndex < normalSubBatchCount; ++subBatchIndex) {
-				for (uint32_t passIndex = normalSubBatches[subBatchIndex].begin; passIndex < normalSubBatches[subBatchIndex].end; ++passIndex) {
-					RE::BSBatchRenderer::RenderPassImmediately(tmpArray[passIndex], technique, alphaTest, renderFlags);
-				}
-			}
-			if (instancedSubBatchCount > 0) {
-				csState->isInstancedPass = true;
-
-				RE::BSShaderManager::State::GetSingleton().currentShaderTechnique = technique;
-				batchRenderer->EndPass();
-				if (tmpArray[instancedSubBatches[0].begin]->shader->SetupTechnique(instancedTechnique)) {
-					RE::BSBatchRenderer::GetCurrentShader() = tmpArray[instancedSubBatches[0].begin]->shader;
-					RE::BSBatchRenderer::GetCurrentTechnique() = instancedTechnique;
-
-					for (uint32_t subBatchIndex = 0; subBatchIndex < instancedSubBatchCount; ++subBatchIndex) {
-						const uint32_t firstPassIndex = instancedSubBatches[subBatchIndex].begin;
-						const uint32_t lastPassIndex = instancedSubBatches[subBatchIndex].end;
-						auto* firstPass = tmpArray[firstPassIndex];
-						csState->instanceCount = lastPassIndex - firstPassIndex;
-
-						auto* material = firstPass->shaderProperty->material;
-						if (material != RE::BSBatchRenderer::GetCurrentMaterial()) {
-							if (material != nullptr) {
-								firstPass->shader->SetupMaterial(material);
-							}
-							RE::BSBatchRenderer::GetCurrentMaterial() = material;
-						}
-
-						RE::BSBatchRenderer::SetupGeometry(firstPass, firstPass->shader, alphaTest || RE::BSGraphics::State::GetSingleton()->useEarlyZ, renderFlags);
-						SetupInstances(firstPass, csState->instanceCount);
-						RE::BSBatchRenderer::Draw(firstPass);
-						firstPass->shader->RestoreGeometry(firstPass, renderFlags);
-
-						csState->instanceCount = 0;
-					}
-				} else {
-					RE::BSBatchRenderer::GetCurrentShader() = nullptr;
-					RE::BSBatchRenderer::GetCurrentTechnique() = 0;
-				}
-
-				csState->isInstancedPass = false;
-			}
-		}
-		else
-		{
-			for (auto currentPass = passGroup.passes[bucketIndex]; currentPass; currentPass = currentPass->passGroupNext)
-			{
-				RE::BSBatchRenderer::RenderPassImmediately(currentPass, technique, alphaTest, renderFlags);
-			}
-		}*/
-
-		if (!subBatches.empty()) {
+		if (!subBatches.empty() || nonInstanceablePassCount > 0) {
 			bool hasInstanced = false;
+			for (uint32_t passIndex = 0; passIndex < nonInstanceablePassCount; ++passIndex) {
+				RE::BSBatchRenderer::RenderPassImmediately(nonInstanceablePasses[passIndex], technique, alphaTest, renderFlags);
+			}
 			for (const auto& [rendererData, data] : subBatches)
 			{
-				if (rendererData == nullptr || data.passCount < static_cast<uint32_t>(csState->minInstanceCount)) {
+				if (data.passCount < static_cast<uint32_t>(csState->minInstanceCount)) {
 					for (uint32_t passIndex = 0; passIndex < data.passCount; ++passIndex) {
 						RE::BSBatchRenderer::RenderPassImmediately(data.passes[passIndex], technique, alphaTest, renderFlags);
 					}
@@ -1862,6 +1857,7 @@ namespace Hooks
 			}
 			if (hasInstanced) {
 				csState->isInstancedPass = true;
+				csState->instancedShaderType = instancedShaderType;
 
 				RE::BSShaderManager::State::GetSingleton().currentShaderTechnique = technique;
 				batchRenderer->EndPass();
@@ -1871,7 +1867,7 @@ namespace Hooks
 					RE::BSBatchRenderer::GetCurrentTechnique() = instancedTechnique;
 
 					for (const auto& [rendererData, data] : subBatches) {
-						if (rendererData != nullptr && data.passCount >= static_cast<uint32_t>(csState->minInstanceCount)) {
+						if (data.passCount >= static_cast<uint32_t>(csState->minInstanceCount)) {
 							auto* firstPass = data.passes[0];
 							csState->instanceCount = data.passCount;
 
@@ -1884,7 +1880,12 @@ namespace Hooks
 							}
 
 							RE::BSBatchRenderer::SetupGeometry(firstPass, firstPass->shader, alphaTest || RE::BSGraphics::State::GetSingleton()->useEarlyZ, renderFlags);
-							SetupInstances(data.passes.data(), data.passCount, utilityTechnique);
+							if (instancedShaderType == RE::BSShader::Type::Lighting) {
+								SetupInstancesLighting(data.passes.data(), data.passCount, lightingTechnique, lightingFlags);
+							} else {
+								SetupInstancesUtility(data.passes.data(), data.passCount, utilityFlags);
+							}
+							
 							RE::BSBatchRenderer::Draw(firstPass);
 							firstPass->shader->RestoreGeometry(firstPass, renderFlags);
 
@@ -1897,6 +1898,7 @@ namespace Hooks
 				}
 
 				csState->isInstancedPass = false;
+				csState->instancedShaderType = RE::BSShader::Type::None;
 			}
 		} else {
 			for (auto currentPass = passGroup.passes[bucketIndex]; currentPass; currentPass = currentPass->passGroupNext) {

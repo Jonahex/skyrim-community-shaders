@@ -50,6 +50,16 @@ struct VS_INPUT
 #if defined(VR)
 	uint InstanceID : SV_INSTANCEID;
 #endif  // VR
+	
+#	if defined(INSTANCED)
+    float4 World0 : INSTANCEPOS0;
+    float4 World1 : INSTANCEPOS1;
+    float4 World2 : INSTANCEPOS2;
+    float4 PreviousWorld0 : INSTANCEPOS3;
+    float4 PreviousWorld1 : INSTANCEPOS4;
+    float4 PreviousWorld2 : INSTANCEPOS5;
+    float4 TreeParams : INSTANCEPOS6;
+#endif
 };
 
 struct VS_OUTPUT
@@ -170,13 +180,13 @@ cbuffer VS_PerFrame : register(b12)
 };
 
 #	if defined(TREE_ANIM)
-float2 GetTreeShiftVector(float4 position, float4 color)
+float2 GetTreeShiftVector(float4 position, float4 color, float4 treeParams)
 {
-	precise float4 tmp1 = (TreeParams.w * TreeParams.y).xxxx * WindTimers.xxyy;
+	precise float4 tmp1 = (treeParams.w * treeParams.y).xxxx * WindTimers.xxyy;
 	precise float4 tmp2 = float4(0.1, 0.25, 0.1, 0.25) * tmp1 + dot(position.xyz, 1.0.xxx).xxxx;
 	precise float4 tmp3 = abs(-1.0.xxxx + 2.0.xxxx * frac(0.5.xxxx + tmp2.xyzw));
 	precise float4 tmp4 = (tmp3 * tmp3) * (3.0.xxxx - 2.0.xxxx * tmp3);
-	return (tmp4.xz + 0.1.xx * tmp4.yw) * (TreeParams.z * color.w).xx;
+	return (tmp4.xz + 0.1.xx * tmp4.yw) * (treeParams.z * color.w).xx;
 }
 #	endif  // TREE_ANIM
 
@@ -191,14 +201,25 @@ VS_OUTPUT main(VS_INPUT input)
 		input.InstanceID
 #	endif
 	);
+	
+#	if defined(INSTANCED)
+    row_major float3x4 world = float3x4(input.World0, input.World1, input.World2);
+    row_major float3x4 previousWorld = float3x4(input.PreviousWorld0, input.PreviousWorld1, input.PreviousWorld2);
+	float4 treeParams = input.TreeParams;
+#	else
+	row_major float3x4 world = World[eyeIndex];
+	row_major float3x4 previousWorld = PreviousWorld[eyeIndex];
+	float4 treeParams = TreeParams;
+#	endif
+
 #	if defined(LODLANDNOISE) || defined(LODLANDSCAPE)
-	inputPosition = AdjustLodLandscapeVertexPositionMS(inputPosition, float4x4(World[eyeIndex], float4(0, 0, 0, 1)), HighDetailRange[eyeIndex]);
+	inputPosition = AdjustLodLandscapeVertexPositionMS(inputPosition, float4x4(world, float4(0, 0, 0, 1)), HighDetailRange[eyeIndex]);
 #	endif  // defined(LODLANDNOISE) || defined(LODLANDSCAPE)                                                                   \
 
 	precise float4 previousInputPosition = inputPosition;
 
 #	if defined(TREE_ANIM)
-	precise float2 treeShiftVector = GetTreeShiftVector(input.Position, input.Color);
+	precise float2 treeShiftVector = GetTreeShiftVector(input.Position, input.Color, treeParams);
 	float3 normal = -1.0.xxx + 2.0.xxx * input.Normal.xyz;
 
 	inputPosition.xyz += normal.xyz * treeShiftVector.x;
@@ -218,9 +239,9 @@ VS_OUTPUT main(VS_INPUT input)
 
 	float4 viewPos = mul(ViewProj[eyeIndex], worldPosition);
 #	else   // !SKINNED
-	precise float4 previousWorldPosition = float4(mul(PreviousWorld[eyeIndex], inputPosition), 1);
-	precise float4 worldPosition = float4(mul(World[eyeIndex], inputPosition), 1);
-	precise float4x4 world4x4 = float4x4(World[eyeIndex][0], World[eyeIndex][1], World[eyeIndex][2], float4(0, 0, 0, 1));
+	precise float4 previousWorldPosition = float4(mul(previousWorld, inputPosition), 1);
+	precise float4 worldPosition = float4(mul(world, inputPosition), 1);
+	precise float4x4 world4x4 = float4x4(world[0], world[1], world[2], float4(0, 0, 0, 1));
 	precise float4x4 modelView = mul(ViewProj[eyeIndex], world4x4);
 	float4 viewPos = mul(modelView, inputPosition);
 #	endif  // SKINNED
@@ -270,9 +291,9 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.TBN1.xyz = worldTbnTr[1];
 	vsout.TBN2.xyz = worldTbnTr[2];
 #		elif defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX)
-	vsout.TBN0.xyz = mul(tbn, World[eyeIndex][0].xyz);
-	vsout.TBN1.xyz = mul(tbn, World[eyeIndex][1].xyz);
-	vsout.TBN2.xyz = mul(tbn, World[eyeIndex][2].xyz);
+	vsout.TBN0.xyz = mul(tbn, world[0].xyz);
+	vsout.TBN1.xyz = mul(tbn, world[1].xyz);
+	vsout.TBN2.xyz = mul(tbn, world[2].xyz);
 	float3x3 tempTbnTr = transpose(float3x3(vsout.TBN0.xyz, vsout.TBN1.xyz, vsout.TBN2.xyz));
 	tempTbnTr[0] = normalize(tempTbnTr[0]);
 	tempTbnTr[1] = normalize(tempTbnTr[1]);
@@ -325,7 +346,7 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.ScreenNormalTransform1.xyz = ScreenNormalTransform[1];
 	vsout.ScreenNormalTransform2.xyz = ScreenNormalTransform[2];
 #	else
-	float3x4 transMat = mul(ScreenProj[eyeIndex], World[eyeIndex]);
+	float3x4 transMat = mul(ScreenProj[eyeIndex], world);
 
 #		if defined(MODELSPACENORMALS)
 	vsout.ScreenNormalTransform0.xyz = transMat[0].xyz;
@@ -353,7 +374,7 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.FogParam.xyz = lerp(FogNearColor.xyz, FogFarColor.xyz, fogColorParam);
 	vsout.FogParam.w = fogColorParam;
 
-	vsout.World[0] = World[0];
+	vsout.World[0] = world;
 #	ifdef VR
 	vsout.World[1] = World[1];
 #	endif  // VR

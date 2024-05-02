@@ -60,6 +60,9 @@ namespace SIE
 			if ((descriptor & static_cast<uint32_t>(ShaderCache::LightingShaderFlags::TruePbr)) != 0) {
 				defines[lastIndex++] = { "TRUE_PBR", nullptr };
 			}
+			if ((descriptor & static_cast<uint32_t>(ShaderCache::LightingShaderFlags::Instanced)) != 0) {
+				defines[lastIndex++] = { "INSTANCED", nullptr };
+			}
 
 			for (auto* feature : Feature::GetFeatureList()) {
 				if (feature->loaded && feature->HasShaderDefine(RE::BSShader::Type::Lighting)) {

@@ -33,7 +33,7 @@ struct VS_INPUT
     float4 World2 : INSTANCEPOS2;
     float4 World3 : INSTANCEPOS3;
     float4 TreeParams : INSTANCEPOS4;
-#endif
+#	endif
 };
 
 struct VS_OUTPUT

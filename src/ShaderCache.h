@@ -232,6 +232,7 @@ namespace SIE
 			// bits 3-5 used to store point lights count
 			// bits 6-8 used to store shadow lights count
 			TruePbr = 1 << 3,
+			Instanced = 1 << 4,
 
 			Specular = 1 << 9,
 			SoftLighting = 1 << 10,
