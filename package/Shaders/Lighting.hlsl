@@ -1672,6 +1672,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	
 	float3 lodLandDiffuseColor = 0;
 
+	float dirLightAngle = 0;
+
 #	if defined(TRUE_PBR)
 	{
 		float3 dirDiffuseColor, dirTransmissionColor, dirSpecularColor;
@@ -1686,7 +1688,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		endif
 	}
 #	else
-	float dirLightAngle = dot(modelNormal.xyz, DirLightDirection.xyz);
+	dirLightAngle = dot(modelNormal.xyz, DirLightDirection.xyz);
 
 #		if defined(DEFERRED)
 	float3 dirDiffuseColor = 0.0;
@@ -2039,9 +2041,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	diffuseColor += emitColor.xyz;
 #	endif
 	
-#	if (!defined(TRUE_PBR) || defined(LOD_LAND_BLEND))
 	float3 directionalAmbientColor = mul(DirectionalAmbient, modelNormal);
 
+#	if (!defined(TRUE_PBR) || defined(LOD_LAND_BLEND))
 #		if defined(TRUE_PBR) && defined(LOD_LAND_BLEND)
 	lodLandDiffuseColor += directionalAmbientColor;
 #		elif !defined(DEFERRED)
@@ -2458,7 +2460,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	psout.Masks.y = !perPassSSS[0].IsBeastRace;
 #		endif
 #		if defined(TRUE_PBR)
-	psout.Masks.z = 1;
+	psout.Reflectance.x = 1;
 #		endif
 #	endif
 

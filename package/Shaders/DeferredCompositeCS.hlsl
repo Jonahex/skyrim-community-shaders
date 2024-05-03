@@ -42,12 +42,13 @@ half GetScreenDepth(half depth)
 	half NdotL = dot(normalVS, DirLightDirectionVS[eyeIndex].xyz);
 
 	half3 albedo = AlbedoTexture[globalId.xy];
-	half3 masks = MasksTexture[globalId.xy];
+    half3 masks = MasksTexture[globalId.xy];
+    half3 reflectance = ReflectanceTexture[globalId.xy];
 
     half3 color = MainRW[globalId.xy].rgb;
 
     float3 lightColor = DirLightColor.xyz;
-	[branch] if (masks.z != 0)
+	[branch] if (reflectance.x != 0)
     {
         lightColor = sRGB2Lin(lightColor);
     }
@@ -75,7 +76,8 @@ half GetScreenDepth(half depth)
 	half shadow = 1.0;
 
 	half3 albedo = AlbedoTexture[globalId.xy];
-	half3 masks = MasksTexture[globalId.xy];
+    half3 masks = MasksTexture[globalId.xy];
+    half3 reflectance = ReflectanceTexture[globalId.xy];
 
 	if (NdotL > 0.0 || masks.z > 0.0) {
 		shadow = ShadowMaskTexture[globalId.xy];
@@ -100,7 +102,7 @@ half GetScreenDepth(half depth)
 	half3 color = MainRW[globalId.xy].rgb;
 	
     float3 lightColor = DirLightColor.xyz * shadow;
-	[branch] if (masks.z != 0)
+	[branch] if (reflectance.x != 0)
     {
         lightColor = sRGB2Lin(lightColor);
     }
@@ -129,9 +131,10 @@ half GetScreenDepth(half depth)
 	half3 gi = giAo.rgb;
 	half ao = giAo.w;
 
-	half3 masks = MasksTexture[globalId.xy];
-
-	[branch] if (masks.z != 0)
+    half3 masks = MasksTexture[globalId.xy];
+    half3 reflectance = ReflectanceTexture[globalId.xy];
+	
+	[branch] if (reflectance.x != 0)
     {
         diffuseColor.rgb += sRGB2Lin(gi);
     }
@@ -157,14 +160,15 @@ half GetScreenDepth(half depth)
 	half3 diffuseColor = MainRW[globalId.xy];
 	half3 specularColor = SpecularTexture[globalId.xy];
 	half3 albedo = AlbedoTexture[globalId.xy];
-	half3 masks = MasksTexture[globalId.xy];
+    half3 masks = MasksTexture[globalId.xy];
+    half3 reflectance = ReflectanceTexture[globalId.xy];
 
 	half3 normalWS = normalize(mul(InvViewMatrix[eyeIndex], half4(normalVS, 0)));
 
 	half glossiness = normalGlossiness.z;
 	half3 color = diffuseColor + specularColor;
 	
-	[branch] if (masks.z != 0)
+	[branch] if (reflectance.x != 0)
     {
         color = Lin2sRGB(color);
     }
