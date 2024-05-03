@@ -77,9 +77,12 @@ void GrassLighting::ModifyGrass(const RE::BSShader*, const uint32_t descriptor)
 	const auto technique = descriptor & 0b1111;
 	if (technique != static_cast<uint32_t>(GrassShaderTechniques::RenderDepth)) {
 		if (updatePerFrame) {
+			auto& state = RE::BSShaderManager::State::GetSingleton();
+			RE::NiTransform& dalcTransform = state.directionalAmbientTransform;
 			auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
 
 			PerFrame perFrameData{};
+			Util::StoreTransform3x4NoScale(perFrameData.DirectionalAmbient, dalcTransform);
 			perFrameData.SunlightScale = !REL::Module::IsVR() ?
 			                                 imageSpaceManager->GetRuntimeData().data.baseData.hdr.sunlightScale :
 			                                 imageSpaceManager->GetVRRuntimeData().data.baseData.hdr.sunlightScale;

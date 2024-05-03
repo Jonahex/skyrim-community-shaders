@@ -529,7 +529,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	
     float3 diffuseIrradiance, specularIrradiance;
     GetAmbientLightInputPBR(diffuseIrradiance, specularIrradiance, normal, viewDirection, baseColor.xyz, roughness, f0, subsurfaceColor, thickness, ao);
-    diffuseColor += diffuseIrradiance;
+    //diffuseColor += diffuseIrradiance;
     specularColor += specularIrradiance;
     diffuseColor += transmissionColor;
 #		else
@@ -559,6 +559,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #	if defined(TRUE_PBR)
 	psout.Reflectance.x = 1;
+	psout.Reflectance.y = ao;
 #	endif
 
 	float3 normalVS = normalize(WorldToView(normal, false, eyeIndex));

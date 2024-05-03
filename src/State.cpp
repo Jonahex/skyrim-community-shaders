@@ -795,7 +795,6 @@ State::PBRTextureSetData* State::GetPBRTextureSetData(const RE::TESForm* texture
 		return nullptr;
 	}
 
-	logger::info("{}", textureSet->GetFormEditorID());
 	auto it = pbrTextureSets.find(textureSet->GetFormEditorID());
 	if (it == pbrTextureSets.end()) {
 		return nullptr;

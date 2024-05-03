@@ -25,6 +25,7 @@ struct GrassLighting : Feature
 
 	struct alignas(16) PerFrame
 	{
+		DirectX::XMFLOAT3X4 DirectionalAmbient;
 		float SunlightScale;
 		Settings Settings;
 		float pad[2];

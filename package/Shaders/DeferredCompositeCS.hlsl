@@ -48,10 +48,7 @@ half GetScreenDepth(half depth)
     half3 color = MainRW[globalId.xy].rgb;
 
     float3 lightColor = DirLightColor.xyz;
-	[branch] if (reflectance.x != 0)
-    {
-        lightColor = sRGB2Lin(lightColor);
-    }
+    lightColor = lerp(lightColor, sRGB2Lin(lightColor), reflectance.x);
     color += albedo * lerp(max(0, NdotL), 1.0, masks.z) * lightColor;
 
 	MainRW[globalId.xy] = half4(color.xyz, 1.0);
@@ -102,10 +99,7 @@ half GetScreenDepth(half depth)
 	half3 color = MainRW[globalId.xy].rgb;
 	
     float3 lightColor = DirLightColor.xyz * shadow;
-	[branch] if (reflectance.x != 0)
-    {
-        lightColor = sRGB2Lin(lightColor);
-    }
+    lightColor = lerp(lightColor, sRGB2Lin(lightColor), reflectance.x);
     color += albedo * lerp(max(0, NdotL), 1.0, masks.z) * lightColor;
 
 	MainRW[globalId.xy] = half4(color.xyz, 1.0);
@@ -133,16 +127,13 @@ half GetScreenDepth(half depth)
 
     half3 masks = MasksTexture[globalId.xy];
     half3 reflectance = ReflectanceTexture[globalId.xy];
-	
-	[branch] if (reflectance.x != 0)
-    {
-        diffuseColor.rgb += sRGB2Lin(gi);
-    }
-    else
-    {
-        half3 directionalAmbientColor = mul(DirectionalAmbient, half4(normalWS, 1.0));
-        diffuseColor.rgb += albedo * directionalAmbientColor * ao + gi;
-    }
+    
+	half3 directionalAmbientColor = mul(DirectionalAmbient, half4(normalWS, 1.0));
+    directionalAmbientColor = lerp(directionalAmbientColor, sRGB2Lin(directionalAmbientColor), reflectance.x);
+    gi = lerp(gi, sRGB2Lin(gi), reflectance.x);
+    float materialAO = lerp(1, ao, reflectance.y);
+    ao = min(materialAO, ao);
+	diffuseColor.rgb += albedo * directionalAmbientColor * ao + gi;
 
 	MainRW[globalId.xy] = half4(diffuseColor.xyz, 1.0);
 };
@@ -167,13 +158,10 @@ half GetScreenDepth(half depth)
 
 	half glossiness = normalGlossiness.z;
 	half3 color = diffuseColor + specularColor;
-	
-	[branch] if (reflectance.x != 0)
-    {
-        color = Lin2sRGB(color);
-    }
 
-#if defined(DEBUG)
+    color = lerp(color, Lin2sRGB(color), reflectance.x);
+
+#	if defined(DEBUG)
 	half2 texCoord = half2(globalId.xy) / BufferDim.xy;
 
 	if (texCoord.x < 0.5 && texCoord.y < 0.5) {
@@ -185,7 +173,7 @@ half GetScreenDepth(half depth)
 	} else {
 		color = glossiness;
 	}
-#endif
+#	endif
 
 	MainRW[globalId.xy] = half4(color.xyz, 1.0);
 	NormalTAAMaskSpecularMaskRW[globalId.xy] = half4(EncodeNormalVanilla(normalVS), 0.0, glossiness);

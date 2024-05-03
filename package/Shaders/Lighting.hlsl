@@ -1231,6 +1231,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	baseColor.xyz = GetFacegenRGBTintBaseColor(baseColor.xyz, uv);
 #	endif  // FACEGEN
 
+	float lodLandBlendFactor = 0;
 #	if defined(LANDSCAPE)
 
 #		if defined(SNOW) && !defined(TRUE_PBR)
@@ -1437,7 +1438,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float lodBlendParameter = GetLodLandBlendParameter(lodLandColor.xyz);
 	float lodBlendMask = TexLandLodBlend2Sampler.Sample(SampLandLodBlend2Sampler, 3.0.xx * input.TexCoord0.zw).x;
 	float lodLandFadeFactor = GetLodLandBlendMultiplier(lodBlendParameter, lodBlendMask);
-	float lodLandBlendFactor = LODTexParams.z * input.LandBlendWeights2.w;
+	lodLandBlendFactor = LODTexParams.z * input.LandBlendWeights2.w;
 #		endif
 
 #		if defined(LOD_LAND_BLEND) && !defined(TRUE_PBR)
@@ -2125,7 +2126,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	if defined(TRUE_PBR)
 	float3 diffuseIrradiance, specularIrradiance;
 	GetAmbientLightInputPBR(diffuseIrradiance, specularIrradiance, worldSpaceNormal.xyz, worldSpaceViewDirection, baseColor.xyz, roughness, f0, subsurfaceColor, thickness, ao);
+#	if !defined(DEFERRED)
 	color.xyz += diffuseIrradiance;
+#	endif
 	specularColorPBR += specularIrradiance;
 	
 	color.xyz += emitColor.xyz;
@@ -2240,7 +2243,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	color.xyz += specularColorPBR;
 #	endif
 
+#	if !(defined(DEFERRED) && defined(TRUE_PBR))
 	color.xyz = Lin2sRGB(color.xyz);
+#	endif
 
 #	if defined(LOD_LAND_BLEND) && defined(TRUE_PBR)
 	{
@@ -2253,7 +2258,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		foggedLitLodLandColor = lodLandTmpColor + ColourOutputClamp.xxx;
 		foggedLitLodLandColor = min(litLodLandColor, foggedLitLodLandColor);
 
+#		if defined(DEFERRED)
+		baseColor.xyz = lerp(baseColor.xyz, input.Color.xyz * lodLandColor * lodLandFadeFactor, lodLandBlendFactor);
+		specularColorPBR = lerp(specularColorPBR, 0, lodLandBlendFactor);
+		color.xyz = lerp(color.xyz, 0, lodLandBlendFactor);
+#		else
 		color.xyz = lerp(color.xyz, foggedLitLodLandColor, lodLandBlendFactor);
+#		endif
 		tmpColor = lerp(tmpColor, lodLandTmpColor, lodLandBlendFactor);
 	}
 #	endif  // defined(LOD_LAND_BLEND) && defined(TRUE_PBR)
@@ -2460,7 +2471,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	psout.Masks.y = !perPassSSS[0].IsBeastRace;
 #		endif
 #		if defined(TRUE_PBR)
-	psout.Reflectance.x = 1;
+	psout.Reflectance.x = 1 - lodLandBlendFactor;
+	psout.Reflectance.y = ao;
 #		endif
 #	endif
 
