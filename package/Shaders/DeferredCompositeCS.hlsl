@@ -1,6 +1,7 @@
 #include "Common/Color.hlsl"
 #include "Common/DeferredShared.hlsli"
 #include "Common/GBuffer.hlsli"
+#include "Common/PBRCommon.hlsli"
 #include "Common/VR.hlsli"
 
 Texture2D<half3> SpecularTexture : register(t0);
@@ -48,7 +49,7 @@ half GetScreenDepth(half depth)
     half3 color = MainRW[globalId.xy].rgb;
 
     float3 lightColor = DirLightColor.xyz;
-    lightColor = lerp(lightColor, sRGB2Lin(lightColor), reflectance.x);
+    lightColor = lerp(lightColor, AdjustDirectLightColorForPBR(lightColor), reflectance.x);
     color += albedo * lerp(max(0, NdotL), 1.0, masks.z) * lightColor;
 
 	MainRW[globalId.xy] = half4(color.xyz, 1.0);
@@ -99,7 +100,7 @@ half GetScreenDepth(half depth)
 	half3 color = MainRW[globalId.xy].rgb;
 	
     float3 lightColor = DirLightColor.xyz * shadow;
-    lightColor = lerp(lightColor, sRGB2Lin(lightColor), reflectance.x);
+    lightColor = lerp(lightColor, AdjustDirectLightColorForPBR(lightColor), reflectance.x);
     color += albedo * lerp(max(0, NdotL), 1.0, masks.z) * lightColor;
 
 	MainRW[globalId.xy] = half4(color.xyz, 1.0);
@@ -129,10 +130,9 @@ half GetScreenDepth(half depth)
     half3 reflectance = ReflectanceTexture[globalId.xy];
     
 	half3 directionalAmbientColor = mul(DirectionalAmbient, half4(normalWS, 1.0));
-    directionalAmbientColor = lerp(directionalAmbientColor, sRGB2Lin(directionalAmbientColor), reflectance.x);
-    gi = lerp(gi, sRGB2Lin(gi), reflectance.x);
-    float materialAO = lerp(1, ao, reflectance.y);
-    ao = min(materialAO, ao);
+    directionalAmbientColor = lerp(directionalAmbientColor, AdjustAmbientLightColorForPBR(directionalAmbientColor), reflectance.x);
+    float materialAO = lerp(1, reflectance.y, reflectance.x);
+    ao *= materialAO;
 	diffuseColor.rgb += albedo * directionalAmbientColor * ao + gi;
 
 	MainRW[globalId.xy] = half4(diffuseColor.xyz, 1.0);

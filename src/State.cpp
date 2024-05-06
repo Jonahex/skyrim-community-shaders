@@ -721,6 +721,7 @@ void State::SetupFrame()
 
 		ID3D11ShaderResourceView* view = pbrDataBuffer->srv.get();
 		context->PSSetShaderResources(121, 1, &view);
+		context->CSSetShaderResources(121, 1, &view);
 	}
 }
 
