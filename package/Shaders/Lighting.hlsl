@@ -428,8 +428,6 @@ SamplerState SampDetailSampler : register(s4);
 SamplerState SampParallaxSampler : register(s3);
 #		elif defined(PROJECTED_UV) && !defined(SPARKLE)
 SamplerState SampProjDiffuseSampler : register(s3);
-#		elif defined(TRUE_PBR)
-SamplerState SampParallaxSampler : register(s3);
 #		endif
 
 #		if (defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX) || defined(SNOW_FLAG) || defined(EYE)) && !defined(FACEGEN)
@@ -438,6 +436,7 @@ SamplerState SampEnvMaskSampler : register(s5);
 #		endif
 
 #		if defined(TRUE_PBR)
+SamplerState SampParallaxSampler : register(s4);
 SamplerState SampRMAOSSampler : register(s5);
 #		endif
 
@@ -514,8 +513,6 @@ Texture2D<float4> TexDetailSampler : register(t4);
 Texture2D<float4> TexParallaxSampler : register(t3);
 #		elif defined(PROJECTED_UV) && !defined(SPARKLE)
 Texture2D<float4> TexProjDiffuseSampler : register(t3);
-#		elif defined(TRUE_PBR)
-Texture2D<float4> TexParallaxSampler : register(t3);
 #		endif
 
 #		if (defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX) || defined(SNOW_FLAG) || defined(EYE)) && !defined(FACEGEN)
@@ -524,6 +521,7 @@ Texture2D<float4> TexEnvMaskSampler : register(t5);
 #		endif
 
 #		if defined(TRUE_PBR)
+Texture2D<float4> TexParallaxSampler : register(t4);
 Texture2D<float4> TexRMAOSSampler : register(t5);
 #		endif
 
@@ -1065,7 +1063,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #		endif  // ENVMAP
 
-#		if defined(TRUE_PBR) && !defined(LANDSCAPE) && !defined(LODLANDSCAPE) && !defined(PROJECTED_UV)
+#		if defined(TRUE_PBR) && !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
 	bool PBRParallax = false;
 	[branch] if ((PBRFlags & TruePBR_HasDisplacement) != 0) {
 		PBRParallax = true;
@@ -1649,7 +1647,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		elif defined(ENVMAP)
 	if (complexMaterialParallax && perPassParallax[0].EnableShadows)
 		dirShadow *= GetParallaxSoftShadowMultiplier(uv, mipLevel, dirLightDirectionTS, sh0, TexEnvMaskSampler, SampEnvMaskSampler, 3, dirLightIsLit * parallaxShadowQuality, displacementScale);
-#		elif defined(TRUE_PBR) && !defined(PROJECTED_UV) && !defined(LODLANDSCAPE)
+#		elif defined(TRUE_PBR) && !defined(LODLANDSCAPE)
 	if (PBRParallax && perPassParallax[0].EnableShadows)
 		dirShadow *= GetParallaxSoftShadowMultiplier(uv, mipLevel, dirLightDirectionTS, sh0, TexParallaxSampler, SampParallaxSampler, 0, dirLightIsLit * parallaxShadowQuality, displacementScale);
 #		endif  // LANDSCAPE
@@ -1669,7 +1667,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	if defined(TRUE_PBR)
 	{
 		float3 dirDiffuseColor, dirTransmissionColor, dirSpecularColor;
-		GetDirectLightInputPBR(dirDiffuseColor, dirTransmissionColor, dirSpecularColor, modelNormal.xyz, viewDirection, DirLightDirection, AdjustDirectLightColorForPBR(dirLightColor), roughness, f0, subsurfaceColor, thickness);
+		GetDirectLightInputPBR(dirDiffuseColor, dirTransmissionColor, dirSpecularColor, modelNormal.xyz, viewDirection, DirLightDirection, dirLightColor, roughness, f0, subsurfaceColor, thickness);
 		lightsDiffuseColor += dirDiffuseColor;
 		transmissionColor += dirTransmissionColor;
 		specularColorPBR += dirSpecularColor;
@@ -1942,7 +1940,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #				elif defined(ENVMAP)
 			[branch] if (complexMaterialParallax)
 				lightShadow *= GetParallaxSoftShadowMultiplier(uv, mipLevel, lightDirectionTS, sh0, TexEnvMaskSampler, SampEnvMaskSampler, 3, parallaxShadowQuality, displacementScale);
-#				elif defined(TRUE_PBR) && !defined(PROJECTED_UV) && !defined(LODLANDSCAPE)
+#				elif defined(TRUE_PBR) && !defined(LODLANDSCAPE)
 			[branch] if (PBRParallax)
 				lightShadow *= GetParallaxSoftShadowMultiplier(uv, mipLevel, lightDirectionTS, sh0, TexParallaxSampler, SampParallaxSampler, 0, parallaxShadowQuality, displacementScale);
 #				endif

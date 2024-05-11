@@ -758,9 +758,9 @@ namespace Hooks
 
 					const bool hasDisplacement = pbrMaterial->displacementTexture != nullptr && pbrMaterial->displacementTexture != RE::BSGraphics::State::GetSingleton()->GetRuntimeData().defaultTextureBlack;
 					if (hasDisplacement) {
-						shadowState->SetPSTexture(3, pbrMaterial->displacementTexture->rendererTexture);
-						shadowState->SetPSTextureAddressMode(3, static_cast<RE::BSGraphics::TextureAddressMode>(pbrMaterial->textureClampMode));
-						shadowState->SetPSTextureFilterMode(3, RE::BSGraphics::TextureFilterMode::kAnisotropic);
+						shadowState->SetPSTexture(4, pbrMaterial->displacementTexture->rendererTexture);
+						shadowState->SetPSTextureAddressMode(4, static_cast<RE::BSGraphics::TextureAddressMode>(pbrMaterial->textureClampMode));
+						shadowState->SetPSTextureFilterMode(4, RE::BSGraphics::TextureFilterMode::kAnisotropic);
 
 						shaderFlags.set(PBRShaderFlags::HasDisplacement);
 					}
@@ -839,14 +839,55 @@ namespace Hooks
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
+	float sRGB2Lin(float color)
+	{
+		return color > 0.04045f ? pow(color / 1.055f + 0.055f / 1.055f, 2.4f) : color / 12.92f;
+	}
+
+	RE::NiColor sRGB2Lin(const RE::NiColor& color)
+	{
+		return RE::NiColor(sRGB2Lin(color.red), sRGB2Lin(color.green), sRGB2Lin(color.blue));
+	}
+
+	RE::NiColor AdjustDirectColorForPBR(const RE::NiColor& color)
+	{
+		auto* state = State::GetSingleton();
+		auto linColor = sRGB2Lin(color);
+		return {
+			state->pbrData.lightColorMultiplier * std::pow(linColor.red, state->pbrData.lightColorPower),
+			state->pbrData.lightColorMultiplier * std::pow(linColor.green, state->pbrData.lightColorPower),
+			state->pbrData.lightColorMultiplier * std::pow(linColor.blue, state->pbrData.lightColorPower)
+		};
+	}
+
 	struct BSLightingShader_SetupGeometry
 	{
 		static void thunk(RE::BSLightingShader* shader, RE::BSRenderPass* pass, uint32_t renderFlags)
 		{
 			const uint32_t originalExtraFlags = shader->currentRawTechnique & 0b111000u;
 
+			auto* state = State::GetSingleton();
+
+			float originalFade = 0.f;
+			RE::NiColor originalColor;
+
 			if ((shader->currentRawTechnique & static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::TruePbr)) != 0) {
 				shader->currentRawTechnique |= static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::AmbientSpecular);
+
+				if (pass->numLights > 0) {
+					auto& data = pass->sceneLights[0]->light->GetLightRuntimeData();
+					originalFade = data.fade;
+					originalColor = data.diffuse;
+
+					data.fade = std::pow(sRGB2Lin(data.fade), state->pbrData.lightColorPower);
+
+					const auto linDiffuse = sRGB2Lin(data.diffuse);
+					data.diffuse = {
+						state->pbrData.lightColorMultiplier * std::pow(linDiffuse.red, state->pbrData.lightColorPower),
+						state->pbrData.lightColorMultiplier * std::pow(linDiffuse.green, state->pbrData.lightColorPower),
+						state->pbrData.lightColorMultiplier * std::pow(linDiffuse.blue, state->pbrData.lightColorPower)
+					};
+				}
 			}
 
 			shader->currentRawTechnique &= ~0b111000u;
@@ -859,6 +900,12 @@ namespace Hooks
 
 			if ((shader->currentRawTechnique & static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::TruePbr)) != 0) {
 				shader->currentRawTechnique &= ~static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::AmbientSpecular);
+
+				if (pass->numLights > 0) {
+					auto& data = pass->sceneLights[0]->light->GetLightRuntimeData();
+					data.fade = originalFade;
+					data.diffuse = originalColor;
+				}
 			}
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
