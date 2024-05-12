@@ -1028,12 +1028,14 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	endif  // LANDSCAPE
 
 	float displacementScale = 1.f;
+	float displacementOffset = 0.f;
+	float2 displacementLimits = float2(0, 1);
 	
 #	if defined(CPM_AVAILABLE)
 #		if defined(PARALLAX)
 	if (perPassParallax[0].EnableParallax) {
 		mipLevel = GetMipLevel(uv, TexParallaxSampler);
-		uv = GetParallaxCoords(viewPosition.z, uv, mipLevel, viewDirection, tbnTr, TexParallaxSampler, SampParallaxSampler, 0, displacementScale, pixelOffset);
+		uv = GetParallaxCoords(viewPosition.z, uv, mipLevel, viewDirection, tbnTr, TexParallaxSampler, SampParallaxSampler, 0, displacementScale, displacementOffset, displacementLimits, pixelOffset);
 		if (perPassParallax[0].EnableShadows && parallaxShadowQuality > 0.0f)
 			sh0 = TexParallaxSampler.SampleLevel(SampParallaxSampler, uv, mipLevel).x;
 	}
@@ -1052,7 +1054,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 			if (envMaskTest > (4.0 / 255.0)) {
 				complexMaterialParallax = true;
 				mipLevel = GetMipLevel(uv, TexEnvMaskSampler);
-				uv = GetParallaxCoords(viewPosition.z, uv, mipLevel, viewDirection, tbnTr, TexEnvMaskSampler, SampTerrainParallaxSampler, 3, displacementScale, pixelOffset);
+				uv = GetParallaxCoords(viewPosition.z, uv, mipLevel, viewDirection, tbnTr, TexEnvMaskSampler, SampTerrainParallaxSampler, 3, displacementScale, displacementOffset, displacementLimits, pixelOffset);
 				if (perPassParallax[0].EnableShadows && parallaxShadowQuality > 0.0f)
 					sh0 = TexEnvMaskSampler.SampleLevel(SampEnvMaskSampler, uv, mipLevel).w;
 			}
@@ -1068,8 +1070,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	[branch] if ((PBRFlags & TruePBR_HasDisplacement) != 0) {
 		PBRParallax = true;
 		displacementScale = PBRParams1.y;
+		if ((PBRFlags & TruePBR_InterlayerParallax) != 0) {
+			displacementScale *= 0.5;
+			displacementOffset = -0.25;
+			displacementLimits = float2(0, 0.5);
+		}
 		mipLevel = GetMipLevel(uv, TexParallaxSampler);
-		uv = GetParallaxCoords(viewPosition.z, uv, mipLevel, viewDirection, tbnTr, TexParallaxSampler, SampParallaxSampler, 0, displacementScale, pixelOffset);
+		uv = GetParallaxCoords(viewPosition.z, uv, mipLevel, viewDirection, tbnTr, TexParallaxSampler, SampParallaxSampler, 0, displacementScale, displacementOffset, displacementLimits, pixelOffset);
 		if (perPassParallax[0].EnableShadows && parallaxShadowQuality > 0.0f)
 			sh0 = displacementScale * (TexParallaxSampler.SampleLevel(SampParallaxSampler, uv, mipLevel).x - 0.5) + 0.5;
 	}
@@ -1106,7 +1113,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		displacementScale1 = PBRParams1.y;
 #		endif
 
-		uv = GetParallaxCoords(viewPosition.z, uv, mipLevel[0], viewDirection, tbnTr, TexColorSampler, SampTerrainParallaxSampler, 3, input.LandBlendWeights1.x, displacementScale1, pixelOffset[0]);
+		uv = GetParallaxCoords(viewPosition.z, uv, mipLevel[0], viewDirection, tbnTr, TexColorSampler, SampTerrainParallaxSampler, 3, input.LandBlendWeights1.x, displacementScale1, 0, float2(0, 1), pixelOffset[0]);
 		terrainUVs[0] = uv;
 		if (perPassParallax[0].EnableShadows && parallaxShadowQuality > 0.0f)
 			sh0[0] = TexColorSampler.SampleLevel(SampTerrainParallaxSampler, uv, mipLevel[0]).w;
@@ -1225,7 +1232,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 			displacementScale2 = LandscapeTexture2PBRParams.y;
 #			endif
 
-			uv = GetParallaxCoords(viewPosition.z, uvOriginal, mipLevel[1], viewDirection, tbnTr, TexLandColor2Sampler, SampTerrainParallaxSampler, 3, input.LandBlendWeights1.y, displacementScale2, pixelOffset[1]);
+			uv = GetParallaxCoords(viewPosition.z, uvOriginal, mipLevel[1], viewDirection, tbnTr, TexLandColor2Sampler, SampTerrainParallaxSampler, 3, input.LandBlendWeights1.y, displacementScale2, 0, float2(0, 1), pixelOffset[1]);
 			terrainUVs[1] = uv;
 			if (perPassParallax[0].EnableShadows && parallaxShadowQuality > 0.0f)
 				sh0[1] = TexLandColor2Sampler.SampleLevel(SampTerrainParallaxSampler, uv, mipLevel[1]).w;
@@ -1264,7 +1271,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 			displacementScale3 = LandscapeTexture3PBRParams.y;
 #			endif
 
-			uv = GetParallaxCoords(viewPosition.z, uvOriginal, mipLevel[2], viewDirection, tbnTr, TexLandColor3Sampler, SampTerrainParallaxSampler, 3, input.LandBlendWeights1.z, displacementScale3, pixelOffset[2]);
+			uv = GetParallaxCoords(viewPosition.z, uvOriginal, mipLevel[2], viewDirection, tbnTr, TexLandColor3Sampler, SampTerrainParallaxSampler, 3, input.LandBlendWeights1.z, displacementScale3, 0, float2(0, 1), pixelOffset[2]);
 			terrainUVs[2] = uv;
 			if (perPassParallax[0].EnableShadows && parallaxShadowQuality > 0.0f)
 				sh0[2] = TexLandColor3Sampler.SampleLevel(SampTerrainParallaxSampler, uv, mipLevel[2]).w;
@@ -1303,7 +1310,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 			displacementScale4 = LandscapeTexture4PBRParams.y;
 #			endif
 
-			uv = GetParallaxCoords(viewPosition.z, uvOriginal, mipLevel[3], viewDirection, tbnTr, TexLandColor4Sampler, SampTerrainParallaxSampler, 3, input.LandBlendWeights1.w, displacementScale4, pixelOffset[3]);
+			uv = GetParallaxCoords(viewPosition.z, uvOriginal, mipLevel[3], viewDirection, tbnTr, TexLandColor4Sampler, SampTerrainParallaxSampler, 3, input.LandBlendWeights1.w, displacementScale4, 0, float2(0, 1), pixelOffset[3]);
 			terrainUVs[3] = uv;
 			if (perPassParallax[0].EnableShadows && parallaxShadowQuality > 0.0f)
 				sh0[3] = TexLandColor4Sampler.SampleLevel(SampTerrainParallaxSampler, uv, mipLevel[3]).w;
@@ -1342,7 +1349,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 			displacementScale5 = LandscapeTexture5PBRParams.y;
 #			endif
 
-			uv = GetParallaxCoords(viewPosition.z, uvOriginal, mipLevel[4], viewDirection, tbnTr, TexLandColor5Sampler, SampTerrainParallaxSampler, 3, input.LandBlendWeights2.x, displacementScale5, pixelOffset[4]);
+			uv = GetParallaxCoords(viewPosition.z, uvOriginal, mipLevel[4], viewDirection, tbnTr, TexLandColor5Sampler, SampTerrainParallaxSampler, 3, input.LandBlendWeights2.x, displacementScale5, 0, float2(0, 1), pixelOffset[4]);
 			terrainUVs[4] = uv;
 			if (perPassParallax[0].EnableShadows && parallaxShadowQuality > 0.0f)
 				sh0[4] = TexLandColor5Sampler.SampleLevel(SampTerrainParallaxSampler, uv, mipLevel[4]).w;
@@ -1381,7 +1388,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 			displacementScale6 = LandscapeTexture6PBRParams.y;
 #			endif
 
-			uv = GetParallaxCoords(viewPosition.z, uvOriginal, mipLevel[5], viewDirection, tbnTr, TexLandColor6Sampler, SampTerrainParallaxSampler, 3, input.LandBlendWeights2.y, displacementScale6, pixelOffset[5]);
+			uv = GetParallaxCoords(viewPosition.z, uvOriginal, mipLevel[5], viewDirection, tbnTr, TexLandColor6Sampler, SampTerrainParallaxSampler, 3, input.LandBlendWeights2.y, displacementScale6, 0, float2(0, 1), pixelOffset[5]);
 			terrainUVs[5] = uv;
 			if (perPassParallax[0].EnableShadows && parallaxShadowQuality > 0.0f)
 				sh0[5] = TexLandColor6Sampler.SampleLevel(SampTerrainParallaxSampler, uv, mipLevel[5]).w;
@@ -1684,13 +1691,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		dirShadow *= GetParallaxSoftShadowMultiplierTerrain(input, terrainUVs, mipLevel, dirLightDirectionTS, sh0, dirLightIsLit * parallaxShadowQuality);
 #		elif defined(PARALLAX)
 	if (perPassParallax[0].EnableParallax && perPassParallax[0].EnableShadows)
-		dirShadow *= GetParallaxSoftShadowMultiplier(uv, mipLevel, dirLightDirectionTS, sh0, TexParallaxSampler, SampParallaxSampler, 0, dirLightIsLit * parallaxShadowQuality, displacementScale);
+		dirShadow *= GetParallaxSoftShadowMultiplier(uv, mipLevel, dirLightDirectionTS, sh0, TexParallaxSampler, SampParallaxSampler, 0, dirLightIsLit * parallaxShadowQuality, displacementScale, displacementOffset, displacementLimits);
 #		elif defined(ENVMAP)
 	if (complexMaterialParallax && perPassParallax[0].EnableShadows)
-		dirShadow *= GetParallaxSoftShadowMultiplier(uv, mipLevel, dirLightDirectionTS, sh0, TexEnvMaskSampler, SampEnvMaskSampler, 3, dirLightIsLit * parallaxShadowQuality, displacementScale);
+		dirShadow *= GetParallaxSoftShadowMultiplier(uv, mipLevel, dirLightDirectionTS, sh0, TexEnvMaskSampler, SampEnvMaskSampler, 3, dirLightIsLit * parallaxShadowQuality, displacementScale, displacementOffset, displacementLimits);
 #		elif defined(TRUE_PBR) && !defined(LODLANDSCAPE)
 	if (PBRParallax && perPassParallax[0].EnableShadows)
-		dirShadow *= GetParallaxSoftShadowMultiplier(uv, mipLevel, dirLightDirectionTS, sh0, TexParallaxSampler, SampParallaxSampler, 0, dirLightIsLit * parallaxShadowQuality, displacementScale);
+		dirShadow *= GetParallaxSoftShadowMultiplier(uv, mipLevel, dirLightDirectionTS, sh0, TexParallaxSampler, SampParallaxSampler, 0, dirLightIsLit * parallaxShadowQuality, displacementScale, displacementOffset, displacementLimits);
 #		endif  // LANDSCAPE
 #	endif      // defined(CPM_AVAILABLE) && (defined (SKINNED) || !defined \
 				// (MODELSPACENORMALS))
@@ -1977,16 +1984,16 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #				if defined(PARALLAX)
 			[branch] if (perPassParallax[0].EnableParallax)
-				lightShadow *= GetParallaxSoftShadowMultiplier(uv, mipLevel, lightDirectionTS, sh0, TexParallaxSampler, SampParallaxSampler, 0, parallaxShadowQuality, displacementScale);
+				lightShadow *= GetParallaxSoftShadowMultiplier(uv, mipLevel, lightDirectionTS, sh0, TexParallaxSampler, SampParallaxSampler, 0, parallaxShadowQuality, displacementScale, displacementOffset, displacementLimits);
 #				elif defined(LANDSCAPE)
 			[branch] if (perPassParallax[0].EnableTerrainParallax)
 				lightShadow *= GetParallaxSoftShadowMultiplierTerrain(input, terrainUVs, mipLevel, lightDirectionTS, sh0, parallaxShadowQuality);
 #				elif defined(ENVMAP)
 			[branch] if (complexMaterialParallax)
-				lightShadow *= GetParallaxSoftShadowMultiplier(uv, mipLevel, lightDirectionTS, sh0, TexEnvMaskSampler, SampEnvMaskSampler, 3, parallaxShadowQuality, displacementScale);
+				lightShadow *= GetParallaxSoftShadowMultiplier(uv, mipLevel, lightDirectionTS, sh0, TexEnvMaskSampler, SampEnvMaskSampler, 3, parallaxShadowQuality, displacementScale, displacementOffset, displacementLimits);
 #				elif defined(TRUE_PBR) && !defined(LODLANDSCAPE)
 			[branch] if (PBRParallax)
-				lightShadow *= GetParallaxSoftShadowMultiplier(uv, mipLevel, lightDirectionTS, sh0, TexParallaxSampler, SampParallaxSampler, 0, parallaxShadowQuality, displacementScale);
+				lightShadow *= GetParallaxSoftShadowMultiplier(uv, mipLevel, lightDirectionTS, sh0, TexParallaxSampler, SampParallaxSampler, 0, parallaxShadowQuality, displacementScale, displacementOffset, displacementLimits);
 #				endif
 		}
 #			endif

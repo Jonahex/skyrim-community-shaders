@@ -34,9 +34,9 @@ float GetMipLevel(float2 coords, Texture2D<float4> tex)
 }
 
 #if defined(LANDSCAPE)
-float2 GetParallaxCoords(float distance, float2 coords, float mipLevel, float3 viewDir, float3x3 tbn, Texture2D<float4> tex, SamplerState texSampler, uint channel, float blend, float scale, out float pixelOffset)
+float2 GetParallaxCoords(float distance, float2 coords, float mipLevel, float3 viewDir, float3x3 tbn, Texture2D<float4> tex, SamplerState texSampler, uint channel, float blend, float scale, float offset, float2 limits, out float pixelOffset)
 #else
-float2 GetParallaxCoords(float distance, float2 coords, float mipLevel, float3 viewDir, float3x3 tbn, Texture2D<float4> tex, SamplerState texSampler, uint channel, float scale, out float pixelOffset)
+float2 GetParallaxCoords(float distance, float2 coords, float mipLevel, float3 viewDir, float3x3 tbn, Texture2D<float4> tex, SamplerState texSampler, uint channel, float scale, float offset, float2 limits, out float pixelOffset)
 #endif
 {
 	pixelOffset = 0.5;
@@ -116,7 +116,7 @@ float2 GetParallaxCoords(float distance, float2 coords, float mipLevel, float3 v
 			currHeight.z = tex.SampleLevel(texSampler, currentOffset[1].xy, mipLevel)[channel];
 			currHeight.w = tex.SampleLevel(texSampler, currentOffset[1].zw, mipLevel)[channel];
 			
-			currHeight = (currHeight - 0.5) * scale + 0.5;
+			currHeight = clamp((currHeight - 0.5) * scale + 0.5 + offset, limits.x, limits.y);
 
 			bool4 testResult = currHeight >= currentBound;
 			[branch] if (any(testResult))
@@ -202,13 +202,13 @@ float2 GetParallaxCoords(float distance, float2 coords, float mipLevel, float3 v
 		}
 
 		if (nearBlendToMid > 0.0) {
-			float height = saturate(scale * (tex.Sample(texSampler, coords.xy)[channel] - 0.5) + 0.5);
+			float height = clamp(scale * (tex.Sample(texSampler, coords.xy)[channel] - 0.5) + 0.5 + offset, limits.x, limits.y);
 			height = height * maxHeight - minHeight;
 			pixelOffset = lerp(pt1.x, height, nearBlendToMid);
 			output = lerp(output, viewDirTS.xy * height.xx + coords.xy, nearBlendToMid);
 		}
 	} else if (midBlendToFar < 1.0) {
-		float height = saturate(scale * (tex.Sample(texSampler, coords.xy)[channel] - 0.5) + 0.5);
+		float height = clamp(scale * (tex.Sample(texSampler, coords.xy)[channel] - 0.5) + 0.5 + offset, limits.x, limits.y);
 		if (midBlendToFar > 0.0) {
 			maxHeight *= (1 - midBlendToFar);
 			minHeight *= (1 - midBlendToFar);
@@ -228,14 +228,14 @@ float2 GetParallaxCoords(float distance, float2 coords, float mipLevel, float3 v
 
 // Cheap method of creating soft shadows using height for a given light source
 // Only uses 1 sample vs the 8 in the original paper's example, which makes this effect very scaleable at the cost of small details
-float GetParallaxSoftShadowMultiplier(float2 coords, float mipLevel, float3 L, float sh0, Texture2D<float4> tex, SamplerState texSampler, uint channel, float quality, float scale)
+float GetParallaxSoftShadowMultiplier(float2 coords, float mipLevel, float3 L, float sh0, Texture2D<float4> tex, SamplerState texSampler, uint channel, float quality, float scale, float offset, float2 limits)
 {
 	if (quality > 0.0) {
 		const float height = 0.025;
 		const float2 rayDir = L.xy * height;
 
 		const float h0 = 1.0 - sh0;
-		const float h = 1.0 - saturate(scale * (tex.SampleLevel(texSampler, coords + rayDir, mipLevel)[channel] - 0.5) + 0.5);
+		const float h = 1.0 - clamp(scale * (tex.SampleLevel(texSampler, coords + rayDir, mipLevel)[channel] - 0.5) + 0.5 + offset, limits.x, limits.y);
 
 		// Compare the difference between the two heights to see if the height blocks it
 		const float occlusion = 1.0 - saturate((h0 - h) * 7.0);
@@ -252,17 +252,17 @@ float GetParallaxSoftShadowMultiplierTerrain(PS_INPUT input, float2 coords[6], f
 	float occlusion = 0.0;
 
 	if (input.LandBlendWeights1.x > 0)
-		occlusion += GetParallaxSoftShadowMultiplier(coords[0], mipLevel[0], L, sh0[0], TexColorSampler, SampTerrainParallaxSampler, 3, quality, 1.f) * input.LandBlendWeights1.x;
+		occlusion += GetParallaxSoftShadowMultiplier(coords[0], mipLevel[0], L, sh0[0], TexColorSampler, SampTerrainParallaxSampler, 3, quality, 1.f, 0.f, float2(0, 1)) * input.LandBlendWeights1.x;
 	if (input.LandBlendWeights1.y > 0)
-		occlusion += GetParallaxSoftShadowMultiplier(coords[1], mipLevel[1], L, sh0[1], TexLandColor2Sampler, SampTerrainParallaxSampler, 3, quality, 1.f) * input.LandBlendWeights1.y;
+		occlusion += GetParallaxSoftShadowMultiplier(coords[1], mipLevel[1], L, sh0[1], TexLandColor2Sampler, SampTerrainParallaxSampler, 3, quality, 1.f, 0.f, float2(0, 1)) * input.LandBlendWeights1.y;
 	if (input.LandBlendWeights1.z > 0)
-		occlusion += GetParallaxSoftShadowMultiplier(coords[2], mipLevel[2], L, sh0[2], TexLandColor3Sampler, SampTerrainParallaxSampler, 3, quality, 1.f) * input.LandBlendWeights1.z;
+		occlusion += GetParallaxSoftShadowMultiplier(coords[2], mipLevel[2], L, sh0[2], TexLandColor3Sampler, SampTerrainParallaxSampler, 3, quality, 1.f, 0.f, float2(0, 1)) * input.LandBlendWeights1.z;
 	if (input.LandBlendWeights1.w > 0)
-		occlusion += GetParallaxSoftShadowMultiplier(coords[3], mipLevel[3], L, sh0[3], TexLandColor4Sampler, SampTerrainParallaxSampler, 3, quality, 1.f) * input.LandBlendWeights1.w;
+		occlusion += GetParallaxSoftShadowMultiplier(coords[3], mipLevel[3], L, sh0[3], TexLandColor4Sampler, SampTerrainParallaxSampler, 3, quality, 1.f, 0.f, float2(0, 1)) * input.LandBlendWeights1.w;
 	if (input.LandBlendWeights2.x > 0)
-		occlusion += GetParallaxSoftShadowMultiplier(coords[4], mipLevel[4], L, sh0[4], TexLandColor5Sampler, SampTerrainParallaxSampler, 3, quality, 1.f) * input.LandBlendWeights2.x;
+		occlusion += GetParallaxSoftShadowMultiplier(coords[4], mipLevel[4], L, sh0[4], TexLandColor5Sampler, SampTerrainParallaxSampler, 3, quality, 1.f, 0.f, float2(0, 1)) * input.LandBlendWeights2.x;
 	if (input.LandBlendWeights2.y > 0)
-		occlusion += GetParallaxSoftShadowMultiplier(coords[5], mipLevel[5], L, sh0[5], TexLandColor6Sampler, SampTerrainParallaxSampler, 3, quality, 1.f) * input.LandBlendWeights2.y;
+		occlusion += GetParallaxSoftShadowMultiplier(coords[5], mipLevel[5], L, sh0[5], TexLandColor6Sampler, SampTerrainParallaxSampler, 3, quality, 1.f, 0.f, float2(0, 1)) * input.LandBlendWeights2.y;
 	return saturate(occlusion);  // Blend weights seem to go greater than 1.0 sometimes
 }
 #endif
