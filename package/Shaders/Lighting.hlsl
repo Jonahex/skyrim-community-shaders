@@ -1538,39 +1538,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	if defined(WORLD_MAP)
 	baseColor.xyz = GetWorldMapBaseColor(rawBaseColor.xyz, baseColor.xyz, texProjTmp);
 #	endif  // WORLD_MAP
-		
-#	if defined(TRUE_PBR)
-	float roughness = 1;
-	float metallic = 0;
-	float ao = 1;
-	float3 f0 = 0.04;
-	float3 subsurfaceColor = 0;
-	float thickness = 1;
-	
-	roughness = saturate(rawRMAOS.x);
-	metallic = saturate(rawRMAOS.y);
-	f0 = saturate(rawRMAOS.w);
-	
-	float3 pbrDiffuseColor = baseColor.xyz;
-	f0 = lerp(f0, baseColor.xyz, metallic);
-	baseColor.xyz *= 1 - metallic;
-	
-	ao = rawRMAOS.z;
-	
-#		if !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
-	subsurfaceColor = PBRParams2.xyz;
-	thickness = PBRParams2.w;
-	[branch] if ((PBRFlags & TruePBR_HasSubsurface) != 0)
-	{
-		float4 sampledSubsurfaceProperties = TexRimSoftLightWorldMapOverlaySampler.Sample(SampRimSoftLightWorldMapOverlaySampler, uv);
-		subsurfaceColor *= sampledSubsurfaceProperties.xyz;
-		thickness *= sampledSubsurfaceProperties.w;
-	}
-#		endif
-	
-	float3 specularColorPBR = 0;
-	float3 transmissionColor = 0;
-#	endif // TRUE_PBR
 
 	float3 worldSpaceNormal = modelNormal;
 
@@ -1580,6 +1547,80 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	endif
 
 	float3 screenSpaceNormal = normalize(WorldToView(worldSpaceNormal, false, eyeIndex));
+		
+#	if defined(TRUE_PBR)
+	PBRSurfaceProperties pbrSurfaceProperties;
+	
+	pbrSurfaceProperties.Roughness = saturate(rawRMAOS.x);
+	pbrSurfaceProperties.Metallic = saturate(rawRMAOS.y);
+	pbrSurfaceProperties.AO = rawRMAOS.z;
+	pbrSurfaceProperties.F0 = lerp(saturate(rawRMAOS.w), baseColor.xyz, pbrSurfaceProperties.Metallic);
+
+	pbrSurfaceProperties.SubsurfaceColor = 0;
+	pbrSurfaceProperties.Thickness = 0;
+		
+	pbrSurfaceProperties.CoatColor = 0;
+	pbrSurfaceProperties.CoatStrength = 0;
+	pbrSurfaceProperties.CoatRoughness = 0;
+	pbrSurfaceProperties.CoatF0 = 0.04;
+	
+	baseColor.xyz *= 1 - pbrSurfaceProperties.Metallic;
+
+	float3 coatModelNormal = modelNormal.xyz;
+	float3 coatWorldNormal = worldSpaceNormal;
+	
+#		if !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
+	[branch] if ((PBRFlags & TruePBR_Subsurface) != 0)
+	{
+		pbrSurfaceProperties.SubsurfaceColor = PBRParams2.xyz;
+		pbrSurfaceProperties.Thickness = PBRParams2.w;
+		[branch] if ((PBRFlags & TruePBR_HasFeatureTexture0) != 0)
+		{
+			float4 sampledSubsurfaceProperties = TexRimSoftLightWorldMapOverlaySampler.Sample(SampRimSoftLightWorldMapOverlaySampler, uv);
+			pbrSurfaceProperties.SubsurfaceColor *= sampledSubsurfaceProperties.xyz;
+			pbrSurfaceProperties.Thickness *= sampledSubsurfaceProperties.w;
+		}
+	}
+	else if ((PBRFlags & TruePBR_TwoLayer) != 0)
+	{
+		pbrSurfaceProperties.CoatColor = PBRParams2.xyz;
+		pbrSurfaceProperties.CoatStrength = PBRParams2.w;
+		pbrSurfaceProperties.CoatRoughness = MultiLayerParallaxData.x;
+		pbrSurfaceProperties.CoatF0 = MultiLayerParallaxData.y;
+		
+		float2 coatUv = uv;
+		[branch] if ((PBRFlags & TruePBR_InterlayerParallax) != 0)
+		{
+			coatUv = uvOriginal;
+		}
+		[branch] if ((PBRFlags & TruePBR_HasFeatureTexture0) != 0)
+		{
+			float4 sampledCoatProperties = TexRimSoftLightWorldMapOverlaySampler.Sample(SampRimSoftLightWorldMapOverlaySampler, coatUv);
+			pbrSurfaceProperties.CoatColor *= sampledCoatProperties.xyz;
+			pbrSurfaceProperties.CoatStrength *= sampledCoatProperties.w;
+		}
+		[branch] if ((PBRFlags & TruePBR_HasFeatureTexture1) != 0)
+		{
+			float4 sampledCoatProperties = TexBackLightSampler.Sample(SampBackLightSampler, coatUv);
+			pbrSurfaceProperties.CoatRoughness *= sampledCoatProperties.w;
+			[branch] if ((PBRFlags & TruePBR_CoatNormal) != 0)
+			{
+				coatModelNormal = normalize(mul(tbn, TransformNormal(sampledCoatProperties.xyz)));
+			}
+
+#if !defined(DRAW_IN_WORLDSPACE)
+			[flatten] if (!input.WorldSpace) 
+			{
+				coatWorldNormal = normalize(mul(input.World[eyeIndex], float4(coatModelNormal, 0)));
+			}
+#		endif
+		}
+	}
+#	endif
+	
+	float3 specularColorPBR = 0;
+	float3 transmissionColor = 0;
+#	endif // TRUE_PBR
 
 #	if !defined(MODELSPACENORMALS)
 	float3 vertexNormal = tbnTr[2];
@@ -1660,15 +1701,17 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float3 specularColor = 0.0.xxx;
 
 	float3 lightsDiffuseColor = 0.0.xxx;
+	float3 coatLightsDiffuseColor = 0.0.xxx;
 	float3 lightsSpecularColor = 0.0.xxx;
 	
 	float3 lodLandDiffuseColor = 0;
 
 #	if defined(TRUE_PBR)
 	{
-		float3 dirDiffuseColor, dirTransmissionColor, dirSpecularColor;
-		GetDirectLightInputPBR(dirDiffuseColor, dirTransmissionColor, dirSpecularColor, modelNormal.xyz, viewDirection, DirLightDirection, dirLightColor, roughness, f0, subsurfaceColor, thickness);
+		float3 dirDiffuseColor, coatDirDiffuseColor, dirTransmissionColor, dirSpecularColor;
+		GetDirectLightInputPBR(dirDiffuseColor, coatDirDiffuseColor, dirTransmissionColor, dirSpecularColor, modelNormal.xyz, coatModelNormal, viewDirection, DirLightDirection, dirLightColor, pbrSurfaceProperties);
 		lightsDiffuseColor += dirDiffuseColor;
+		coatLightsDiffuseColor += coatDirDiffuseColor;
 		transmissionColor += dirTransmissionColor;
 		specularColorPBR += dirSpecularColor;
 #		if defined(LOD_LAND_BLEND)
@@ -1830,9 +1873,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		
 #			if defined(TRUE_PBR)
 		{
-			float3 pointDiffuseColor, pointTransmissionColor, pointSpecularColor;
-			GetDirectLightInputPBR(pointDiffuseColor, pointTransmissionColor, pointSpecularColor, modelNormal.xyz, viewDirection, normalizedLightDirection, AdjustDirectLightColorForPBR(lightColor), roughness, f0, subsurfaceColor, thickness);
+			float3 pointDiffuseColor, coatPointDiffuseColor, pointTransmissionColor, pointSpecularColor;
+			GetDirectLightInputPBR(pointDiffuseColor, coatPointDiffuseColor, pointTransmissionColor, pointSpecularColor, modelNormal.xyz, coatModelNormal, viewDirection, normalizedLightDirection, AdjustDirectLightColorForPBR(lightColor), pbrSurfaceProperties);
 			lightsDiffuseColor += pointDiffuseColor;
+			coatLightsDiffuseColor += coatPoinDiffuseColor;
 			transmissionColor += pointTransmissionColor;
 			specularColorPBR += pointSpecularColor;
 		}
@@ -1927,7 +1971,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 			}
 		}
 
-#if defined(CPM_AVAILABLE)
+#		if defined(CPM_AVAILABLE)
 		if (perPassParallax[0].EnableShadows && shadowComponent != 0.0) {
 			float3 lightDirectionTS = normalize(mul(normalizedLightDirection, tbn).xyz);
 
@@ -1951,9 +1995,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #			if defined(TRUE_PBR)
 		{
-			float3 pointDiffuseColor, pointTransmissionColor, pointSpecularColor;
-			GetDirectLightInputPBR(pointDiffuseColor, pointTransmissionColor, pointSpecularColor, worldSpaceNormal.xyz, worldSpaceViewDirection, normalizedLightDirection, AdjustDirectLightColorForPBR(lightColor), roughness, f0, subsurfaceColor, thickness);
+			float3 pointDiffuseColor, coatPointDiffuseColor, pointTransmissionColor, pointSpecularColor;
+			GetDirectLightInputPBR(pointDiffuseColor, coatPointDiffuseColor, pointTransmissionColor, pointSpecularColor, worldSpaceNormal.xyz, coatWorldNormal, worldSpaceViewDirection, normalizedLightDirection, AdjustDirectLightColorForPBR(lightColor), pbrSurfaceProperties);
 			lightsDiffuseColor += pointDiffuseColor;
+			coatLightsDiffuseColor += coatPointDiffuseColor;
 			transmissionColor += pointTransmissionColor;
 			specularColorPBR += pointSpecularColor;
 		}
@@ -1980,10 +2025,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		lightsDiffuseColor += lightDiffuseColor;
 #			endif
 
-#				if defined(WETNESS_EFFECTS)
+#			if defined(WETNESS_EFFECTS)
 		if (waterRoughnessSpecular < 1.0)
 			wetnessSpecular += GetWetnessSpecular(wetnessNormal, normalizedLightDirection, worldSpaceViewDirection, sRGB2Lin(lightColor), waterRoughnessSpecular) * perPassWetnessEffects[0].MaxPointLightSpecular;
-#endif
+#			endif
 	}
 #		endif
 #	endif
@@ -2109,16 +2154,26 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 	float4 color = 0;
 	
-	color.xyz += diffuseColor * baseColor.xyz;
-	
 #	if defined(TRUE_PBR)
+	{
+		float3 directLightsDiffuseInput = diffuseColor * baseColor.xyz;
+		[branch] if ((PBRFlags & TruePBR_ColoredCoat) != 0)
+		{
+			directLightsDiffuseInput = lerp(directLightsDiffuseInput, pbrSurfaceProperties.CoatColor * coatLightsDiffuseColor, pbrSurfaceProperties.CoatStrength);
+		}
+		
+		color.xyz += directLightsDiffuseInput;
+	}
+
 	float3 diffuseIrradiance, specularIrradiance;
-	GetAmbientLightInputPBR(diffuseIrradiance, specularIrradiance, worldSpaceNormal.xyz, worldSpaceViewDirection, baseColor.xyz, roughness, f0, subsurfaceColor, thickness, ao);
+	GetAmbientLightInputPBR(diffuseIrradiance, specularIrradiance, worldSpaceNormal.xyz, worldSpaceViewDirection, baseColor.xyz, pbrSurfaceProperties);
 	color.xyz += diffuseIrradiance;
 	specularColorPBR += specularIrradiance;
 	
 	color.xyz += emitColor.xyz;
 	color.xyz += transmissionColor;
+#	else
+	color.xyz += diffuseColor * baseColor.xyz;
 #	endif
 
 #	if defined(HAIR)

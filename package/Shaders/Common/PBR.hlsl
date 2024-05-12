@@ -11,6 +11,20 @@ struct PBRData
 	bool MatchDynamicCubemapToAmbient;
 };
 
+struct PBRSurfaceProperties
+{
+    float Roughness;
+    float Metallic;
+    float AO;
+    float3 F0;
+    float3 SubsurfaceColor;
+    float Thickness;
+    float3 CoatColor;
+    float CoatStrength;
+    float CoatRoughness;
+    float3 CoatF0;
+};
+
 #define TruePBR_Lambert 0
 #define TruePBR_Burley 1
 #define TruePBR_OrenNayar 2
@@ -18,9 +32,14 @@ struct PBRData
 #define TruePBR_Chan 4
 
 #define TruePBR_HasEmissive (1 << 0)
-#define TruePBR_HasSubsurface (1 << 1)
-#define TruePBR_Subsurface (1 << 3)
-#define TruePBR_HasDisplacement (1 << 4)
+#define TruePBR_HasDisplacement (1 << 1)
+#define TruePBR_HasFeatureTexture0 (1 << 2)
+#define TruePBR_HasFeatureTexture1 (1 << 3)
+#define TruePBR_Subsurface (1 << 4)
+#define TruePBR_TwoLayer (1 << 5)
+#define TruePBR_ColoredCoat (1 << 6)
+#define TruePBR_InterlayerParallax (1 << 7)
+#define TruePBR_CoatNormal (1 << 8)
 	
 StructuredBuffer<PBRData> pbrData : register(t121);
 
@@ -87,11 +106,11 @@ float GetNormalDistributionFunctionCharlie(float roughness, float NdotH) {
     return (2.0 + invAlpha) * pow(sin2h, invAlpha * 0.5) / (2.0 * PI);
 }
 
-float3 GetSpecularDirectLightMultiplierMicrofacet(float roughness, float3 specularColor, float NdotL, float NdotV, float NdotH, float VdotH)
+float3 GetSpecularDirectLightMultiplierMicrofacet(float roughness, float3 specularColor, float NdotL, float NdotV, float NdotH, float VdotH, out float3 F)
 {
 	float D = GetNormalDistributionFunctionGGX(roughness, NdotH);
 	float G = GetVisibilityFunctionSmithJointApprox(roughness, NdotV, NdotL);
-	float3 F = GetFresnelFactorSchlick(specularColor, VdotH);
+	F = GetFresnelFactorSchlick(specularColor, VdotH);
 
 	return D * G * F;
 }
@@ -179,9 +198,10 @@ float2 GetEnvBRDFApproxLazarov(float roughness, float NdotV)
 	return AB;
 }
 
-void GetDirectLightInputPBR(out float3 diffuse, out float3 transmission, out float3 specular, float3 N, float3 V, float3 L, float3 lightColor, float roughness, float3 specularColor, float3 subsurfaceColor, float thickness)
+void GetDirectLightInputPBR(out float3 diffuse, out float3 coatDiffuse, out float3 transmission, out float3 specular, float3 N, float3 coatN, float3 V, float3 L, float3 lightColor, PBRSurfaceProperties surfaceProperties)
 {
 	diffuse = 0;
+    coatDiffuse = 0;
 	transmission = 0;
 	specular = 0;
 	
@@ -206,40 +226,64 @@ void GetDirectLightInputPBR(out float3 diffuse, out float3 transmission, out flo
 	}
 	else if (pbrData[0].DiffuseModel == TruePBR_Burley)
 	{
-		diffuseMultiplier = GetDiffuseDirectLightMultiplierBurley(roughness, satNdotV, satNdotL, satVdotH);
-	}
+        diffuseMultiplier = GetDiffuseDirectLightMultiplierBurley(surfaceProperties.Roughness, satNdotV, satNdotL, satVdotH);
+    }
 	else if (pbrData[0].DiffuseModel == TruePBR_OrenNayar)
 	{
-		diffuseMultiplier = GetDiffuseDirectLightMultiplierOrenNayar(roughness, N, V, L, NdotV, NdotL);
-	}
+        diffuseMultiplier = GetDiffuseDirectLightMultiplierOrenNayar(surfaceProperties.Roughness, N, V, L, NdotV, NdotL);
+    }
 	else if (pbrData[0].DiffuseModel == TruePBR_Gotanda)
 	{
-		diffuseMultiplier = GetDiffuseDirectLightMultiplierGotanda(roughness, satNdotV, satNdotL, satVdotL);
-	}
+        diffuseMultiplier = GetDiffuseDirectLightMultiplierGotanda(surfaceProperties.Roughness, satNdotV, satNdotL, satVdotL);
+    }
 	else
 	{
-		diffuseMultiplier = GetDiffuseDirectLightMultiplierChan(roughness, satNdotV, satNdotL, satVdotH, satNdotH);
-	}
+        diffuseMultiplier = GetDiffuseDirectLightMultiplierChan(surfaceProperties.Roughness, satNdotV, satNdotL, satVdotH, satNdotH);
+    }
 
 	diffuse += PI * diffuseMultiplier * lightColor * satNdotL;
-	specular += PI * GetSpecularDirectLightMultiplierMicrofacet(roughness, specularColor, satNdotL, satNdotV, satNdotH, satVdotH) * lightColor * satNdotL;
+	
+    float3 F;
+    specular += PI * GetSpecularDirectLightMultiplierMicrofacet(surfaceProperties.Roughness, surfaceProperties.F0, satNdotL, satNdotV, satNdotH, satVdotH, F) * lightColor * satNdotL;
 	
 	float2 specularBRDF = 0;
 	[branch] if (pbrData[0].UseMultipleScattering)
 	{
-		specularBRDF = GetEnvBRDFApproxLazarov(roughness, satNdotV);
-		specular *= 1 + specularColor * (1 / (specularBRDF.x + specularBRDF.y) - 1);
-	}
+        specularBRDF = GetEnvBRDFApproxLazarov(surfaceProperties.Roughness, satNdotV);
+        specular *= 1 + surfaceProperties.F0 * (1 / (specularBRDF.x + specularBRDF.y) - 1);
+    }
 	
 #	if !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
 	[branch] if ((PBRFlags & TruePBR_Subsurface) != 0)
 	{
 		const float subsurfacePower = 12.234;
 		float forwardScatter = exp2(saturate(-VdotL) * subsurfacePower - subsurfacePower);
-		float backScatter = saturate(satNdotL * thickness + (1.0 - thickness)) * 0.5;
-		float subsurface = lerp(backScatter, 1, forwardScatter) * (1.0 - thickness);
-		transmission += PI * diffuseMultiplier * subsurfaceColor * subsurface * lightColor;
-	}
+        float backScatter = saturate(satNdotL * surfaceProperties.Thickness + (1.0 - surfaceProperties.Thickness)) * 0.5;
+        float subsurface = lerp(backScatter, 1, forwardScatter) * (1.0 - surfaceProperties.Thickness);
+        transmission += PI * diffuseMultiplier * surfaceProperties.SubsurfaceColor * subsurface * lightColor;
+    }
+    else if ((PBRFlags & TruePBR_TwoLayer) != 0)
+    {
+        float coatNdotL = satNdotL;
+        float coatNdotV = satNdotV;
+        float coatNdotH = satNdotH;
+        [branch] if ((PBRFlags & TruePBR_CoatNormal) != 0)
+        {
+            coatNdotL = clamp(dot(coatN, L), 1e-5, 1);
+            coatNdotV = saturate(abs(dot(coatN, V)) + 1e-5);
+            coatNdotH = saturate(dot(coatN, H));
+        }
+		
+        float3 coatF;
+        float3 coatSpecular = PI * GetSpecularDirectLightMultiplierMicrofacet(surfaceProperties.CoatRoughness, surfaceProperties.CoatF0, coatNdotL, coatNdotV, coatNdotH, satVdotH, coatF) * lightColor * coatNdotL;
+		
+		float3 layerAttenuation = 1 - coatF * surfaceProperties.CoatStrength;
+        diffuse *= layerAttenuation;
+        specular *= layerAttenuation;
+		
+        coatDiffuse += lightColor * coatNdotL;
+        specular += coatSpecular * surfaceProperties.CoatStrength;
+    }
 #	endif
 }
 
@@ -255,14 +299,14 @@ float3 GetSpecularDominantDirection(float3 N, float3 R, float roughness)
 	return lerp(N, R, (1 - a) * (sqrt(1 - a) + a));	
 }
 
-void GetAmbientLightInputPBR(out float3 diffuse, out float3 specular, float3 N, float3 V, float3 diffuseColor, float roughness, float3 specularColor, float3 subsurfaceColor, float thickness, float materialAO)
+void GetAmbientLightInputPBR(out float3 diffuse, out float3 specular, float3 N, float3 V, float3 diffuseColor, PBRSurfaceProperties surfaceProperties)
 {
 	diffuse = 0;
 	specular = 0;
 
 	float NdotV = saturate(dot(N, V));
 	float3 R = normalize(reflect(-V, N));
-	R = GetSpecularDominantDirection(N, R, roughness);
+    R = GetSpecularDominantDirection(N, R, surfaceProperties.Roughness);
 
 	float3 diffuseIrradiance = 0;
 	float3 specularIrradiance = 0;
@@ -271,7 +315,7 @@ void GetAmbientLightInputPBR(out float3 diffuse, out float3 specular, float3 N, 
 	uint width = 0, height = 0;
 	specularTexture.GetDimensions(width, height);
 	uint levelCount = log2(width) + 1;
-	float specularLevel = RoughnessToMip(roughness, levelCount);
+	float specularLevel = RoughnessToMip(surfaceProperties.Roughness, levelCount);
 	
 	float ambientScale = 1;
 	
@@ -292,17 +336,14 @@ void GetAmbientLightInputPBR(out float3 diffuse, out float3 specular, float3 N, 
         specularIrradiance += AdjustAmbientLightColorForPBR(mul(DirectionalAmbient, float4(R, 1.f)));
     }
 
-    float2 specularBRDF = GetEnvBRDFApproxLazarov(roughness, NdotV);
+    float2 specularBRDF = GetEnvBRDFApproxLazarov(surfaceProperties.Roughness, NdotV);
 	
-	float3 specularLobeWeight = specularColor * specularBRDF.x + specularBRDF.y;
+	float3 specularLobeWeight = surfaceProperties.F0 * specularBRDF.x + specularBRDF.y;
 	float3 diffuseLobeWeight = diffuseColor * (1 - specularLobeWeight);
 	[branch] if (pbrData[0].UseMultipleScattering)
 	{
-		specularLobeWeight *= 1 + specularColor * (1 / (specularBRDF.x + specularBRDF.y) - 1);
-	}
-	
-	diffuse += diffuseIrradiance * diffuseLobeWeight;
-	specular += specularIrradiance * specularLobeWeight;
+        specularLobeWeight *= 1 + surfaceProperties.F0 * (1 / (specularBRDF.x + specularBRDF.y) - 1);
+    }
 	
 	[branch] if ((PBRFlags & TruePBR_Subsurface) != 0)
 	{
@@ -311,7 +352,7 @@ void GetAmbientLightInputPBR(out float3 diffuse, out float3 specular, float3 N, 
 #	if defined(DYNAMIC_CUBEMAPS)
 		[branch] if (pbrData[0].UseDynamicCubemap)
 		{
-			float level = (levelCount - 1) * roughness * roughness + 1 + thickness;
+			float level = (levelCount - 1) * surfaceProperties.Roughness * surfaceProperties.Roughness + 1 + surfaceProperties.Thickness;
 			subsurfaceSpecularIrradiance += PI * ambientScale * AdjustAmbientLightColorForPBR(specularTexture.SampleLevel(SampColorSampler, -V, level).xyz);
 		}
 		else
@@ -320,17 +361,41 @@ void GetAmbientLightInputPBR(out float3 diffuse, out float3 specular, float3 N, 
             subsurfaceSpecularIrradiance += AdjustAmbientLightColorForPBR(mul(DirectionalAmbient, float4(-V, 1.f)));
         }
 		
-		float attenuation = (1.0 - thickness) / (2.0 * PI);
-		diffuse += subsurfaceColor * (diffuseIrradiance + subsurfaceSpecularIrradiance) * attenuation;
-	}
+        float attenuation = (1.0 - surfaceProperties.Thickness) / (2.0 * PI);
+		diffuse += surfaceProperties.SubsurfaceColor * (diffuseIrradiance + subsurfaceSpecularIrradiance) * attenuation;
+    }
+    else if ((PBRFlags & TruePBR_TwoLayer) != 0)
+    {
+        float2 coatSpecularBRDF = GetEnvBRDFApproxLazarov(surfaceProperties.CoatRoughness, NdotV);
+        float3 coatSpecularLobeWeight = surfaceProperties.CoatF0 * coatSpecularBRDF.x + coatSpecularBRDF.y;
+		[branch] if (pbrData[0].UseMultipleScattering)
+		{
+            coatSpecularLobeWeight *= 1 + surfaceProperties.CoatF0 * (1 / (coatSpecularBRDF.x + coatSpecularBRDF.y) - 1);
+        }
+        float3 coatF = GetFresnelFactorSchlick(surfaceProperties.CoatF0, NdotV);
+		
+		float3 layerAttenuation = 1 - coatF * surfaceProperties.CoatStrength;
+        diffuseLobeWeight *= layerAttenuation;
+        specularLobeWeight *= layerAttenuation;
+		
+        [branch] if ((PBRFlags & TruePBR_ColoredCoat) != 0)
+        {
+            float3 coatDiffuseLobeWeight = surfaceProperties.CoatColor * (1 - coatSpecularLobeWeight);
+            diffuseLobeWeight += coatDiffuseLobeWeight * surfaceProperties.CoatStrength;
+        }
+        specularLobeWeight += coatSpecularLobeWeight * surfaceProperties.CoatStrength;
+    }
 	
-	float3 diffuseAO = materialAO;
-	float3 specularAO = SpecularAOLagarde(NdotV, materialAO, roughness);
+    diffuse += diffuseIrradiance * diffuseLobeWeight;
+    specular += specularIrradiance * specularLobeWeight;
+	
+    float3 diffuseAO = surfaceProperties.AO;
+    float3 specularAO = SpecularAOLagarde(NdotV, surfaceProperties.AO, surfaceProperties.Roughness);
 	[branch] if (pbrData[0].UseMultiBounceAO)
 	{
 		diffuseAO = MultiBounceAO(diffuseColor, diffuseAO).y;
-		specularAO = MultiBounceAO(specularColor, specularAO).y;
-	}
+        specularAO = MultiBounceAO(surfaceProperties.F0, specularAO).y;
+    }
 	
 	diffuse *= diffuseAO;
 	specular *= specularAO;

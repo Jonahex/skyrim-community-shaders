@@ -761,6 +761,25 @@ void State::SetupTextureSetData()
 			if (config["subsurfaceOpacity"].is_number_float()) {
 				textureSetData.subsurfaceOpacity = config["subsurfaceOpacity"];
 			}
+			{
+				const auto& coatColor = config["coatColor"];
+				if (coatColor.is_array() && coatColor.size() == 3 &&
+					coatColor[0].is_number_float() && coatColor[1].is_number_float() &&
+					coatColor[2].is_number_float()) {
+					textureSetData.coatColor.red = coatColor[0];
+					textureSetData.coatColor.green = coatColor[1];
+					textureSetData.coatColor.blue = coatColor[1];
+				}
+			}
+			if (config["coatStrength"].is_number_float()) {
+				textureSetData.coatStrength = config["coatStrength"];
+			}
+			if (config["coatRoughness"].is_number_float()) {
+				textureSetData.coatRoughness = config["coatRoughness"];
+			}
+			if (config["coatSpecularLevel"].is_number_float()) {
+				textureSetData.coatSpecularLevel = config["coatSpecularLevel"];
+			}
 
 			pbrTextureSets.insert_or_assign(editorId, textureSetData);
 		}
@@ -773,7 +792,6 @@ State::PBRTextureSetData* State::GetPBRTextureSetData(const RE::TESForm* texture
 		return nullptr;
 	}
 
-	logger::info("{}", textureSet->GetFormEditorID());
 	auto it = pbrTextureSets.find(textureSet->GetFormEditorID());
 	if (it == pbrTextureSets.end()) {
 		return nullptr;

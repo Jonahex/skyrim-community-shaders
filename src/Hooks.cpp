@@ -546,7 +546,9 @@ namespace Hooks
 			{
 				RE::BSLightingShaderMaterialBase* material = nullptr;
 				if (property->flags.any(kMenuScreen)) {
-					material = BSLightingShaderMaterialPBR::Make();
+					auto* pbrMaterial = BSLightingShaderMaterialPBR::Make();
+					pbrMaterial->loadedWithFeature = feature;
+					material = pbrMaterial;
 					isPbr = true;
 				} else {
 					material = RE::BSLightingShaderMaterialBase::CreateMaterial(feature);
@@ -588,8 +590,20 @@ namespace Hooks
 				if (property->flags.any(kRimLighting)) {
 					pbrMaterial->pbrFlags.set(PBRFlags::Subsurface);
 				}
+				else if (property->flags.any(kMultiLayerParallax)) {
+					pbrMaterial->pbrFlags.set(PBRFlags::TwoLayer);
+					if (property->flags.any(kSoftLighting)) {
+						pbrMaterial->pbrFlags.set(PBRFlags::InterlayerParallax);
+					}
+					if (property->flags.any(kBackLighting)) {
+						pbrMaterial->pbrFlags.set(PBRFlags::CoatNormal);
+					}
+					if (property->flags.any(kEffectLighting)) {
+						pbrMaterial->pbrFlags.set(PBRFlags::ColoredCoat);
+					}
+				}
 				property->flags.set(kVertexLighting);
-				property->flags.reset(kMenuScreen, kSpecular, kGlowMap, kEnvMap, kSoftLighting, kRimLighting, kBackLighting, kAnisotropicLighting);
+				property->flags.reset(kMenuScreen, kSpecular, kGlowMap, kEnvMap, kMultiLayerParallax, kSoftLighting, kRimLighting, kBackLighting, kAnisotropicLighting, kEffectLighting);
 			}
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
@@ -745,6 +759,37 @@ namespace Hooks
 					stl::enumeration<PBRShaderFlags> shaderFlags;
 					if (pbrMaterial->pbrFlags.any(PBRFlags::Subsurface)) {
 						shaderFlags.set(PBRShaderFlags::Subsurface);
+
+						std::array<float, 4> PBRParams2;
+						PBRParams2[0] = pbrMaterial->GetSubsurfaceColor().red;
+						PBRParams2[1] = pbrMaterial->GetSubsurfaceColor().green;
+						PBRParams2[2] = pbrMaterial->GetSubsurfaceColor().blue;
+						PBRParams2[3] = pbrMaterial->GetSubsurfaceOpacity();
+						shadowState->SetPSConstant(PBRParams2, RE::BSGraphics::ConstantGroupLevel::PerMaterial, 43);
+					}
+					else if (pbrMaterial->pbrFlags.any(PBRFlags::TwoLayer)) {
+						shaderFlags.set(PBRShaderFlags::TwoLayer);
+						if (pbrMaterial->pbrFlags.any(PBRFlags::InterlayerParallax)) {
+							shaderFlags.set(PBRShaderFlags::InterlayerParallax);
+						}
+						if (pbrMaterial->pbrFlags.any(PBRFlags::CoatNormal)) {
+							shaderFlags.set(PBRShaderFlags::CoatNormal);
+						}
+						if (pbrMaterial->pbrFlags.any(PBRFlags::ColoredCoat)) {
+							shaderFlags.set(PBRShaderFlags::ColoredCoat);
+						}
+
+						std::array<float, 4> PBRParams2;
+						PBRParams2[0] = pbrMaterial->GetCoatColor().red;
+						PBRParams2[1] = pbrMaterial->GetCoatColor().green;
+						PBRParams2[2] = pbrMaterial->GetCoatColor().blue;
+						PBRParams2[3] = pbrMaterial->GetCoatStrength();
+						shadowState->SetPSConstant(PBRParams2, RE::BSGraphics::ConstantGroupLevel::PerMaterial, 43);
+
+						std::array<float, 4> PBRParams3;
+						PBRParams3[0] = pbrMaterial->GetCoatRoughness();
+						PBRParams3[1] = pbrMaterial->GetCoatSpecularLevel();
+						shadowState->SetPSConstant(PBRParams3, RE::BSGraphics::ConstantGroupLevel::PerMaterial, 27);
 					}
 
 					const bool hasEmissive = pbrMaterial->emissiveTexture != nullptr && pbrMaterial->emissiveTexture != RE::BSGraphics::State::GetSingleton()->GetRuntimeData().defaultTextureBlack;
@@ -765,13 +810,22 @@ namespace Hooks
 						shaderFlags.set(PBRShaderFlags::HasDisplacement);
 					}
 
-					const bool hasSubsurface = pbrMaterial->subsurfaceTexture != nullptr && pbrMaterial->subsurfaceTexture != RE::BSGraphics::State::GetSingleton()->GetRuntimeData().defaultTextureWhite;
-					if (hasSubsurface) {
-						shadowState->SetPSTexture(12, pbrMaterial->subsurfaceTexture->rendererTexture);
+					const bool hasFeaturesTexture0 = pbrMaterial->featuresTexture0 != nullptr && pbrMaterial->featuresTexture0 != RE::BSGraphics::State::GetSingleton()->GetRuntimeData().defaultTextureWhite;
+					if (hasFeaturesTexture0) {
+						shadowState->SetPSTexture(12, pbrMaterial->featuresTexture0->rendererTexture);
 						shadowState->SetPSTextureAddressMode(12, static_cast<RE::BSGraphics::TextureAddressMode>(pbrMaterial->textureClampMode));
 						shadowState->SetPSTextureFilterMode(12, RE::BSGraphics::TextureFilterMode::kAnisotropic);
 
-						shaderFlags.set(PBRShaderFlags::HasSubsurface);
+						shaderFlags.set(PBRShaderFlags::HasFeaturesTexture0);
+					}
+
+					const bool hasFeaturesTexture1 = pbrMaterial->featuresTexture1 != nullptr && pbrMaterial->featuresTexture1 != RE::BSGraphics::State::GetSingleton()->GetRuntimeData().defaultTextureWhite;
+					if (hasFeaturesTexture1) {
+						shadowState->SetPSTexture(9, pbrMaterial->featuresTexture1->rendererTexture);
+						shadowState->SetPSTextureAddressMode(9, static_cast<RE::BSGraphics::TextureAddressMode>(pbrMaterial->textureClampMode));
+						shadowState->SetPSTextureFilterMode(9, RE::BSGraphics::TextureFilterMode::kAnisotropic);
+
+						shaderFlags.set(PBRShaderFlags::HasFeaturesTexture1);
 					}
 
 					{
@@ -784,15 +838,6 @@ namespace Hooks
 						PBRParams1[1] = pbrMaterial->GetDisplacementScale();
 						PBRParams1[2] = pbrMaterial->GetSpecularLevel();
 						shadowState->SetPSConstant(PBRParams1, RE::BSGraphics::ConstantGroupLevel::PerMaterial, 37);
-					}
-
-					{
-						std::array<float, 4> PBRParams2;
-						PBRParams2[0] = pbrMaterial->GetSubsurfaceColor().red;
-						PBRParams2[1] = pbrMaterial->GetSubsurfaceColor().green;
-						PBRParams2[2] = pbrMaterial->GetSubsurfaceColor().blue;
-						PBRParams2[3] = pbrMaterial->GetSubsurfaceOpacity();
-						shadowState->SetPSConstant(PBRParams2, RE::BSGraphics::ConstantGroupLevel::PerMaterial, 43);
 					}
 				}
 
@@ -1290,11 +1335,13 @@ namespace Hooks
 					pbrMaterial->pbrFlags = pbrSrcMaterial->pbrFlags;
 					pbrMaterial->normalTexture = pbrSrcMaterial->normalTexture;
 					pbrMaterial->rmaosTexture = pbrSrcMaterial->rmaosTexture;
-					pbrMaterial->subsurfaceTexture = pbrSrcMaterial->subsurfaceTexture;
+					pbrMaterial->featuresTexture0 = pbrSrcMaterial->featuresTexture0;
+					pbrMaterial->featuresTexture1 = pbrSrcMaterial->featuresTexture1;
 					pbrMaterial->specularColorScale = pbrSrcMaterial->specularColorScale;
 					pbrMaterial->specularPower = pbrSrcMaterial->specularPower;
 					pbrMaterial->specularColor = pbrSrcMaterial->specularColor;
 					pbrMaterial->subSurfaceLightRolloff = pbrSrcMaterial->subSurfaceLightRolloff;
+					pbrMaterial->coatRoughness = pbrSrcMaterial->coatRoughness;
 				}
 			}
 
@@ -1407,13 +1454,13 @@ namespace Hooks
 					shaderFlags.set(PBRShaderFlags::Subsurface);
 				}
 
-				const bool hasSubsurface = pbrMaterial->subsurfaceTexture != nullptr && pbrMaterial->subsurfaceTexture != RE::BSGraphics::State::GetSingleton()->GetRuntimeData().defaultTextureWhite;
+				const bool hasSubsurface = pbrMaterial->featuresTexture0 != nullptr && pbrMaterial->featuresTexture0 != RE::BSGraphics::State::GetSingleton()->GetRuntimeData().defaultTextureWhite;
 				if (hasSubsurface) {
-					shadowState->SetPSTexture(4, pbrMaterial->subsurfaceTexture->rendererTexture);
+					shadowState->SetPSTexture(4, pbrMaterial->featuresTexture0->rendererTexture);
 					shadowState->SetPSTextureAddressMode(4, static_cast<RE::BSGraphics::TextureAddressMode>(pbrMaterial->textureClampMode));
 					shadowState->SetPSTextureFilterMode(4, RE::BSGraphics::TextureFilterMode::kAnisotropic);
 
-					shaderFlags.set(PBRShaderFlags::HasSubsurface);
+					shaderFlags.set(PBRShaderFlags::HasFeaturesTexture0);
 				}
 
 				{
@@ -1442,6 +1489,46 @@ namespace Hooks
 				func(shader, material);
 			}
 		};
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	struct BSGrassShader_SetupGeometry
+	{
+		static void thunk(RE::BSShader* shader, RE::BSRenderPass* pass, uint32_t renderFlags)
+		{
+			auto* state = State::GetSingleton();
+			const auto technique = static_cast<SIE::ShaderCache::GrassShaderTechniques>(state->currentPixelDescriptor & 0b1111);
+
+			float originalFade = 0.f;
+			RE::NiColor originalColor;
+
+			if (technique == SIE::ShaderCache::GrassShaderTechniques::TruePbr) {
+				if (pass->numLights > 0) {
+					auto& data = pass->sceneLights[0]->light->GetLightRuntimeData();
+					originalFade = data.fade;
+					originalColor = data.diffuse;
+
+					data.fade = std::pow(sRGB2Lin(data.fade), state->pbrData.lightColorPower);
+
+					const auto linDiffuse = sRGB2Lin(data.diffuse);
+					data.diffuse = {
+						state->pbrData.lightColorMultiplier * std::pow(linDiffuse.red, state->pbrData.lightColorPower),
+						state->pbrData.lightColorMultiplier * std::pow(linDiffuse.green, state->pbrData.lightColorPower),
+						state->pbrData.lightColorMultiplier * std::pow(linDiffuse.blue, state->pbrData.lightColorPower)
+					};
+				}
+			}
+
+			func(shader, pass, renderFlags);
+
+			if (technique == SIE::ShaderCache::GrassShaderTechniques::TruePbr) {
+				if (pass->numLights > 0) {
+					auto& data = pass->sceneLights[0]->light->GetLightRuntimeData();
+					data.fade = originalFade;
+					data.diffuse = originalColor;
+				}
+			}
+		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
@@ -1525,5 +1612,6 @@ namespace Hooks
 		logger::info("Hooking BSGrassShader");
 		stl::write_vfunc<0x2, BSGrassShader_SetupTechnique>(RE::VTABLE_BSGrassShader[0]);
 		stl::write_vfunc<0x4, BSGrassShader_SetupMaterial>(RE::VTABLE_BSGrassShader[0]);
+		stl::write_vfunc<0x6, BSGrassShader_SetupGeometry>(RE::VTABLE_BSGrassShader[0]);
 	}
 }

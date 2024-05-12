@@ -21,7 +21,10 @@ void BSLightingShaderMaterialPBR::CopyMembers(RE::BSShaderMaterial* that)
 
 	auto* pbrThat = static_cast<BSLightingShaderMaterialPBR*>(that);
 
+	loadedWithFeature = pbrThat->loadedWithFeature;
 	pbrFlags = pbrThat->pbrFlags;
+	coatRoughness = pbrThat->coatRoughness;
+	coatSpecularLevel = pbrThat->coatSpecularLevel;
 
 	if (rmaosTexture != pbrThat->rmaosTexture) {
 		rmaosTexture = pbrThat->rmaosTexture;
@@ -32,8 +35,11 @@ void BSLightingShaderMaterialPBR::CopyMembers(RE::BSShaderMaterial* that)
 	if (displacementTexture != pbrThat->displacementTexture) {
 		displacementTexture = pbrThat->displacementTexture;
 	}
-	if (subsurfaceTexture != pbrThat->subsurfaceTexture) {
-		subsurfaceTexture = pbrThat->subsurfaceTexture;
+	if (featuresTexture0 != pbrThat->featuresTexture0) {
+		featuresTexture0 = pbrThat->featuresTexture0;
+	}
+	if (featuresTexture1 != pbrThat->featuresTexture1) {
+		featuresTexture1 = pbrThat->featuresTexture1;
 	}
 }
 
@@ -42,20 +48,26 @@ std::uint32_t BSLightingShaderMaterialPBR::ComputeCRC32(uint32_t srcHash)
 	struct HashContainer
 	{
 		uint32_t pbrFlags = 0;
+		float coatRoughness = 0.f;
+		float coatSpecularLevel = 0.f;
 		uint32_t rmaodHash = 0;
 		uint32_t emissiveHash = 0;
 		uint32_t displacementHash = 0;
-		uint32_t subsurfaceHash = 0;
+		uint32_t features0Hash = 0;
+		uint32_t features1Hash = 0;
 		uint32_t baseHash = 0;
 	} hashes;
 
 	hashes.pbrFlags = pbrFlags.underlying();
+	hashes.coatRoughness = coatRoughness * 100.f;
+	hashes.coatSpecularLevel = coatSpecularLevel * 100.f;
 	if (textureSet != nullptr)
 	{
 		hashes.rmaodHash = RE::BSCRC32<const char*>()(textureSet->GetTexturePath(RmaosTexture));
 		hashes.emissiveHash = RE::BSCRC32<const char*>()(textureSet->GetTexturePath(EmissiveTexture));
 		hashes.displacementHash = RE::BSCRC32<const char*>()(textureSet->GetTexturePath(DisplacementTexture));
-		hashes.subsurfaceHash = RE::BSCRC32<const char*>()(textureSet->GetTexturePath(SubsurfaceTexture));
+		hashes.features0Hash = RE::BSCRC32<const char*>()(textureSet->GetTexturePath(FeaturesTexture0));
+		hashes.features1Hash = RE::BSCRC32<const char*>()(textureSet->GetTexturePath(FeaturesTexture1));
 	}
 
 	hashes.baseHash = BSLightingShaderMaterialBase::ComputeCRC32(srcHash);
@@ -89,15 +101,24 @@ void BSLightingShaderMaterialPBR::OnLoadTextureSet(std::uint64_t arg1, RE::BSTex
 			textureSet->SetTexture(RmaosTexture, rmaosTexture);
 			textureSet->SetTexture(EmissiveTexture, emissiveTexture);
 			textureSet->SetTexture(DisplacementTexture, displacementTexture);
-			textureSet->SetTexture(SubsurfaceTexture, subsurfaceTexture);
+			textureSet->SetTexture(FeaturesTexture0, featuresTexture0);
+			textureSet->SetTexture(FeaturesTexture1, featuresTexture1);
 
 			if (auto* bgsTextureSet = netimmerse_cast<RE::BGSTextureSet*>(inTextureSet); bgsTextureSet != nullptr) {
 				if (auto* textureSetData = State::GetSingleton()->GetPBRTextureSetData(bgsTextureSet)) {
 					specularColorScale = textureSetData->roughnessScale;
 					specularPower = textureSetData->specularLevel;
 					rimLightPower = textureSetData->displacementScale;
-					specularColor = textureSetData->subsurfaceColor;
-					subSurfaceLightRolloff = textureSetData->subsurfaceOpacity;
+
+					if (pbrFlags.any(PBRFlags::Subsurface)) {
+						specularColor = textureSetData->subsurfaceColor;
+						subSurfaceLightRolloff = textureSetData->subsurfaceOpacity;
+					} else if (pbrFlags.any(PBRFlags::TwoLayer)) {
+						specularColor = textureSetData->coatColor;
+						subSurfaceLightRolloff = textureSetData->coatStrength;
+						coatRoughness = textureSetData->coatRoughness;
+						coatSpecularLevel = textureSetData->coatSpecularLevel;
+					}
 				}
 			}
 		}
@@ -115,7 +136,8 @@ void BSLightingShaderMaterialPBR::ClearTextures()
 	rmaosTexture.reset();
 	emissiveTexture.reset();
 	displacementTexture.reset();
-	subsurfaceTexture.reset();
+	featuresTexture0.reset();
+	featuresTexture1.reset();
 }
 
 void BSLightingShaderMaterialPBR::ReceiveValuesFromRootMaterial(bool skinned, bool rimLighting, bool softLighting, bool backLighting, bool MSN)
@@ -131,8 +153,11 @@ void BSLightingShaderMaterialPBR::ReceiveValuesFromRootMaterial(bool skinned, bo
 	if (displacementTexture == nullptr) {
 		displacementTexture = stateData.defaultTextureBlack;
 	}
-	if (subsurfaceTexture == nullptr) {
-		subsurfaceTexture = stateData.defaultTextureWhite;
+	if (featuresTexture0 == nullptr) {
+		featuresTexture0 = stateData.defaultTextureWhite;
+	}
+	if (featuresTexture1 == nullptr) {
+		featuresTexture1 = stateData.defaultTextureWhite;
 	}
 }
 
@@ -160,11 +185,32 @@ uint32_t BSLightingShaderMaterialPBR::GetTextures(RE::NiSourceTexture** textures
 	if (displacementTexture != nullptr) {
 		textures[textureIndex++] = displacementTexture.get();
 	}
-	if (subsurfaceTexture != nullptr) {
-		textures[textureIndex++] = subsurfaceTexture.get();
+	if (featuresTexture0 != nullptr) {
+		textures[textureIndex++] = featuresTexture0.get();
+	}
+	if (featuresTexture1 != nullptr) {
+		textures[textureIndex++] = featuresTexture1.get();
 	}
 
 	return textureIndex;
+}
+
+void BSLightingShaderMaterialPBR::LoadBinary(RE::NiStream& stream)
+{
+	BSLightingShaderMaterialBase::LoadBinary(stream);
+
+	if (loadedWithFeature == RE::BSLightingShaderMaterial::Feature::kMultilayerParallax)
+	{
+		stream.iStr->read(&coatRoughness, 1);
+		stream.iStr->read(&coatSpecularLevel, 1);
+
+		float dummy;
+		stream.iStr->read(&dummy, 1);
+		stream.iStr->read(&dummy, 1);
+		if (stream.header.version > 0x4A) {
+			stream.iStr->read(&dummy, 1);
+		}
+	}
 }
 
 float BSLightingShaderMaterialPBR::GetRoughnessScale() const
@@ -190,4 +236,24 @@ const RE::NiColor& BSLightingShaderMaterialPBR::GetSubsurfaceColor() const
 float BSLightingShaderMaterialPBR::GetSubsurfaceOpacity() const
 {
 	return subSurfaceLightRolloff;
+}
+
+const RE::NiColor& BSLightingShaderMaterialPBR::GetCoatColor() const
+{
+	return specularColor;
+}
+
+float BSLightingShaderMaterialPBR::GetCoatStrength() const
+{
+	return subSurfaceLightRolloff;
+}
+
+float BSLightingShaderMaterialPBR::GetCoatRoughness() const
+{
+	return coatRoughness;
+}
+
+float BSLightingShaderMaterialPBR::GetCoatSpecularLevel() const
+{
+	return coatSpecularLevel;
 }

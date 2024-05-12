@@ -447,31 +447,30 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		if defined(TRUE_PBR)
     float4 rawRMAOS = TexRMAOSSampler.Sample(SampRMAOSSampler, input.TexCoord.xy) * float4(PBRParams1.x, 1, 1, PBRParams1.y);
 	
-    float roughness = 1;
-    float metallic = 0;
-    float ao = 1;
-    float3 f0 = 0.04;
-    float3 subsurfaceColor = 0;
-    float thickness = 1;
+	PBRSurfaceProperties pbrSurfaceProperties;
 	
-    roughness = saturate(rawRMAOS.x);
-    metallic = saturate(rawRMAOS.y);
-    f0 = saturate(rawRMAOS.w);
+    pbrSurfaceProperties.Roughness = saturate(rawRMAOS.x);
+    pbrSurfaceProperties.Metallic = saturate(rawRMAOS.y);
+    pbrSurfaceProperties.AO = rawRMAOS.z;
+    pbrSurfaceProperties.F0 = lerp(saturate(rawRMAOS.w), baseColor.xyz, pbrSurfaceProperties.Metallic);
+
+	pbrSurfaceProperties.SubsurfaceColor = 0;
+	pbrSurfaceProperties.Thickness = 0;
+		
+	pbrSurfaceProperties.CoatColor = 0;
+	pbrSurfaceProperties.CoatStrength = 0;
+	pbrSurfaceProperties.CoatRoughness = 0;
+	pbrSurfaceProperties.CoatF0 = 0.04;
 	
-    float3 pbrDiffuseColor = baseColor.xyz;
-    f0 = lerp(f0, baseColor.xyz, metallic);
-    baseColor.xyz *= 1 - metallic;
+    baseColor.xyz *= 1 - pbrSurfaceProperties.Metallic;
 	
-    ao = rawRMAOS.z;
-	
-    subsurfaceColor = PBRParams2.xyz;
-    thickness = PBRParams2.w;
-	[branch]
-    if ((PBRFlags & TruePBR_HasSubsurface) != 0)
+    pbrSurfaceProperties.SubsurfaceColor = PBRParams2.xyz;
+    pbrSurfaceProperties.Thickness = PBRParams2.w;
+	[branch] if ((PBRFlags & TruePBR_HasFeatureTexture0) != 0)
     {
         float4 sampledSubsurfaceProperties = TexSubsurfaceSampler.Sample(SampSubsurfaceSampler, input.TexCoord.xy);
-        subsurfaceColor *= sampledSubsurfaceProperties.xyz;
-        thickness *= sampledSubsurfaceProperties.w;
+        pbrSurfaceProperties.SubsurfaceColor *= sampledSubsurfaceProperties.xyz;
+        pbrSurfaceProperties.Thickness *= sampledSubsurfaceProperties.w;
     }
 	
     float3 specularColorPBR = 0;
@@ -486,8 +485,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	
 #		if defined(TRUE_PBR)
 	{
-        float3 dirDiffuseColor, dirTransmissionColor, dirSpecularColor;
-        GetDirectLightInputPBR(dirDiffuseColor, dirTransmissionColor, dirSpecularColor, worldNormal, viewDirection, DirLightDirection, sRGB2Lin(dirLightColor), roughness, f0, subsurfaceColor, thickness);
+        float3 dirDiffuseColor, coatDirDiffuseColor, dirTransmissionColor, dirSpecularColor;
+        GetDirectLightInputPBR(dirDiffuseColor, coatDirDiffuseColor, dirTransmissionColor, dirSpecularColor, worldNormal, worldNormal, viewDirection, DirLightDirection, dirLightColor, pbrSurfaceProperties);
         lightsDiffuseColor += dirDiffuseColor;
         transmissionColor += dirTransmissionColor;
         specularColorPBR += dirSpecularColor;
@@ -552,8 +551,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 				
 #			if defined(TRUE_PBR)
 				{
-                    float3 pointDiffuseColor, pointTransmissionColor, pointSpecularColor;
-                    GetDirectLightInputPBR(pointDiffuseColor, pointTransmissionColor, pointSpecularColor, worldNormal.xyz, viewDirection, normalizedLightDirection, sRGB2Lin(lightColor * intensityMultiplier), roughness, f0, subsurfaceColor, thickness);
+                    float3 pointDiffuseColor, coatDirDiffuseColor, pointTransmissionColor, pointSpecularColor;
+                    GetDirectLightInputPBR(pointDiffuseColor, coatDirDiffuseColor, pointTransmissionColor, pointSpecularColor, worldNormal, worldNormal, viewDirection, normalizedLightDirection, AdjustDirectLightColorForPBR(lightColor * intensityMultiplier), pbrSurfaceProperties);
                     lightsDiffuseColor += pointDiffuseColor;
                     transmissionColor += pointTransmissionColor;
                     specularColorPBR += pointSpecularColor;
@@ -588,7 +587,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	
 #		if defined(TRUE_PBR)
     float3 diffuseIrradiance, specularIrradiance;
-    GetAmbientLightInputPBR(diffuseIrradiance, specularIrradiance, worldNormal.xyz, viewDirection, baseColor.xyz, roughness, f0, subsurfaceColor, thickness, ao);
+    GetAmbientLightInputPBR(diffuseIrradiance, specularIrradiance, worldNormal.xyz, viewDirection, baseColor.xyz, pbrSurfaceProperties);
     color.xyz += diffuseIrradiance;
     specularColorPBR += specularIrradiance;
 	

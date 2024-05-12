@@ -2,16 +2,24 @@
 
 enum class PBRFlags : uint32_t
 {
-	Subsurface = 1 << 1,
+	Subsurface = 1 << 0,
+	TwoLayer = 1 << 1,
+	ColoredCoat = 1 << 2,
+	InterlayerParallax = 1 << 3,
+	CoatNormal = 1 << 4,
 };
 
 enum class PBRShaderFlags : uint32_t
 {
 	HasEmissive = 1 << 0,
-	HasSubsurface = 1 << 1,
-	TwoSidedFoliage = 1 << 2,
-	Subsurface = 1 << 3,
-	HasDisplacement = 1 << 4,
+	HasDisplacement = 1 << 1,
+	HasFeaturesTexture0 = 1 << 2,
+	HasFeaturesTexture1 = 1 << 3,
+	Subsurface = 1 << 4,
+	TwoLayer = 1 << 5,
+	ColoredCoat = 1 << 6,
+	InterlayerParallax = 1 << 7,
+	CoatNormal = 1 << 8,
 };
 
 class BSLightingShaderMaterialPBR : public RE::BSLightingShaderMaterialBase
@@ -22,7 +30,8 @@ public:
 	inline static constexpr auto RmaosTexture = static_cast<RE::BSTextureSet::Texture>(5);
 	inline static constexpr auto EmissiveTexture = static_cast<RE::BSTextureSet::Texture>(2);
 	inline static constexpr auto DisplacementTexture = static_cast<RE::BSTextureSet::Texture>(3);
-	inline static constexpr auto SubsurfaceTexture = static_cast<RE::BSTextureSet::Texture>(7);
+	inline static constexpr auto FeaturesTexture0 = static_cast<RE::BSTextureSet::Texture>(7);
+	inline static constexpr auto FeaturesTexture1 = static_cast<RE::BSTextureSet::Texture>(6);
 
 	~BSLightingShaderMaterialPBR();
 
@@ -35,6 +44,7 @@ public:
 	void ClearTextures() override;                                                                                                // 09
 	void ReceiveValuesFromRootMaterial(bool skinned, bool rimLighting, bool softLighting, bool backLighting, bool MSN) override;  // 0A
 	uint32_t GetTextures(RE::NiSourceTexture** textures) override;                                                                // 0B
+	void LoadBinary(RE::NiStream& stream) override;                                                                               // 0D
 	
 	static BSLightingShaderMaterialPBR* Make();
 
@@ -46,11 +56,31 @@ public:
 	const RE::NiColor& GetSubsurfaceColor() const;
 	float GetSubsurfaceOpacity() const;
 
+	const RE::NiColor& GetCoatColor() const;
+	float GetCoatStrength() const;
+	float GetCoatRoughness() const;
+	float GetCoatSpecularLevel() const;
+
 	// members
+	RE::BSShaderMaterial::Feature loadedWithFeature = RE::BSShaderMaterial::Feature::kDefault;
+
 	stl::enumeration<PBRFlags> pbrFlags;
 
+	float coatRoughness = 1.f;
+	float coatSpecularLevel = 0.04f;
+
+	// Roughness in r, metallic in g, AO in b, nonmetal reflectance in a
 	RE::NiPointer<RE::NiSourceTexture> rmaosTexture;
+
+	// Emission color in rgb
 	RE::NiPointer<RE::NiSourceTexture> emissiveTexture;
+
+	// Displacement in r
 	RE::NiPointer<RE::NiSourceTexture> displacementTexture;
-	RE::NiPointer<RE::NiSourceTexture> subsurfaceTexture;
+
+	// Subsurface map (subsurface color in rgb, thickness in a) / Coat map (coat color in rgb, coat strength in a)
+	RE::NiPointer<RE::NiSourceTexture> featuresTexture0;
+
+	// Coat normal map (coat normal in rgb, coat roughness in a)
+	RE::NiPointer<RE::NiSourceTexture> featuresTexture1;
 };

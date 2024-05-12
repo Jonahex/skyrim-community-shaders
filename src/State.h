@@ -175,8 +175,14 @@ public:
 		float roughnessScale = 1.f;
 		float displacementScale = 1.f;
 		float specularLevel = 0.04f;
+
 		RE::NiColor subsurfaceColor;
 		float subsurfaceOpacity = 0.f;
+
+		RE::NiColor coatColor = { 1.f, 1.f, 1.f };
+		float coatStrength = 1.f;
+		float coatRoughness = 1.f;
+		float coatSpecularLevel = 0.04f;
 	};
 
 	void SetupTextureSetData();
