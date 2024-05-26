@@ -198,7 +198,7 @@ float2 GetEnvBRDFApproxLazarov(float roughness, float NdotV)
 	return AB;
 }
 
-void GetDirectLightInputPBR(out float3 diffuse, out float3 coatDiffuse, out float3 transmission, out float3 specular, float3 N, float3 coatN, float3 V, float3 L, float3 lightColor, PBRSurfaceProperties surfaceProperties)
+void GetDirectLightInputPBR(out float3 diffuse, out float3 coatDiffuse, out float3 transmission, out float3 specular, float3 N, float3 coatN, float3 V, float3 coatV, float3 L, float3 coatL, float3 lightColor, float3 coatLightColor, PBRSurfaceProperties surfaceProperties)
 {
 	diffuse = 0;
     coatDiffuse = 0;
@@ -264,24 +264,28 @@ void GetDirectLightInputPBR(out float3 diffuse, out float3 coatDiffuse, out floa
     }
     else if ((PBRFlags & TruePBR_TwoLayer) != 0)
     {
+		float3 coatH = normalize(coatV + coatL);
+		
         float coatNdotL = satNdotL;
         float coatNdotV = satNdotV;
         float coatNdotH = satNdotH;
+		float coatVdotH = satVdotH;
         [branch] if ((PBRFlags & TruePBR_CoatNormal) != 0)
         {
-            coatNdotL = clamp(dot(coatN, L), 1e-5, 1);
-            coatNdotV = saturate(abs(dot(coatN, V)) + 1e-5);
-            coatNdotH = saturate(dot(coatN, H));
+            coatNdotL = clamp(dot(coatN, coatL), 1e-5, 1);
+            coatNdotV = saturate(abs(dot(coatN, coatV)) + 1e-5);
+            coatNdotH = saturate(dot(coatN, coatH));
+			coatVdotH = saturate(dot(coatV, coatH));
         }
 		
         float3 coatF;
-        float3 coatSpecular = PI * GetSpecularDirectLightMultiplierMicrofacet(surfaceProperties.CoatRoughness, surfaceProperties.CoatF0, coatNdotL, coatNdotV, coatNdotH, satVdotH, coatF) * lightColor * coatNdotL;
+        float3 coatSpecular = PI * GetSpecularDirectLightMultiplierMicrofacet(surfaceProperties.CoatRoughness, surfaceProperties.CoatF0, coatNdotL, coatNdotV, coatNdotH, coatVdotH, coatF) * coatLightColor * coatNdotL;
 		
 		float3 layerAttenuation = 1 - coatF * surfaceProperties.CoatStrength;
         diffuse *= layerAttenuation;
         specular *= layerAttenuation;
 		
-        coatDiffuse += lightColor * coatNdotL;
+        coatDiffuse += coatLightColor * coatNdotL;
         specular += coatSpecular * surfaceProperties.CoatStrength;
     }
 #	endif
