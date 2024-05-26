@@ -486,7 +486,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		if defined(TRUE_PBR)
 	{
         float3 dirDiffuseColor, coatDirDiffuseColor, dirTransmissionColor, dirSpecularColor;
-        GetDirectLightInputPBR(dirDiffuseColor, coatDirDiffuseColor, dirTransmissionColor, dirSpecularColor, worldNormal, worldNormal, viewDirection, DirLightDirection, dirLightColor, pbrSurfaceProperties);
+        GetDirectLightInputPBR(dirDiffuseColor, coatDirDiffuseColor, dirTransmissionColor, dirSpecularColor, worldNormal, worldNormal, viewDirection, viewDirection, DirLightDirection, DirLightDirection, dirLightColor, dirLightColor, pbrSurfaceProperties);
         lightsDiffuseColor += dirDiffuseColor;
         transmissionColor += dirTransmissionColor;
         specularColorPBR += dirSpecularColor;
@@ -552,7 +552,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #			if defined(TRUE_PBR)
 				{
                     float3 pointDiffuseColor, coatDirDiffuseColor, pointTransmissionColor, pointSpecularColor;
-                    GetDirectLightInputPBR(pointDiffuseColor, coatDirDiffuseColor, pointTransmissionColor, pointSpecularColor, worldNormal, worldNormal, viewDirection, normalizedLightDirection, AdjustDirectLightColorForPBR(lightColor * intensityMultiplier), pbrSurfaceProperties);
+					float3 pbrLightColor = AdjustDirectLightColorForPBR(lightColor * intensityMultiplier);
+                    GetDirectLightInputPBR(pointDiffuseColor, coatDirDiffuseColor, pointTransmissionColor, pointSpecularColor, worldNormal, worldNormal, viewDirection, viewDirection, normalizedLightDirection, normalizedLightDirection, pbrLightColor, pbrLightColor, pbrSurfaceProperties);
                     lightsDiffuseColor += pointDiffuseColor;
                     transmissionColor += pointTransmissionColor;
                     specularColorPBR += pointSpecularColor;
