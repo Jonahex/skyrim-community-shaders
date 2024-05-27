@@ -1042,6 +1042,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	displacementParams.MaxDisplacement = 1.f;
 #		endif
 #	endif  // LANDSCAPE
+
+	float3 entryNormal = 0;
+	float3 entryNormalTS = 0;
+	float eta = 1;
+	float3 refractedViewDirection = viewDirection;
+	float3 refractedViewDirectionWS = worldSpaceViewDirection;
 	
 #	if defined(CPM_AVAILABLE)
 #		if defined(PARALLAX)
@@ -1077,12 +1083,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #		endif  // ENVMAP
 
-	float3 entryNormal = 0;
-	float3 entryNormalTS = 0;
-	float eta = 1;
-	float3 refractedViewDirection = viewDirection;
-	float3 refractedViewDirectionWS = worldSpaceViewDirection;
-
 #		if defined(TRUE_PBR) && !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
 	bool PBRParallax = false;
 	[branch] if ((PBRFlags & TruePBR_HasDisplacement) != 0) {
@@ -1090,7 +1090,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		displacementParams.Scale = PBRParams1.y;
 		[branch] if ((PBRFlags & TruePBR_InterlayerParallax) != 0) {
 			displacementParams.Scale *= 0.5;
-			displacementParams.Offset = -0.25;
+			displacementParams.Offset = -0.25 - MultiLayerParallaxData.z;
 			displacementParams.MinDisplacement = 0.f;
 			displacementParams.MaxDisplacement = 0.5f;
 			eta = (1 - sqrt(MultiLayerParallaxData.y)) / (1 + sqrt(MultiLayerParallaxData.y));

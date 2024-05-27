@@ -25,6 +25,7 @@ void BSLightingShaderMaterialPBR::CopyMembers(RE::BSShaderMaterial* that)
 	pbrFlags = pbrThat->pbrFlags;
 	coatRoughness = pbrThat->coatRoughness;
 	coatSpecularLevel = pbrThat->coatSpecularLevel;
+	innerLayerDisplacementOffset = pbrThat->innerLayerDisplacementOffset;
 
 	if (rmaosTexture != pbrThat->rmaosTexture) {
 		rmaosTexture = pbrThat->rmaosTexture;
@@ -50,6 +51,7 @@ std::uint32_t BSLightingShaderMaterialPBR::ComputeCRC32(uint32_t srcHash)
 		uint32_t pbrFlags = 0;
 		float coatRoughness = 0.f;
 		float coatSpecularLevel = 0.f;
+		float innerLayerDisplacementOffset = 0.f;
 		uint32_t rmaodHash = 0;
 		uint32_t emissiveHash = 0;
 		uint32_t displacementHash = 0;
@@ -61,6 +63,7 @@ std::uint32_t BSLightingShaderMaterialPBR::ComputeCRC32(uint32_t srcHash)
 	hashes.pbrFlags = pbrFlags.underlying();
 	hashes.coatRoughness = coatRoughness * 100.f;
 	hashes.coatSpecularLevel = coatSpecularLevel * 100.f;
+	hashes.innerLayerDisplacementOffset = innerLayerDisplacementOffset * 100.f;
 	if (textureSet != nullptr)
 	{
 		hashes.rmaodHash = RE::BSCRC32<const char*>()(textureSet->GetTexturePath(RmaosTexture));
@@ -118,6 +121,7 @@ void BSLightingShaderMaterialPBR::OnLoadTextureSet(std::uint64_t arg1, RE::BSTex
 						subSurfaceLightRolloff = textureSetData->coatStrength;
 						coatRoughness = textureSetData->coatRoughness;
 						coatSpecularLevel = textureSetData->coatSpecularLevel;
+						innerLayerDisplacementOffset = textureSetData->innerLayerDisplacementOffset;
 					}
 				}
 			}
@@ -203,9 +207,9 @@ void BSLightingShaderMaterialPBR::LoadBinary(RE::NiStream& stream)
 	{
 		stream.iStr->read(&coatRoughness, 1);
 		stream.iStr->read(&coatSpecularLevel, 1);
+		stream.iStr->read(&innerLayerDisplacementOffset, 1);
 
 		float dummy;
-		stream.iStr->read(&dummy, 1);
 		stream.iStr->read(&dummy, 1);
 		if (stream.header.version > 0x4A) {
 			stream.iStr->read(&dummy, 1);
@@ -256,4 +260,9 @@ float BSLightingShaderMaterialPBR::GetCoatRoughness() const
 float BSLightingShaderMaterialPBR::GetCoatSpecularLevel() const
 {
 	return coatSpecularLevel;
+}
+
+float BSLightingShaderMaterialPBR::GetInnerLayerDisplacementOffset() const
+{
+	return innerLayerDisplacementOffset;
 }

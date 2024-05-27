@@ -780,6 +780,9 @@ void State::SetupTextureSetData()
 			if (config["coatSpecularLevel"].is_number_float()) {
 				textureSetData.coatSpecularLevel = config["coatSpecularLevel"];
 			}
+			if (config["innerLayerDisplacementOffset"].is_number_float()) {
+				textureSetData.innerLayerDisplacementOffset = config["innerLayerDisplacementOffset"];
+			}
 
 			pbrTextureSets.insert_or_assign(editorId, textureSetData);
 		}

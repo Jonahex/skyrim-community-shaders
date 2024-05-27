@@ -60,6 +60,7 @@ public:
 	float GetCoatStrength() const;
 	float GetCoatRoughness() const;
 	float GetCoatSpecularLevel() const;
+	float GetInnerLayerDisplacementOffset() const;
 
 	// members
 	RE::BSShaderMaterial::Feature loadedWithFeature = RE::BSShaderMaterial::Feature::kDefault;
@@ -68,6 +69,7 @@ public:
 
 	float coatRoughness = 1.f;
 	float coatSpecularLevel = 0.04f;
+	float innerLayerDisplacementOffset = 0.f;
 
 	// Roughness in r, metallic in g, AO in b, nonmetal reflectance in a
 	RE::NiPointer<RE::NiSourceTexture> rmaosTexture;

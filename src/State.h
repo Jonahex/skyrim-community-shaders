@@ -183,6 +183,7 @@ public:
 		float coatStrength = 1.f;
 		float coatRoughness = 1.f;
 		float coatSpecularLevel = 0.04f;
+		float innerLayerDisplacementOffset = 0.f;
 	};
 
 	void SetupTextureSetData();
