@@ -8,15 +8,14 @@
 
 struct DisplacementParams
 {
-    float Scale;
-    float Offset;
-    float MinDisplacement;
-    float MaxDisplacement;
+    float DisplacementScale;
+    float DisplacementOffset;
+    float HeightScale;
 };
 
 float AdjustDisplacement(float displacement, DisplacementParams params)
 {
-    return clamp((displacement - 0.5) * params.Scale + 0.5 + params.Offset, params.MinDisplacement, params.MaxDisplacement);
+    return (displacement - 0.5) * params.DisplacementScale + 0.5 + params.DisplacementOffset;
 }
 
 float4 AdjustDisplacement(float4 displacement, DisplacementParams params)
@@ -69,7 +68,7 @@ float2 GetParallaxCoords(float distance, float2 coords, float mipLevel, float3 v
 	float nearBlendToMid = smoothstep(perPassParallax[0].CRPMRange - perPassParallax[0].BlendRange, perPassParallax[0].CRPMRange, distance);
 	float midBlendToFar = smoothstep(1.0 - perPassParallax[0].BlendRange, 1.0, distance);
 
-	float maxHeight = perPassParallax[0].Height;
+	float maxHeight = perPassParallax[0].Height * params.HeightScale;
 	float minHeight = maxHeight * 0.5;
 
 	float2 output;
@@ -256,7 +255,7 @@ float GetParallaxSoftShadowMultiplier(float2 coords, float mipLevel, float3 L, f
         const float h = 1.0 - AdjustDisplacement(tex.SampleLevel(texSampler, coords + rayDir, mipLevel)[channel], params);
 
 		// Compare the difference between the two heights to see if the height blocks it
-		const float occlusion = 1.0 - saturate((h0 - h) * 7.0);
+		const float occlusion = 1.0 - saturate((h0 - h) * params.HeightScale * 7.0);
 
 		// Fade out with quality
 		return lerp(1.0, occlusion, quality);

@@ -1024,10 +1024,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #		if defined (CPM_AVAILABLE)
 	DisplacementParams displacementParams[6];
-	displacementParams[0].Scale = 1.f;
-	displacementParams[0].Offset = 0.f;
-	displacementParams[0].MinDisplacement = 0.f;
-	displacementParams[0].MaxDisplacement = 1.f;
+	displacementParams[0].DisplacementScale = 1.f;
+	displacementParams[0].DisplacementOffset = 0.f;
+	displacementParams[0].HeightScale = 1.f;
 #		endif
 #	else
 	float mipLevel;
@@ -1036,10 +1035,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #		if defined (CPM_AVAILABLE)
 	DisplacementParams displacementParams;
-	displacementParams.Scale = 1.f;
-	displacementParams.Offset = 0.f;
-	displacementParams.MinDisplacement = 0.f;
-	displacementParams.MaxDisplacement = 1.f;
+	displacementParams.DisplacementScale = 1.f;
+	displacementParams.DisplacementOffset = 0.f;
+	displacementParams.HeightScale = 1.f;
 #		endif
 #	endif  // LANDSCAPE
 
@@ -1087,12 +1085,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	bool PBRParallax = false;
 	[branch] if ((PBRFlags & TruePBR_HasDisplacement) != 0) {
 		PBRParallax = true;
-		displacementParams.Scale = PBRParams1.y;
+		displacementParams.HeightScale = PBRParams1.y;
 		[branch] if ((PBRFlags & TruePBR_InterlayerParallax) != 0) {
-			displacementParams.Scale *= 0.5;
-			displacementParams.Offset = -0.25 - MultiLayerParallaxData.z;
-			displacementParams.MinDisplacement = 0.f;
-			displacementParams.MaxDisplacement = 0.5f;
+			displacementParams.DisplacementScale = 0.5;
+			displacementParams.DisplacementOffset = -0.25;
 			eta = (1 - sqrt(MultiLayerParallaxData.y)) / (1 + sqrt(MultiLayerParallaxData.y));
 			[branch] if ((PBRFlags & TruePBR_CoatNormal) != 0) {
 				entryNormalTS = normalize(TransformNormal(TexBackLightSampler.Sample(SampBackLightSampler, uvOriginal)));
@@ -1107,7 +1103,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		mipLevel = GetMipLevel(uv, TexParallaxSampler);
 		uv = GetParallaxCoords(viewPosition.z, uv, mipLevel, refractedViewDirection, tbnTr, TexParallaxSampler, SampParallaxSampler, 0, displacementParams, pixelOffset);
 		if (perPassParallax[0].EnableShadows && parallaxShadowQuality > 0.0f)
-			sh0 = AdjustDisplacement(TexParallaxSampler.SampleLevel(SampParallaxSampler, uv, mipLevel).x, displacementParams);
+			sh0 = TexParallaxSampler.SampleLevel(SampParallaxSampler, uv, mipLevel).x;
 	}
 #		endif  // TRUE_PBR
 
@@ -1138,7 +1134,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		mipLevel[0] = GetMipLevel(uv, TexColorSampler);
 		
 #		if defined(TRUE_PBR)
-		displacementParams[0].Scale = PBRParams1.y;
+		displacementParams[0].HeightScale = PBRParams1.y;
 #		endif
 
 		uv = GetParallaxCoords(viewPosition.z, uv, mipLevel[0], viewDirection, tbnTr, TexColorSampler, SampTerrainParallaxSampler, 3, input.LandBlendWeights1.x, displacementParams[0], pixelOffset[0]);
@@ -1257,7 +1253,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		
 			displacementParams[1] = displacementParams[0];
 #			if defined(TRUE_PBR)
-			displacementParams[1].Scale = LandscapeTexture2PBRParams.y;
+			displacementParams[1].HeightScale = LandscapeTexture2PBRParams.y;
 #			endif
 
 			uv = GetParallaxCoords(viewPosition.z, uvOriginal, mipLevel[1], viewDirection, tbnTr, TexLandColor2Sampler, SampTerrainParallaxSampler, 3, input.LandBlendWeights1.y, displacementParams[1], pixelOffset[1]);
@@ -1296,7 +1292,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		
 			displacementParams[2] = displacementParams[0];
 #			if defined(TRUE_PBR)
-			displacementParams[2].Scale = LandscapeTexture3PBRParams.y;
+			displacementParams[2].HeightScale = LandscapeTexture3PBRParams.y;
 #			endif
 
 			uv = GetParallaxCoords(viewPosition.z, uvOriginal, mipLevel[2], viewDirection, tbnTr, TexLandColor3Sampler, SampTerrainParallaxSampler, 3, input.LandBlendWeights1.z, displacementParams[2], pixelOffset[2]);
@@ -1335,7 +1331,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		
 			displacementParams[3] = displacementParams[0];
 #			if defined(TRUE_PBR)
-			displacementParams[3].Scale = LandscapeTexture4PBRParams.y;
+			displacementParams[3].HeightScale = LandscapeTexture4PBRParams.y;
 #			endif
 
 			uv = GetParallaxCoords(viewPosition.z, uvOriginal, mipLevel[3], viewDirection, tbnTr, TexLandColor4Sampler, SampTerrainParallaxSampler, 3, input.LandBlendWeights1.w, displacementParams[3], pixelOffset[3]);
@@ -1374,7 +1370,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		
 			displacementParams[4] = displacementParams[0];
 #			if defined(TRUE_PBR)
-			displacementParams[4].Scale = LandscapeTexture5PBRParams.y;
+			displacementParams[4].HeightScale = LandscapeTexture5PBRParams.y;
 #			endif
 
 			uv = GetParallaxCoords(viewPosition.z, uvOriginal, mipLevel[4], viewDirection, tbnTr, TexLandColor5Sampler, SampTerrainParallaxSampler, 3, input.LandBlendWeights2.x, displacementParams[4], pixelOffset[4]);
@@ -1413,7 +1409,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		
 			displacementParams[5] = displacementParams[0];
 #			if defined(TRUE_PBR)
-			displacementParams[5].Scale = LandscapeTexture6PBRParams.y;
+			displacementParams[5].HeightScale = LandscapeTexture6PBRParams.y;
 #			endif
 
 			uv = GetParallaxCoords(viewPosition.z, uvOriginal, mipLevel[5], viewDirection, tbnTr, TexLandColor6Sampler, SampTerrainParallaxSampler, 3, input.LandBlendWeights2.y, displacementParams[5], pixelOffset[5]);

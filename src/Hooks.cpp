@@ -789,7 +789,6 @@ namespace Hooks
 						std::array<float, 4> PBRParams3;
 						PBRParams3[0] = pbrMaterial->GetCoatRoughness();
 						PBRParams3[1] = pbrMaterial->GetCoatSpecularLevel();
-						PBRParams3[2] = pbrMaterial->GetInnerLayerDisplacementOffset();
 						shadowState->SetPSConstant(PBRParams3, RE::BSGraphics::ConstantGroupLevel::PerMaterial, 27);
 					}
 
