@@ -2360,8 +2360,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	psout.Albedo.w = 0;
 #	else
 	float alpha = baseColor.w;
-#		if defined(CPM_AVAILABLE) && defined(DO_ALPHA_TEST)
+#		if defined (CPM_AVAILABLE) && !defined(LANDSCAPE)
+#			if defined(PARALLAX)
 	alpha = TexColorSampler.Sample(SampColorSampler, uvOriginal).w;
+#			elif defined (TRUE_PBR)
+	[branch] if (PBRParallax)
+	{
+		alpha = TexColorSampler.Sample(SampColorSampler, uvOriginal).w;
+	}
+#			endif
 #		endif
 #		if !defined(ADDITIONAL_ALPHA_MASK)
 	alpha *= MaterialData.z;
