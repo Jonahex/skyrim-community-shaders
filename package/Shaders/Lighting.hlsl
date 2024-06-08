@@ -2444,13 +2444,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	psout.MotionVectors.xy = SSRParams.z > 1e-5 ? float2(1, 0) : screenMotionVector.xy;
 	psout.MotionVectors.zw = float2(0, 1);
 
-	float tmp = -1e-5 + SSRParams.x;
-	float tmp3 = (SSRParams.y - tmp);
-	float tmp2 = (glossiness - tmp);
-	float tmp1 = 1 / tmp3;
-	tmp = saturate(tmp1 * tmp2);
-	tmp *= tmp * (3 + -2 * tmp);
-	psout.ScreenSpaceNormals.w = tmp * SSRParams.w;
+	float ssrMask = glossiness;
+#	if defined(TRUE_PBR)
+	ssrMask = RGBToLuminanceAlternative(pbrSurfaceProperties.F0);
+#	endif
+	psout.ScreenSpaceNormals.w = smoothstep(-1e-5 + SSRParams.x, SSRParams.y, ssrMask) * SSRParams.w;
 
 #	if defined(WATER_BLENDING)
 	if (perPassWaterBlending[0].EnableWaterBlendingSSR) {
