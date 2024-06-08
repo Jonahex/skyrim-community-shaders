@@ -1519,7 +1519,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #			if defined(SNOW)
 	psout.SnowParameters.y = 1;
 #			endif  // SNOW
-#		else
+#		elif !defined(FACEGEN) && !defined(PARALLAX) && !defined(SPARKLE)
 	if (ProjectedUVParams3.w > 0.5) {
 		float2 projNormalDiffuseUv = ProjectedUVParams3.x * projNoiseUv;
 		float3 projNormal = TransformNormal(TexProjNormalSampler.Sample(SampProjNormalSampler, projNormalDiffuseUv).xyz);
@@ -2360,8 +2360,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	psout.Albedo.w = 0;
 #	else
 	float alpha = baseColor.w;
-#		if defined (CPM_AVAILABLE)
-	//alpha = TexColorSampler.Sample(SampColorSampler, uvOriginal).w;
+#		if defined(CPM_AVAILABLE) && defined(DO_ALPHA_TEST)
+	alpha = TexColorSampler.Sample(SampColorSampler, uvOriginal).w;
 #		endif
 #		if !defined(ADDITIONAL_ALPHA_MASK)
 	alpha *= MaterialData.z;
