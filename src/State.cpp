@@ -179,6 +179,7 @@ void State::Reset()
 void State::Setup()
 {
 	SetupTextureSetData();
+	SetupMaterialObjectData();
 	SetupResources();
 	for (auto* feature : Feature::GetFeatureList())
 		if (feature->loaded)
@@ -755,7 +756,7 @@ void State::SetupTextureSetData()
 					subsurfaceColor[2].is_number_float()) {
 					textureSetData.subsurfaceColor.red = subsurfaceColor[0];
 					textureSetData.subsurfaceColor.green = subsurfaceColor[1];
-					textureSetData.subsurfaceColor.blue = subsurfaceColor[1];
+					textureSetData.subsurfaceColor.blue = subsurfaceColor[2];
 				}
 			}
 			if (config["subsurfaceOpacity"].is_number_float()) {
@@ -768,7 +769,7 @@ void State::SetupTextureSetData()
 					coatColor[2].is_number_float()) {
 					textureSetData.coatColor.red = coatColor[0];
 					textureSetData.coatColor.green = coatColor[1];
-					textureSetData.coatColor.blue = coatColor[1];
+					textureSetData.coatColor.blue = coatColor[2];
 				}
 			}
 			if (config["coatStrength"].is_number_float()) {
@@ -805,4 +806,81 @@ State::PBRTextureSetData* State::GetPBRTextureSetData(const RE::TESForm* texture
 bool State::IsPBRTextureSet(const RE::TESForm* textureSet)
 {
 	return GetPBRTextureSetData(textureSet) != nullptr;
+}
+
+void State::SetupMaterialObjectData()
+{
+	pbrMaterialObjects.clear();
+
+	if (std::filesystem::exists("Data\\PBRMaterialObjects")) {
+		logger::info("[TruePBR] loading PBR material object configs");
+
+		auto configs = clib_util::distribution::get_configs("Data\\PBRMaterialObjects", "", ".json");
+
+		if (configs.empty()) {
+			logger::warn("[TruePBR] no .json files were found within the Data\\PBRMaterialObjects folder, aborting...");
+			return;
+		}
+
+		logger::info("[TruePBR] {} matching jsons found", configs.size());
+
+		for (auto& path : configs) {
+			logger::info("[TruePBR] loading json : {}", path);
+
+			std::ifstream fileStream(path);
+			if (!fileStream.is_open()) {
+				logger::error("[TruePBR] failed to read {}", path);
+				continue;
+			}
+
+			json config;
+			try {
+				fileStream >> config;
+			} catch (const nlohmann::json::parse_error& e) {
+				logger::error("[TruePBR] failed to parse {} : {}", path, e.what());
+				continue;
+			}
+
+			const auto editorId = std::filesystem::path(path).stem().string();
+
+			PBRMaterialObjectData materialObjectData;
+
+			{
+				const auto& baseColorScale = config["baseColorScale"];
+				if (baseColorScale.is_array() && baseColorScale.size() == 3 &&
+					baseColorScale[0].is_number_float() && baseColorScale[1].is_number_float() &&
+					baseColorScale[2].is_number_float()) {
+					materialObjectData.baseColorScale[0] = baseColorScale[0];
+					materialObjectData.baseColorScale[1] = baseColorScale[1];
+					materialObjectData.baseColorScale[2] = baseColorScale[2];
+				}
+			}
+			if (config["roughness"].is_number_float()) {
+				materialObjectData.roughness = config["roughness"];
+			}
+			if (config["specularLevel"].is_number_float()) {
+				materialObjectData.specularLevel = config["specularLevel"];
+			}
+
+			pbrMaterialObjects.insert_or_assign(editorId, materialObjectData);
+		}
+	}
+}
+
+State::PBRMaterialObjectData* State::GetPBRMaterialObjectData(const RE::TESForm* materialObject)
+{
+	if (materialObject == nullptr) {
+		return nullptr;
+	}
+
+	auto it = pbrMaterialObjects.find(materialObject->GetFormEditorID());
+	if (it == pbrMaterialObjects.end()) {
+		return nullptr;
+	}
+	return &it->second;
+}
+
+bool State::IsPBRMaterialObject(const RE::TESForm* materialObject)
+{
+	return GetPBRMaterialObjectData(materialObject) != nullptr;
 }

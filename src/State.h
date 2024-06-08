@@ -192,6 +192,19 @@ public:
 
 	std::unordered_map<std::string, PBRTextureSetData> pbrTextureSets;
 
+	struct PBRMaterialObjectData
+	{
+		std::array<float, 3> baseColorScale = { 1.f, 1.f, 1.f };
+		float roughness = 1.f;
+		float specularLevel = 1.f;
+	};
+
+	void SetupMaterialObjectData();
+	State::PBRMaterialObjectData* GetPBRMaterialObjectData(const RE::TESForm* materialObject);
+	bool IsPBRMaterialObject(const RE::TESForm* materialObject);
+
+	std::unordered_map<std::string, PBRMaterialObjectData> pbrMaterialObjects;
+
 private:
 	std::shared_ptr<REX::W32::ID3DUserDefinedAnnotation> pPerf;
 };

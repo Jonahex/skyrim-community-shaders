@@ -61,6 +61,10 @@ public:
 	float GetCoatRoughness() const;
 	float GetCoatSpecularLevel() const;
 
+	const std::array<float, 3>& GetProjectedMaterialBaseColorScale() const;
+	float GetProjectedMaterialRoughness() const;
+	float GetProjectedMaterialSpecularLevel() const;
+
 	// members
 	RE::BSShaderMaterial::Feature loadedWithFeature = RE::BSShaderMaterial::Feature::kDefault;
 
@@ -68,6 +72,10 @@ public:
 
 	float coatRoughness = 1.f;
 	float coatSpecularLevel = 0.04f;
+
+	std::array<float, 3> projectedMaterialBaseColorScale = { 1.f, 1.f, 1.f };
+	float projectedMaterialRoughness = 1.f;
+	float projectedMaterialSpecularLevel = 0.04f;
 
 	// Roughness in r, metallic in g, AO in b, nonmetal reflectance in a
 	RE::NiPointer<RE::NiSourceTexture> rmaosTexture;

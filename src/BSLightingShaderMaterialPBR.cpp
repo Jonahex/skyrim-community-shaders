@@ -25,6 +25,9 @@ void BSLightingShaderMaterialPBR::CopyMembers(RE::BSShaderMaterial* that)
 	pbrFlags = pbrThat->pbrFlags;
 	coatRoughness = pbrThat->coatRoughness;
 	coatSpecularLevel = pbrThat->coatSpecularLevel;
+	projectedMaterialBaseColorScale = pbrThat->projectedMaterialBaseColorScale;
+	projectedMaterialRoughness = pbrThat->projectedMaterialRoughness;
+	projectedMaterialSpecularLevel = pbrThat->projectedMaterialSpecularLevel;
 
 	if (rmaosTexture != pbrThat->rmaosTexture) {
 		rmaosTexture = pbrThat->rmaosTexture;
@@ -50,6 +53,9 @@ std::uint32_t BSLightingShaderMaterialPBR::ComputeCRC32(uint32_t srcHash)
 		uint32_t pbrFlags = 0;
 		float coatRoughness = 0.f;
 		float coatSpecularLevel = 0.f;
+		std::array<float, 3> projectedMaterialBaseColorScale = { 0.f, 0.f, 0.f };
+		float projectedMaterialRoughness = 0.f;
+		float projectedMaterialSpecularLevel = 0.f;
 		uint32_t rmaodHash = 0;
 		uint32_t emissiveHash = 0;
 		uint32_t displacementHash = 0;
@@ -61,6 +67,11 @@ std::uint32_t BSLightingShaderMaterialPBR::ComputeCRC32(uint32_t srcHash)
 	hashes.pbrFlags = pbrFlags.underlying();
 	hashes.coatRoughness = coatRoughness * 100.f;
 	hashes.coatSpecularLevel = coatSpecularLevel * 100.f;
+	hashes.projectedMaterialBaseColorScale[0] = projectedMaterialBaseColorScale[0] * 100.f;
+	hashes.projectedMaterialBaseColorScale[1] = projectedMaterialBaseColorScale[1] * 100.f;
+	hashes.projectedMaterialBaseColorScale[2] = projectedMaterialBaseColorScale[2] * 100.f;
+	hashes.projectedMaterialRoughness = projectedMaterialRoughness * 100.f;
+	hashes.projectedMaterialSpecularLevel = projectedMaterialSpecularLevel * 100.f;
 	if (textureSet != nullptr)
 	{
 		hashes.rmaodHash = RE::BSCRC32<const char*>()(textureSet->GetTexturePath(RmaosTexture));
@@ -256,4 +267,19 @@ float BSLightingShaderMaterialPBR::GetCoatRoughness() const
 float BSLightingShaderMaterialPBR::GetCoatSpecularLevel() const
 {
 	return coatSpecularLevel;
+}
+
+const std::array<float, 3>& BSLightingShaderMaterialPBR::GetProjectedMaterialBaseColorScale() const
+{
+	return projectedMaterialBaseColorScale;
+}
+
+float BSLightingShaderMaterialPBR::GetProjectedMaterialRoughness() const
+{
+	return projectedMaterialRoughness;
+}
+
+float BSLightingShaderMaterialPBR::GetProjectedMaterialSpecularLevel() const
+{
+	return projectedMaterialSpecularLevel;
 }

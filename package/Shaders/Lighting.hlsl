@@ -1496,7 +1496,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		shadowColor = TexShadowMaskSampler.Sample(SampShadowMaskSampler, shadowUV);
 	}
 
-	float texProjTmp = 0;
+	float projWeight = 0;
 
 #	if defined(PROJECTED_UV)
 	float2 projNoiseUv = ProjectedUVParams.zz * input.TexCoord0.zw;
@@ -1507,12 +1507,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		else
 	float vertexAlpha = input.Color.w;
 #		endif  // defined (TREE_ANIM) || defined (LODOBJECTSHD)
-	texProjTmp = -ProjectedUVParams.x * projNoise + (dot(modelNormal.xyz, texProj) * vertexAlpha - ProjectedUVParams.w);
+	projWeight = -ProjectedUVParams.x * projNoise + (dot(modelNormal.xyz, texProj) * vertexAlpha - ProjectedUVParams.w);
 #		if defined(LODOBJECTSHD)
-	texProjTmp += (-0.5 + input.Color.w) * 2.5;
+	projWeight += (-0.5 + input.Color.w) * 2.5;
 #		endif  // LODOBJECTSHD
 #		if defined(SPARKLE)
-	if (texProjTmp < 0)
+	if (projWeight < 0)
 		discard;
 
 	modelNormal.xyz = projectedNormal;
@@ -1521,30 +1521,30 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #			endif  // SNOW
 #		else
 	if (ProjectedUVParams3.w > 0.5) {
-		float2 projNormalUv = ProjectedUVParams3.x * projNoiseUv;
-		float3 projNormal = TransformNormal(TexProjNormalSampler.Sample(SampProjNormalSampler, projNormalUv).xyz);
-		float2 projDetailUv = ProjectedUVParams3.y * projNoiseUv;
-		float3 projDetail = TexProjDetail.Sample(SampProjDetailSampler, projDetailUv).xyz;
-		float3 texProjTmp3 = (projDetail * 2.0.xxx + float3(projNormal.xy, -1));
-		texProjTmp3.xy += -1.0.xx;
-		texProjTmp3.z = projNormal.z * texProjTmp3.z;
-		float3 finalProjNormal = normalize(texProjTmp3);
-		float3 projDiffuse = TexProjDiffuseSampler.Sample(SampProjDiffuseSampler, projNormalUv).xyz;
-		float texProjTmp1 = saturate(5 * (0.1 + texProjTmp));
-		float texProjTmp2 = (texProjTmp1 * -2 + 3) * (texProjTmp1 * texProjTmp1);
-		normal.xyz = texProjTmp2.xxx * (finalProjNormal - normal.xyz) + normal.xyz;
-		baseColor.xyz = texProjTmp2.xxx * (projDiffuse * ProjectedUVParams2.xyz - baseColor.xyz) + baseColor.xyz;
+		float2 projNormalDiffuseUv = ProjectedUVParams3.x * projNoiseUv;
+		float3 projNormal = TransformNormal(TexProjNormalSampler.Sample(SampProjNormalSampler, projNormalDiffuseUv).xyz);
+		float2 projDetailNormalUv = ProjectedUVParams3.y * projNoiseUv;
+		float3 projDetailNormal = TexProjDetail.Sample(SampProjDetailSampler, projDetailNormalUv).xyz;
+		float3 finalProjNormal = normalize(TransformNormal(projDetailNormal) * float3(1, 1, projNormal.z) + float3(projNormal.xy, 0));
+		float3 projBaseColor = TexProjDiffuseSampler.Sample(SampProjDiffuseSampler, projNormalDiffuseUv).xyz * ProjectedUVParams2.xyz;
+		float projBlendWeight = smoothstep(0, 1, 5 * (0.1 + projWeight));
+#			if defined(TRUE_PBR)
+		projBaseColor = saturate(EnvmapData.xyz * projBaseColor);
+		rawRMAOS.xyw = lerp(rawRMAOS.xyw, float3(ParallaxOccData.x, 0, ParallaxOccData.y), projBlendWeight);
+#			endif
+		normal.xyz = lerp(normal.xyz, finalProjNormal, projBlendWeight);
+		baseColor.xyz = lerp(baseColor.xyz, projBaseColor, projBlendWeight);
 
 #			if defined(SNOW)
 		useSnowDecalSpecular = true;
-		psout.SnowParameters.y = GetSnowParameterY(texProjTmp2, baseColor.w);
+		psout.SnowParameters.y = GetSnowParameterY(projBlendWeight, baseColor.w);
 #			endif  // SNOW
 	} else {
-		if (texProjTmp > 0) {
+		if (projWeight > 0) {
 			baseColor.xyz = ProjectedUVParams2.xyz;
 #			if defined(SNOW)
 			useSnowDecalSpecular = true;
-			psout.SnowParameters.y = GetSnowParameterY(texProjTmp, baseColor.w);
+			psout.SnowParameters.y = GetSnowParameterY(projWeight, baseColor.w);
 #			endif  // SNOW
 		} else {
 #			if defined(SNOW)
@@ -1567,7 +1567,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	endif
 
 #	if defined(WORLD_MAP)
-	baseColor.xyz = GetWorldMapBaseColor(rawBaseColor.xyz, baseColor.xyz, texProjTmp);
+	baseColor.xyz = GetWorldMapBaseColor(rawBaseColor.xyz, baseColor.xyz, projWeight);
 #	endif  // WORLD_MAP
 
 	float3 worldSpaceNormal = modelNormal;

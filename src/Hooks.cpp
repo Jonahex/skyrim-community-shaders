@@ -792,6 +792,19 @@ namespace Hooks
 						shadowState->SetPSConstant(PBRParams3, RE::BSGraphics::ConstantGroupLevel::PerMaterial, 27);
 					}
 
+					{
+						std::array<float, 4> PBRProjectedUVParams1;
+						PBRProjectedUVParams1[0] = pbrMaterial->GetProjectedMaterialBaseColorScale()[0];
+						PBRProjectedUVParams1[1] = pbrMaterial->GetProjectedMaterialBaseColorScale()[1];
+						PBRProjectedUVParams1[2] = pbrMaterial->GetProjectedMaterialBaseColorScale()[2];
+						shadowState->SetPSConstant(PBRProjectedUVParams1, RE::BSGraphics::ConstantGroupLevel::PerMaterial, 21);
+
+						std::array<float, 4> PBRProjectedUVParams2;
+						PBRProjectedUVParams2[0] = pbrMaterial->GetProjectedMaterialRoughness();
+						PBRProjectedUVParams2[1] = pbrMaterial->GetProjectedMaterialSpecularLevel();
+						shadowState->SetPSConstant(PBRProjectedUVParams2, RE::BSGraphics::ConstantGroupLevel::PerMaterial, 22);
+					}
+
 					const bool hasEmissive = pbrMaterial->emissiveTexture != nullptr && pbrMaterial->emissiveTexture != RE::BSGraphics::State::GetSingleton()->GetRuntimeData().defaultTextureBlack;
 					if (hasEmissive) {
 						shadowState->SetPSTexture(6, pbrMaterial->emissiveTexture->rendererTexture);
@@ -1532,6 +1545,39 @@ namespace Hooks
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
+	struct TESBoundObject_Clone3D
+	{
+		static RE::NiAVObject* thunk(RE::TESBoundObject* object, RE::TESObjectREFR* ref, bool arg3)
+		{
+			auto* result = func(object, ref, arg3);
+			if (result != nullptr && ref->data.objectReference->formType == RE::FormType::Static)
+			{
+				auto* stat = static_cast<RE::TESObjectSTAT*>(ref->data.objectReference);
+				if (stat->data.materialObj != nullptr && stat->data.materialObj->directionalData.singlePass)
+				{
+					if (auto* pbrData = State::GetSingleton()->GetPBRMaterialObjectData(stat->data.materialObj)) {
+						RE::BSVisit::TraverseScenegraphGeometries(result, [pbrData](RE::BSGeometry* geometry) {
+							if (auto* shaderProperty = static_cast<RE::BSShaderProperty*>(geometry->GetGeometryRuntimeData().properties[1].get())) {
+								if (shaderProperty->GetMaterialType() == RE::BSShaderMaterial::Type::kLighting && 
+									shaderProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kVertexLighting)) {
+									if (auto* material = static_cast<BSLightingShaderMaterialPBR*>(shaderProperty->material)) {
+										material->projectedMaterialBaseColorScale = pbrData->baseColorScale;
+										material->projectedMaterialRoughness = pbrData->roughness;
+										material->projectedMaterialSpecularLevel = pbrData->specularLevel;
+									}
+								}
+							}
+
+							return RE::BSVisit::BSVisitControl::kContinue;
+						});
+					}
+				}
+			}
+			return result;
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
 	void Install()
 	{
 		SKSE::AllocTrampoline(14);
@@ -1593,6 +1639,8 @@ namespace Hooks
 		stl::write_vfunc<0x33, TESForm_SetFormEditorID>(RE::VTABLE_TESLandTexture[0]);
 		stl::write_vfunc<0x32, TESForm_GetFormEditorID>(RE::VTABLE_BGSTextureSet[0]);
 		stl::write_vfunc<0x33, TESForm_SetFormEditorID>(RE::VTABLE_BGSTextureSet[0]);
+		stl::write_vfunc<0x32, TESForm_GetFormEditorID>(RE::VTABLE_BGSMaterialObject[0]);
+		stl::write_vfunc<0x33, TESForm_SetFormEditorID>(RE::VTABLE_BGSMaterialObject[0]);
 
 		logger::info("Hooking SetPerFrameBuffers");
 		*(uintptr_t*)&ptr_SetPerFrameBuffers = Detours::X64::DetourFunction(REL::RelocationID(75570, 77371).address(), (uintptr_t)&hk_SetPerFrameBuffers);
@@ -1613,5 +1661,8 @@ namespace Hooks
 		stl::write_vfunc<0x2, BSGrassShader_SetupTechnique>(RE::VTABLE_BSGrassShader[0]);
 		stl::write_vfunc<0x4, BSGrassShader_SetupMaterial>(RE::VTABLE_BSGrassShader[0]);
 		stl::write_vfunc<0x6, BSGrassShader_SetupGeometry>(RE::VTABLE_BSGrassShader[0]);
+
+		logger::info("Hooking TESObjectSTAT");
+		stl::write_vfunc<0x4A, TESBoundObject_Clone3D>(RE::VTABLE_TESObjectSTAT[0]);
 	}
 }
