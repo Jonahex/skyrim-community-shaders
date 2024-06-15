@@ -1539,7 +1539,7 @@ namespace Hooks
 		static RE::NiAVObject* thunk(RE::TESBoundObject* object, RE::TESObjectREFR* ref, bool arg3)
 		{
 			auto* result = func(object, ref, arg3);
-			if (result != nullptr && ref->data.objectReference->formType == RE::FormType::Static)
+			if (result != nullptr && ref != nullptr && ref->data.objectReference != nullptr && ref->data.objectReference->formType == RE::FormType::Static)
 			{
 				auto* stat = static_cast<RE::TESObjectSTAT*>(ref->data.objectReference);
 				if (stat->data.materialObj != nullptr && stat->data.materialObj->directionalData.singlePass)
