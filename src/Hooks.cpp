@@ -907,17 +907,6 @@ namespace Hooks
 		return RE::NiColor(sRGB2Lin(color.red), sRGB2Lin(color.green), sRGB2Lin(color.blue));
 	}
 
-	RE::NiColor AdjustDirectColorForPBR(const RE::NiColor& color)
-	{
-		auto* state = State::GetSingleton();
-		auto linColor = sRGB2Lin(color);
-		return {
-			state->pbrData.lightColorMultiplier * std::pow(linColor.red, state->pbrData.lightColorPower),
-			state->pbrData.lightColorMultiplier * std::pow(linColor.green, state->pbrData.lightColorPower),
-			state->pbrData.lightColorMultiplier * std::pow(linColor.blue, state->pbrData.lightColorPower)
-		};
-	}
-
 	struct BSLightingShader_SetupGeometry
 	{
 		static void thunk(RE::BSLightingShader* shader, RE::BSRenderPass* pass, uint32_t renderFlags)
@@ -941,9 +930,9 @@ namespace Hooks
 
 					const auto linDiffuse = sRGB2Lin(data.diffuse);
 					data.diffuse = {
-						state->pbrData.lightColorMultiplier * std::pow(linDiffuse.red, state->pbrData.lightColorPower),
-						state->pbrData.lightColorMultiplier * std::pow(linDiffuse.green, state->pbrData.lightColorPower),
-						state->pbrData.lightColorMultiplier * std::pow(linDiffuse.blue, state->pbrData.lightColorPower)
+						state->globalPBRLightColorMultiplier * state->weatherPBRDirectionalLightColorMultiplier * std::pow(linDiffuse.red, state->pbrData.lightColorPower),
+						state->globalPBRLightColorMultiplier * state->weatherPBRDirectionalLightColorMultiplier * std::pow(linDiffuse.green, state->pbrData.lightColorPower),
+						state->globalPBRLightColorMultiplier * state->weatherPBRDirectionalLightColorMultiplier * std::pow(linDiffuse.blue, state->pbrData.lightColorPower)
 					};
 				}
 			}
@@ -1641,6 +1630,10 @@ namespace Hooks
 		stl::write_vfunc<0x33, TESForm_SetFormEditorID>(RE::VTABLE_BGSTextureSet[0]);
 		stl::write_vfunc<0x32, TESForm_GetFormEditorID>(RE::VTABLE_BGSMaterialObject[0]);
 		stl::write_vfunc<0x33, TESForm_SetFormEditorID>(RE::VTABLE_BGSMaterialObject[0]);
+		stl::write_vfunc<0x32, TESForm_GetFormEditorID>(RE::VTABLE_BGSLightingTemplate[0]);
+		stl::write_vfunc<0x33, TESForm_SetFormEditorID>(RE::VTABLE_BGSLightingTemplate[0]);
+		stl::write_vfunc<0x32, TESForm_GetFormEditorID>(RE::VTABLE_TESWeather[0]);
+		stl::write_vfunc<0x33, TESForm_SetFormEditorID>(RE::VTABLE_TESWeather[0]);
 
 		logger::info("Hooking SetPerFrameBuffers");
 		*(uintptr_t*)&ptr_SetPerFrameBuffers = Detours::X64::DetourFunction(REL::RelocationID(75570, 77371).address(), (uintptr_t)&hk_SetPerFrameBuffers);

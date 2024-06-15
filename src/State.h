@@ -148,6 +148,14 @@ public:
 		UseDynamicCubemap,
 	};
 
+	float globalPBRLightColorMultiplier = 1.f;
+	float globalPBRLightColorPower = 1.f;
+	float globalPBRAmbientLightColorMultiplier = 1.f;
+	float globalPBRAmbientLightColorPower = 1.f;
+
+	float weatherPBRDirectionalLightColorMultiplier = 1.f;
+	float weatherPBRDirectionalAmbientLightColorMultiplier = 1.f;
+
 #pragma warning(push)
 #pragma warning(disable: 4324)
 	struct alignas(16) PBRData
@@ -204,6 +212,32 @@ public:
 	bool IsPBRMaterialObject(const RE::TESForm* materialObject);
 
 	std::unordered_map<std::string, PBRMaterialObjectData> pbrMaterialObjects;
+
+	struct PBRLightingTemplateData
+	{
+		float directionalLightColorScale = 1.f;
+		float directionalAmbientLightColorScale = 1.f;
+	};
+
+	void SetupLightingTemplateData();
+	State::PBRLightingTemplateData* GetPBRLightingTemplateData(const RE::TESForm* lightingTemplate);
+	bool IsPBRLightingTemplate(const RE::TESForm* lightingTemplate);
+	void SavePBRLightingTemplateData(const std::string& editorId);
+
+	std::unordered_map<std::string, PBRLightingTemplateData> pbrLightingTemplates;
+
+	struct PBRWeatherData
+	{
+		float directionalLightColorScale = 1.f;
+		float directionalAmbientLightColorScale = 1.f;
+	};
+
+	void SetupWeatherData();
+	State::PBRWeatherData* GetPBRWeatherData(const RE::TESForm* weather);
+	bool IsPBRWeather(const RE::TESForm* weather);
+	void SavePBRWeatherData(const std::string& editorId);
+
+	std::unordered_map<std::string, PBRWeatherData> pbrWeathers;
 
 private:
 	std::shared_ptr<REX::W32::ID3DUserDefinedAnnotation> pPerf;

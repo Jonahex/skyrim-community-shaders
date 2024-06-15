@@ -403,7 +403,49 @@ void Menu::DrawSettings()
 			}
 			ImGui::Checkbox("Extended Frame Annotations", &State::GetSingleton()->extendedFrameAnnotations);
 			if (ImGui::TreeNodeEx("PBR", ImGuiTreeNodeFlags_DefaultOpen)) {
-				auto state = State::GetSingleton();
+				auto* state = State::GetSingleton();
+
+				if (const auto* player = RE::PlayerCharacter::GetSingleton()) {
+					if (const auto* currentCell = player->GetParentCell()) {
+						if (currentCell->IsInteriorCell()) {
+							if (const auto* lightingTemplate = currentCell->GetRuntimeData().lightingTemplate) {
+								if (ImGui::TreeNodeEx("Lighting Template Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+									const auto* editorId = lightingTemplate->GetFormEditorID();
+									ImGui::Text(std::format("Current Lighting Template : {}", editorId).c_str());
+
+									auto& pbrData = state->pbrLightingTemplates[editorId];
+
+									ImGui::SliderFloat("Directional Light Scale", &pbrData.directionalLightColorScale, 0.f, 5.f);
+									ImGui::SliderFloat("Directional Ambient Light Scale", &pbrData.directionalAmbientLightColorScale, 0.f, 5.f);
+
+									if (ImGui::Button("Save")) {
+										state->SavePBRLightingTemplateData(editorId);
+									}
+
+									ImGui::TreePop();
+								}
+							}
+						} else if (RE::Sky* sky = RE::Sky::GetSingleton()) {
+							if (const auto* weather = sky->currentWeather) {
+								if (ImGui::TreeNodeEx("Weather Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+									const auto* editorId = weather->GetFormEditorID();
+									ImGui::Text(std::format("Current Weather : {}", editorId).c_str());
+
+									auto& pbrData = state->pbrWeathers[editorId];
+
+									ImGui::SliderFloat("Directional Light Scale", &pbrData.directionalLightColorScale, 0.f, 5.f);
+									ImGui::SliderFloat("Directional Ambient Light Scale", &pbrData.directionalAmbientLightColorScale, 0.f, 5.f);
+
+									if (ImGui::Button("Save")) {
+										state->SavePBRWeatherData(editorId);
+									}
+
+									ImGui::TreePop();
+								}
+							}
+						}
+					}
+				}
 
 				{
 					static const char* diffuseModels[static_cast<size_t>(State::PBRDiffuseModelType::Total)] = {
@@ -440,10 +482,10 @@ void Menu::DrawSettings()
 					state->pbrData.matchDynamicCubemapColorToAmbient = matchDynamicCubemapColorToAmbient;
 				}
 
-				ImGui::SliderFloat("Light Color Multiplier", &state->pbrData.lightColorMultiplier, 1e-3f, 1e2f, "%.3f", ImGuiSliderFlags_Logarithmic);
-				ImGui::SliderFloat("Light Color Power", &state->pbrData.lightColorPower, 1e-3f, 1e2f, "%.3f", ImGuiSliderFlags_Logarithmic);
-				ImGui::SliderFloat("Ambient Light Color Multiplier", &state->pbrData.ambientLightColorMultiplier, 1e-3f, 1e2f, "%.3f", ImGuiSliderFlags_Logarithmic);
-				ImGui::SliderFloat("Ambient Light Color Power", &state->pbrData.ambientLightColorPower, 1e-3f, 1e2f, "%.3f", ImGuiSliderFlags_Logarithmic);
+				ImGui::SliderFloat("Light Color Multiplier", &state->globalPBRLightColorMultiplier, 1e-3f, 1e2f, "%.3f", ImGuiSliderFlags_Logarithmic);
+				ImGui::SliderFloat("Light Color Power", &state->globalPBRLightColorPower, 1e-3f, 1e2f, "%.3f", ImGuiSliderFlags_Logarithmic);
+				ImGui::SliderFloat("Ambient Light Color Multiplier", &state->globalPBRAmbientLightColorMultiplier, 1e-3f, 1e2f, "%.3f", ImGuiSliderFlags_Logarithmic);
+				ImGui::SliderFloat("Ambient Light Color Power", &state->globalPBRAmbientLightColorPower, 1e-3f, 1e2f, "%.3f", ImGuiSliderFlags_Logarithmic);
 				ImGui::TreePop();
 			}
 		}
