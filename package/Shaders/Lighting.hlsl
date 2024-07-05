@@ -1594,6 +1594,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	pbrSurfaceProperties.CoatStrength = 0;
 	pbrSurfaceProperties.CoatRoughness = 0;
 	pbrSurfaceProperties.CoatF0 = 0.04;
+
+	pbrSurfaceProperties.FuzzColor = 0;
+	pbrSurfaceProperties.FuzzWeight = 0;
 	
 	baseColor.xyz *= 1 - pbrSurfaceProperties.Metallic;
 
@@ -1645,6 +1648,18 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 				coatWorldNormal = normalize(mul(input.World[eyeIndex], float4(coatModelNormal, 0)));
 			}
 #			endif
+		}
+	}
+	
+	[branch] if ((PBRFlags & TruePBR_Fuzz) != 0)
+	{
+		pbrSurfaceProperties.FuzzColor = MultiLayerParallaxData.xyz;
+		pbrSurfaceProperties.FuzzWeight = MultiLayerParallaxData.w;
+		[branch] if ((PBRFlags & TruePBR_HasFeatureTexture1) != 0)
+		{
+			float4 sampledFuzzProperties = TexBackLightSampler.Sample(SampBackLightSampler, uv);
+			pbrSurfaceProperties.FuzzColor *= sampledFuzzProperties.xyz;
+			pbrSurfaceProperties.FuzzWeight *= sampledFuzzProperties.w;
 		}
 	}
 #		endif

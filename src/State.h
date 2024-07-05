@@ -192,6 +192,9 @@ public:
 		float coatRoughness = 1.f;
 		float coatSpecularLevel = 0.04f;
 		float innerLayerDisplacementOffset = 0.f;
+
+		RE::NiColor fuzzColor;
+		float fuzzWeight = 0.f;
 	};
 
 	void SetupTextureSetData();

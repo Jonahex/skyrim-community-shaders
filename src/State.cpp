@@ -835,6 +835,8 @@ void State::SetupTextureSetData()
 		PNState::Read(config["coatRoughness"], textureSetData.coatRoughness);
 		PNState::Read(config["coatSpecularLevel"], textureSetData.coatSpecularLevel);
 		PNState::Read(config["innerLayerDisplacementOffset"], textureSetData.innerLayerDisplacementOffset);
+		PNState::Read(config["fuzzColor"], textureSetData.fuzzColor);
+		PNState::Read(config["fuzzWeight"], textureSetData.fuzzWeight);
 
 		pbrTextureSets.insert_or_assign(editorId, textureSetData);
 	});

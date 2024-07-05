@@ -587,10 +587,7 @@ namespace Hooks
 			if (isPbr)
 			{
 				auto pbrMaterial = static_cast<BSLightingShaderMaterialPBR*>(property->material);
-				if (property->flags.any(kRimLighting)) {
-					pbrMaterial->pbrFlags.set(PBRFlags::Subsurface);
-				}
-				else if (property->flags.any(kMultiLayerParallax)) {
+				if (property->flags.any(kMultiLayerParallax)) {
 					pbrMaterial->pbrFlags.set(PBRFlags::TwoLayer);
 					if (property->flags.any(kSoftLighting)) {
 						pbrMaterial->pbrFlags.set(PBRFlags::InterlayerParallax);
@@ -600,6 +597,13 @@ namespace Hooks
 					}
 					if (property->flags.any(kEffectLighting)) {
 						pbrMaterial->pbrFlags.set(PBRFlags::ColoredCoat);
+					}
+				} else {
+					if (property->flags.any(kRimLighting)) {
+						pbrMaterial->pbrFlags.set(PBRFlags::Subsurface);
+					}
+					if (property->flags.any(kSoftLighting)) {
+						pbrMaterial->pbrFlags.set(PBRFlags::Fuzz);
 					}
 				}
 				property->flags.set(kVertexLighting);
@@ -757,17 +761,7 @@ namespace Hooks
 					shadowState->SetPSTextureFilterMode(5, RE::BSGraphics::TextureFilterMode::kAnisotropic);
 
 					stl::enumeration<PBRShaderFlags> shaderFlags;
-					if (pbrMaterial->pbrFlags.any(PBRFlags::Subsurface)) {
-						shaderFlags.set(PBRShaderFlags::Subsurface);
-
-						std::array<float, 4> PBRParams2;
-						PBRParams2[0] = pbrMaterial->GetSubsurfaceColor().red;
-						PBRParams2[1] = pbrMaterial->GetSubsurfaceColor().green;
-						PBRParams2[2] = pbrMaterial->GetSubsurfaceColor().blue;
-						PBRParams2[3] = pbrMaterial->GetSubsurfaceOpacity();
-						shadowState->SetPSConstant(PBRParams2, RE::BSGraphics::ConstantGroupLevel::PerMaterial, 43);
-					}
-					else if (pbrMaterial->pbrFlags.any(PBRFlags::TwoLayer)) {
+					if (pbrMaterial->pbrFlags.any(PBRFlags::TwoLayer)) {
 						shaderFlags.set(PBRShaderFlags::TwoLayer);
 						if (pbrMaterial->pbrFlags.any(PBRFlags::InterlayerParallax)) {
 							shaderFlags.set(PBRShaderFlags::InterlayerParallax);
@@ -790,6 +784,27 @@ namespace Hooks
 						PBRParams3[0] = pbrMaterial->GetCoatRoughness();
 						PBRParams3[1] = pbrMaterial->GetCoatSpecularLevel();
 						shadowState->SetPSConstant(PBRParams3, RE::BSGraphics::ConstantGroupLevel::PerMaterial, 27);
+					} else {
+						if (pbrMaterial->pbrFlags.any(PBRFlags::Subsurface)) {
+							shaderFlags.set(PBRShaderFlags::Subsurface);
+
+							std::array<float, 4> PBRParams2;
+							PBRParams2[0] = pbrMaterial->GetSubsurfaceColor().red;
+							PBRParams2[1] = pbrMaterial->GetSubsurfaceColor().green;
+							PBRParams2[2] = pbrMaterial->GetSubsurfaceColor().blue;
+							PBRParams2[3] = pbrMaterial->GetSubsurfaceOpacity();
+							shadowState->SetPSConstant(PBRParams2, RE::BSGraphics::ConstantGroupLevel::PerMaterial, 43);
+						}
+						if (pbrMaterial->pbrFlags.any(PBRFlags::Fuzz)) {
+							shaderFlags.set(PBRShaderFlags::Fuzz);
+
+							std::array<float, 4> PBRParams3;
+							PBRParams3[0] = pbrMaterial->GetFuzzColor().red;
+							PBRParams3[1] = pbrMaterial->GetFuzzColor().green;
+							PBRParams3[2] = pbrMaterial->GetFuzzColor().blue;
+							PBRParams3[3] = pbrMaterial->GetFuzzWeight();
+							shadowState->SetPSConstant(PBRParams3, RE::BSGraphics::ConstantGroupLevel::PerMaterial, 27);
+						}
 					}
 
 					{

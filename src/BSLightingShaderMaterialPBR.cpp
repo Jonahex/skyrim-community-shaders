@@ -25,6 +25,8 @@ void BSLightingShaderMaterialPBR::CopyMembers(RE::BSShaderMaterial* that)
 	pbrFlags = pbrThat->pbrFlags;
 	coatRoughness = pbrThat->coatRoughness;
 	coatSpecularLevel = pbrThat->coatSpecularLevel;
+	fuzzColor = pbrThat->fuzzColor;
+	fuzzWeight = pbrThat->fuzzWeight;
 	projectedMaterialBaseColorScale = pbrThat->projectedMaterialBaseColorScale;
 	projectedMaterialRoughness = pbrThat->projectedMaterialRoughness;
 	projectedMaterialSpecularLevel = pbrThat->projectedMaterialSpecularLevel;
@@ -53,6 +55,8 @@ std::uint32_t BSLightingShaderMaterialPBR::ComputeCRC32(uint32_t srcHash)
 		uint32_t pbrFlags = 0;
 		float coatRoughness = 0.f;
 		float coatSpecularLevel = 0.f;
+		std::array<float, 3> fuzzColor = { 0.f, 0.f, 0.f };
+		float fuzzWeight = 0.;
 		std::array<float, 3> projectedMaterialBaseColorScale = { 0.f, 0.f, 0.f };
 		float projectedMaterialRoughness = 0.f;
 		float projectedMaterialSpecularLevel = 0.f;
@@ -67,6 +71,10 @@ std::uint32_t BSLightingShaderMaterialPBR::ComputeCRC32(uint32_t srcHash)
 	hashes.pbrFlags = pbrFlags.underlying();
 	hashes.coatRoughness = coatRoughness * 100.f;
 	hashes.coatSpecularLevel = coatSpecularLevel * 100.f;
+	hashes.fuzzColor[0] = fuzzColor[0] * 100.f;
+	hashes.fuzzColor[1] = fuzzColor[1] * 100.f;
+	hashes.fuzzColor[2] = fuzzColor[2] * 100.f;
+	hashes.fuzzWeight = fuzzWeight * 100.f;
 	hashes.projectedMaterialBaseColorScale[0] = projectedMaterialBaseColorScale[0] * 100.f;
 	hashes.projectedMaterialBaseColorScale[1] = projectedMaterialBaseColorScale[1] * 100.f;
 	hashes.projectedMaterialBaseColorScale[2] = projectedMaterialBaseColorScale[2] * 100.f;
@@ -121,14 +129,22 @@ void BSLightingShaderMaterialPBR::OnLoadTextureSet(std::uint64_t arg1, RE::BSTex
 					specularPower = textureSetData->specularLevel;
 					rimLightPower = textureSetData->displacementScale;
 
-					if (pbrFlags.any(PBRFlags::Subsurface)) {
-						specularColor = textureSetData->subsurfaceColor;
-						subSurfaceLightRolloff = textureSetData->subsurfaceOpacity;
-					} else if (pbrFlags.any(PBRFlags::TwoLayer)) {
+					if (pbrFlags.any(PBRFlags::TwoLayer)) {
 						specularColor = textureSetData->coatColor;
 						subSurfaceLightRolloff = textureSetData->coatStrength;
 						coatRoughness = textureSetData->coatRoughness;
 						coatSpecularLevel = textureSetData->coatSpecularLevel;
+					}
+					else {
+						if (pbrFlags.any(PBRFlags::Subsurface)) {
+							specularColor = textureSetData->subsurfaceColor;
+							subSurfaceLightRolloff = textureSetData->subsurfaceOpacity;
+						}
+
+						if (pbrFlags.any(PBRFlags::Fuzz)) {
+							fuzzColor = textureSetData->fuzzColor;
+							fuzzWeight = textureSetData->fuzzWeight;
+						}
 					}
 				}
 			}
@@ -212,13 +228,19 @@ void BSLightingShaderMaterialPBR::LoadBinary(RE::NiStream& stream)
 
 	if (loadedWithFeature == RE::BSLightingShaderMaterial::Feature::kMultilayerParallax)
 	{
-		stream.iStr->read(&coatRoughness, 1);
-		stream.iStr->read(&coatSpecularLevel, 1);
+		std::array<float, 4> parameters;
+		stream.iStr->read(parameters.data(), 4);
 
-		float dummy;
-		stream.iStr->read(&dummy, 1);
-		stream.iStr->read(&dummy, 1);
+		coatRoughness = parameters[0];
+		coatSpecularLevel = parameters[1];
+
+		fuzzColor = { parameters[0],
+			parameters[1],
+			parameters[2] };
+		fuzzWeight = parameters[3];
+
 		if (stream.header.version > 0x4A) {
+			float dummy;
 			stream.iStr->read(&dummy, 1);
 		}
 	}
@@ -282,4 +304,14 @@ float BSLightingShaderMaterialPBR::GetProjectedMaterialRoughness() const
 float BSLightingShaderMaterialPBR::GetProjectedMaterialSpecularLevel() const
 {
 	return projectedMaterialSpecularLevel;
+}
+
+const RE::NiColor& BSLightingShaderMaterialPBR::GetFuzzColor() const
+{
+	return fuzzColor;
+}
+
+float BSLightingShaderMaterialPBR::GetFuzzWeight() const
+{
+	return fuzzWeight;
 }

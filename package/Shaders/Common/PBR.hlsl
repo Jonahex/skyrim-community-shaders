@@ -23,6 +23,8 @@ struct PBRSurfaceProperties
     float CoatStrength;
     float CoatRoughness;
     float3 CoatF0;
+    float3 FuzzColor;
+    float FuzzWeight;
 };
 
 #define TruePBR_Lambert 0
@@ -40,6 +42,7 @@ struct PBRSurfaceProperties
 #define TruePBR_ColoredCoat (1 << 6)
 #define TruePBR_InterlayerParallax (1 << 7)
 #define TruePBR_CoatNormal (1 << 8)
+#define TruePBR_Fuzz (1 << 9)
 	
 StructuredBuffer<PBRData> pbrData : register(t121);
 
@@ -100,7 +103,7 @@ float GetNormalDistributionFunctionGGX(float roughness, float NdotH)
 
 // [Estevez et al. 2017, "Production Friendly Microfacet Sheen BRDF"]
 float GetNormalDistributionFunctionCharlie(float roughness, float NdotH) {
-    float invAlpha  = 1.0 / (roughness * roughness);
+    float invAlpha  = pow(roughness, -4);
     float cos2h = NdotH * NdotH;
     float sin2h = max(1.0 - cos2h, 1e-5);
     return (2.0 + invAlpha) * pow(sin2h, invAlpha * 0.5) / (2.0 * PI);
@@ -254,6 +257,17 @@ void GetDirectLightInputPBR(out float3 diffuse, out float3 coatDiffuse, out floa
     }
 	
 #	if !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
+	[branch] if ((PBRFlags & TruePBR_Fuzz) != 0)
+	{
+		float3 fuzzSpecular = PI * GetSpecularDirectLightMultiplierMicroflakes(surfaceProperties.Roughness, surfaceProperties.FuzzColor, satNdotL, satNdotV, satNdotH, satVdotH) * lightColor * satNdotL;
+		[branch] if (pbrData[0].UseMultipleScattering)
+		{
+			fuzzSpecular *= 1 + surfaceProperties.FuzzColor * (1 / (specularBRDF.x + specularBRDF.y) - 1);
+		}
+		
+        specular = lerp(specular, fuzzSpecular, surfaceProperties.FuzzWeight);
+    }
+	
 	[branch] if ((PBRFlags & TruePBR_Subsurface) != 0)
 	{
 		const float subsurfacePower = 12.234;
@@ -342,11 +356,17 @@ void GetAmbientLightInputPBR(out float3 diffuse, out float3 specular, float3 N, 
 
     float2 specularBRDF = GetEnvBRDFApproxLazarov(surfaceProperties.Roughness, NdotV);
 	
-	float3 specularLobeWeight = surfaceProperties.F0 * specularBRDF.x + specularBRDF.y;
+	float3 specularColor = surfaceProperties.F0;
+	[branch] if ((PBRFlags & TruePBR_Fuzz) != 0)
+	{
+		specularColor = lerp(specularColor, surfaceProperties.FuzzColor, surfaceProperties.FuzzWeight);
+    }
+	
+	float3 specularLobeWeight = specularColor * specularBRDF.x + specularBRDF.y;
 	float3 diffuseLobeWeight = diffuseColor * (1 - specularLobeWeight);
 	[branch] if (pbrData[0].UseMultipleScattering)
 	{
-        specularLobeWeight *= 1 + surfaceProperties.F0 * (1 / (specularBRDF.x + specularBRDF.y) - 1);
+        specularLobeWeight *= 1 + specularColor * (1 / (specularBRDF.x + specularBRDF.y) - 1);
     }
 	
 	[branch] if ((PBRFlags & TruePBR_Subsurface) != 0)
@@ -398,7 +418,7 @@ void GetAmbientLightInputPBR(out float3 diffuse, out float3 specular, float3 N, 
 	[branch] if (pbrData[0].UseMultiBounceAO)
 	{
 		diffuseAO = MultiBounceAO(diffuseColor, diffuseAO).y;
-        specularAO = MultiBounceAO(surfaceProperties.F0, specularAO).y;
+        specularAO = MultiBounceAO(specularColor, specularAO).y;
     }
 	
 	diffuse *= diffuseAO;

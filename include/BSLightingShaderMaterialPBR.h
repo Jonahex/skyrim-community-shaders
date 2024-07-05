@@ -7,6 +7,7 @@ enum class PBRFlags : uint32_t
 	ColoredCoat = 1 << 2,
 	InterlayerParallax = 1 << 3,
 	CoatNormal = 1 << 4,
+	Fuzz = 1 << 5,
 };
 
 enum class PBRShaderFlags : uint32_t
@@ -20,6 +21,7 @@ enum class PBRShaderFlags : uint32_t
 	ColoredCoat = 1 << 6,
 	InterlayerParallax = 1 << 7,
 	CoatNormal = 1 << 8,
+	Fuzz = 1 << 9,
 };
 
 class BSLightingShaderMaterialPBR : public RE::BSLightingShaderMaterialBase
@@ -65,6 +67,9 @@ public:
 	float GetProjectedMaterialRoughness() const;
 	float GetProjectedMaterialSpecularLevel() const;
 
+	const RE::NiColor& GetFuzzColor() const;
+	float GetFuzzWeight() const;
+
 	// members
 	RE::BSShaderMaterial::Feature loadedWithFeature = RE::BSShaderMaterial::Feature::kDefault;
 
@@ -72,6 +77,9 @@ public:
 
 	float coatRoughness = 1.f;
 	float coatSpecularLevel = 0.04f;
+
+	RE::NiColor fuzzColor;
+	float fuzzWeight = 0.f;
 
 	std::array<float, 3> projectedMaterialBaseColorScale = { 1.f, 1.f, 1.f };
 	float projectedMaterialRoughness = 1.f;
@@ -89,6 +97,6 @@ public:
 	// Subsurface map (subsurface color in rgb, thickness in a) / Coat map (coat color in rgb, coat strength in a)
 	RE::NiPointer<RE::NiSourceTexture> featuresTexture0;
 
-	// Coat normal map (coat normal in rgb, coat roughness in a)
+	// Fuzz map (fuzz color in rgb, fuzz weight in a) / Coat normal map (coat normal in rgb, coat roughness in a)
 	RE::NiPointer<RE::NiSourceTexture> featuresTexture1;
 };
