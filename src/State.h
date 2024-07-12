@@ -249,4 +249,5 @@ public:
 
 private:
 	std::shared_ptr<REX::W32::ID3DUserDefinedAnnotation> pPerf;
+	bool initialized = false;
 };
