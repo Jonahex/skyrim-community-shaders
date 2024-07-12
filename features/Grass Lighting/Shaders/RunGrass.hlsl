@@ -222,8 +222,20 @@ struct PS_OUTPUT
 SamplerState SampBaseSampler : register(s0);
 SamplerState SampShadowMaskSampler : register(s1);
 
+#if defined(TRUE_PBR)
+SamplerState SampNormalSampler : register(s2);
+SamplerState SampRMAOSSampler : register(s3);
+SamplerState SampSubsurfaceSampler : register(s4);
+#endif
+
 Texture2D<float4> TexBaseSampler : register(t0);
 Texture2D<float4> TexShadowMaskSampler : register(t1);
+
+#if defined(TRUE_PBR)
+Texture2D<float4> TexNormalSampler : register(t2);
+Texture2D<float4> TexRMAOSSampler : register(t3);
+Texture2D<float4> TexSubsurfaceSampler : register(t4);
+#endif
 
 cbuffer PerFrame : register(b0)
 {
@@ -238,6 +250,15 @@ cbuffer AlphaTestRefCB : register(b11)
 	float AlphaTestRefRS : packoffset(c0);
 }
 #	endif  // VR
+
+#	if defined(TRUE_PBR)
+cbuffer PerMaterial : register(b1)
+{
+    uint PBRFlags : packoffset(c0.x);
+    float3 PBRParams1 : packoffset(c0.y); // roughness scale, specular level
+    float4 PBRParams2 : packoffset(c1); // subsurface color, subsurface opacity
+};
+#	endif
 
 float3 GetLightSpecularInput(float3 L, float3 V, float3 N, float3 lightColor, float shininess)
 {
@@ -296,21 +317,30 @@ float3x3 CalculateTBN(float3 N, float3 p, float2 uv)
 #		include "CloudShadows/CloudShadows.hlsli"
 #	endif
 
+#	if defined(TRUE_PBR)
+#		include "Common/PBR.hlsli"
+#	endif
+
 PS_OUTPUT main(PS_INPUT input, bool frontFace
 			   : SV_IsFrontFace)
 {
 	PS_OUTPUT psout;
 
+#	if !defined(TRUE_PBR)
 	float x;
 	float y;
 	TexBaseSampler.GetDimensions(x, y);
 
 	bool complex = x != y;
+#	endif
 
 	float4 baseColor;
+#	if !defined(TRUE_PBR)
 	if (complex) {
 		baseColor = TexBaseSampler.Sample(SampBaseSampler, float2(input.TexCoord.x, input.TexCoord.y * 0.5));
-	} else {
+	} else 
+#	endif
+	{
 		baseColor = TexBaseSampler.Sample(SampBaseSampler, input.TexCoord.xy);
 	}
 
@@ -326,7 +356,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	psout.PS.xyz = input.Depth.xxx / input.Depth.yyy;
 	psout.PS.w = diffuseAlpha;
 #	else
-	float4 specColor = complex ? TexBaseSampler.Sample(SampBaseSampler, float2(input.TexCoord.x, 0.5 + input.TexCoord.y * 0.5)) : 0;
+#		if !defined(TRUE_PBR)
+	float4 specColor = complex ? TexBaseSampler.Sample(SampBaseSampler, float2(input.TexCoord.x, 0.5 + input.TexCoord.y * 0.5)) : 1;
+#		else
+    float4 specColor = TexNormalSampler.Sample(SampNormalSampler, input.TexCoord.xy);
+#		endif
 	float4 shadowColor = TexShadowMaskSampler.Load(int3(input.HPosition.xy, 0));
 
 	uint eyeIndex = GetEyeIndexPS(input.HPosition, VPOSOffset);
@@ -345,15 +379,56 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 	normal = normalize(lerp(normal, normalize(input.SphereNormal.xyz), input.SphereNormal.w));
 
-	if (complex) {
+#		if !defined(TRUE_PBR)
+	if (complex) 
+#		endif
+	{
 		float3 normalColor = TransformNormal(specColor.xyz);
 		// world-space -> tangent-space -> world-space.
 		// This is because we don't have pre-computed tangents.
 		normal = normalize(mul(normalColor, CalculateTBN(normal, -input.WorldPosition.xyz, input.TexCoord.xy)));
 	}
-
+	
+#		if !defined(TRUE_PBR)
 	if (!complex || grassLightingSettings.OverrideComplexGrassSettings)
 		baseColor.xyz *= grassLightingSettings.BasicGrassBrightness;
+#		endif
+
+#		if defined(TRUE_PBR)
+    float4 rawRMAOS = TexRMAOSSampler.Sample(SampRMAOSSampler, input.TexCoord.xy) * float4(PBRParams1.x, 1, 1, PBRParams1.y);
+	
+	PBRSurfaceProperties pbrSurfaceProperties;
+	
+    pbrSurfaceProperties.Roughness = saturate(rawRMAOS.x);
+    pbrSurfaceProperties.Metallic = saturate(rawRMAOS.y);
+    pbrSurfaceProperties.AO = rawRMAOS.z;
+    pbrSurfaceProperties.F0 = lerp(saturate(rawRMAOS.w), baseColor.xyz, pbrSurfaceProperties.Metallic);
+
+	pbrSurfaceProperties.SubsurfaceColor = 0;
+	pbrSurfaceProperties.Thickness = 0;
+		
+	pbrSurfaceProperties.CoatColor = 0;
+	pbrSurfaceProperties.CoatStrength = 0;
+	pbrSurfaceProperties.CoatRoughness = 0;
+	pbrSurfaceProperties.CoatF0 = 0.04;
+
+	pbrSurfaceProperties.FuzzColor = 0;
+	pbrSurfaceProperties.FuzzWeight = 0;
+	
+    baseColor.xyz *= 1 - pbrSurfaceProperties.Metallic;
+	
+    pbrSurfaceProperties.SubsurfaceColor = PBRParams2.xyz;
+    pbrSurfaceProperties.Thickness = PBRParams2.w;
+	[branch] if ((PBRFlags & TruePBR_HasFeatureTexture0) != 0)
+    {
+        float4 sampledSubsurfaceProperties = TexSubsurfaceSampler.Sample(SampSubsurfaceSampler, input.TexCoord.xy);
+        pbrSurfaceProperties.SubsurfaceColor *= sampledSubsurfaceProperties.xyz;
+        pbrSurfaceProperties.Thickness *= sampledSubsurfaceProperties.w;
+    }
+	
+    float3 specularColorPBR = 0;
+    float3 transmissionColor = 0;
+#		endif // TRUE_PBR
 
 	float3 dirLightColor = DirLightColorShared.xyz;
 	dirLightColor *= shadowColor.x;
@@ -389,8 +464,19 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float3 diffuseColor = 0;
 	float3 specularColor = 0;
 
-	float3 lightsDiffuseColor = dirLightColor * saturate(dirLightAngle) * dirShadow;
+	float3 lightsDiffuseColor = 0;
 	float3 lightsSpecularColor = 0;
+	
+#		if defined(TRUE_PBR)
+	{
+        float3 dirDiffuseColor, coatDirDiffuseColor, dirTransmissionColor, dirSpecularColor;
+        GetDirectLightInputPBR(dirDiffuseColor, coatDirDiffuseColor, dirTransmissionColor, dirSpecularColor, worldNormal, worldNormal, viewDirection, viewDirection, DirLightDirection, DirLightDirection, dirLightColor, dirLightColor, pbrSurfaceProperties);
+        lightsDiffuseColor += dirDiffuseColor;
+        transmissionColor += dirTransmissionColor;
+        specularColorPBR += dirSpecularColor;
+    }
+#		else
+	lightsDiffuseColor += dirLightColor * saturate(dirLightAngle) * dirShadow;
 
 	float3 albedo = max(0, baseColor.xyz * input.VertexColor.xyz);
 
@@ -400,6 +486,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 	if (complex)
 		lightsSpecularColor += GetLightSpecularInput(DirLightDirection, viewDirection, normal, dirLightColor, grassLightingSettings.Glossiness);
+#		endif
 
 #		if defined(LIGHT_LIMIT_FIX)
 	uint clusterIndex = 0;
@@ -435,6 +522,16 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 				else if (lightLimitFixSettings.EnableContactShadows)
 					lightColor *= ContactShadows(viewPosition, screenUV, screenNoise, normalizedLightDirectionVS, shadowQualityScale, 0.0, eyeIndex);
 
+#			if defined(TRUE_PBR)
+				{
+                    float3 pointDiffuseColor, coatDirDiffuseColor, pointTransmissionColor, pointSpecularColor;
+					float3 pbrLightColor = AdjustDirectLightColorForPBR(lightColor * intensityMultiplier);
+                    GetDirectLightInputPBR(pointDiffuseColor, coatDirDiffuseColor, pointTransmissionColor, pointSpecularColor, worldNormal, worldNormal, viewDirection, viewDirection, normalizedLightDirection, normalizedLightDirection, pbrLightColor, pbrLightColor, pbrSurfaceProperties);
+                    lightsDiffuseColor += pointDiffuseColor;
+                    transmissionColor += pointTransmissionColor;
+                    specularColorPBR += pointSpecularColor;
+                }
+#			else
 				float3 lightDiffuseColor = lightColor * saturate(lightAngle.xxx);
 
 				sss += lightColor * saturate(-lightAngle);
@@ -443,6 +540,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 				if (complex)
 					lightsSpecularColor += GetLightSpecularInput(normalizedLightDirection, viewDirection, normal, lightColor, grassLightingSettings.Glossiness) * intensityMultiplier;
+#			endif
 			}
 		}
 	}
@@ -450,11 +548,22 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 	diffuseColor += lightsDiffuseColor;
 
+#		if defined(TRUE_PBR)
+    float3 diffuseIrradiance, specularIrradiance;
+    GetAmbientLightInputPBR(diffuseIrradiance, specularIrradiance, worldNormal.xyz, viewDirection, baseColor.xyz, pbrSurfaceProperties);
+    diffuseColor.xyz += diffuseIrradiance;
+    specularColorPBR += specularIrradiance;
+	
+    diffuseColor.xyz += transmissionColor;
+	specularColor.xyz += specularColorPBR;
+    diffuseColor.xyz = Lin2sRGB(diffuseColor.xyz);
+#		else
 	diffuseColor *= albedo;
 	diffuseColor += max(0, sss * subsurfaceColor * grassLightingSettings.SubsurfaceScatteringAmount);
 
 	specularColor += lightsSpecularColor;
 	specularColor *= specColor.w * grassLightingSettings.SpecularStrength;
+#	endif
 
 #		if defined(LIGHT_LIMIT_FIX) && defined(LLFDEBUG)
 	if (lightLimitFixSettings.EnableLightsVisualisation) {

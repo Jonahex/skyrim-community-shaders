@@ -20,6 +20,7 @@ public:
 	bool enableVShaders = true;
 
 	bool updateShader = true;
+	bool settingCustomShader = false;
 	RE::BSShader* currentShader = nullptr;
 
 	uint32_t currentVertexDescriptor = 0;
@@ -45,6 +46,7 @@ public:
 	void Draw();
 	void Reset();
 	void Setup();
+	void SetupFrame();
 
 	void Load(ConfigMode a_configMode = ConfigMode::USER);
 	void Save(ConfigMode a_configMode = ConfigMode::USER);
@@ -136,8 +138,114 @@ public:
 	bool isVR = false;
 	float screenWidth = 0;
 	float screenHeight = 0;
+
+	enum class PBRDiffuseModelType : uint32_t
+	{
+		Lambert,
+		Burley,
+		OrenNayar,
+		Gotanda,
+		Chan,
+
+		Total
+	};
+
+	enum class PBRFlags : uint32_t
+	{
+		EnableEnergyConservation,
+		UseDynamicCubemap,
+	};
+
+	float globalPBRLightColorMultiplier = 1.f;
+	float globalPBRLightColorPower = 1.f;
+	float globalPBRAmbientLightColorMultiplier = 1.f;
+	float globalPBRAmbientLightColorPower = 1.f;
+
+	float weatherPBRDirectionalLightColorMultiplier = 1.f;
+	float weatherPBRDirectionalAmbientLightColorMultiplier = 1.f;
+
+#pragma warning(push)
+#pragma warning(disable: 4324)
+	struct alignas(16) PBRSettings
+	{
+		float lightColorMultiplier = 1.f;
+		float lightColorPower = 1.f;
+		float ambientLightColorMultiplier = 1.f;
+		float ambientLightColorPower = 1.f;
+		PBRDiffuseModelType diffuseModel = PBRDiffuseModelType::Lambert;
+		uint32_t useMultipleScattering = true;
+		uint32_t useMultiBounceAO = true;
+		uint32_t useDynamicCubemap = true;
+		uint32_t matchDynamicCubemapColorToAmbient = true;
+	} pbrSettings{};
+#pragma warning(pop) 
+
 	ID3D11DeviceContext* context = nullptr;
 	ID3D11Device* device = nullptr;
+
+	struct PBRTextureSetData
+	{
+		float roughnessScale = 1.f;
+		float displacementScale = 1.f;
+		float specularLevel = 0.04f;
+
+		RE::NiColor subsurfaceColor;
+		float subsurfaceOpacity = 0.f;
+
+		RE::NiColor coatColor = { 1.f, 1.f, 1.f };
+		float coatStrength = 1.f;
+		float coatRoughness = 1.f;
+		float coatSpecularLevel = 0.04f;
+		float innerLayerDisplacementOffset = 0.f;
+
+		RE::NiColor fuzzColor;
+		float fuzzWeight = 0.f;
+	};
+
+	void SetupTextureSetData();
+	State::PBRTextureSetData* GetPBRTextureSetData(const RE::TESForm* textureSet);
+	bool IsPBRTextureSet(const RE::TESForm* textureSet);
+
+	std::unordered_map<std::string, PBRTextureSetData> pbrTextureSets;
+
+	struct PBRMaterialObjectData
+	{
+		std::array<float, 3> baseColorScale = { 1.f, 1.f, 1.f };
+		float roughness = 1.f;
+		float specularLevel = 1.f;
+	};
+
+	void SetupMaterialObjectData();
+	State::PBRMaterialObjectData* GetPBRMaterialObjectData(const RE::TESForm* materialObject);
+	bool IsPBRMaterialObject(const RE::TESForm* materialObject);
+
+	std::unordered_map<std::string, PBRMaterialObjectData> pbrMaterialObjects;
+
+	struct PBRLightingTemplateData
+	{
+		float directionalLightColorScale = 1.f;
+		float directionalAmbientLightColorScale = 1.f;
+	};
+
+	void SetupLightingTemplateData();
+	State::PBRLightingTemplateData* GetPBRLightingTemplateData(const RE::TESForm* lightingTemplate);
+	bool IsPBRLightingTemplate(const RE::TESForm* lightingTemplate);
+	void SavePBRLightingTemplateData(const std::string& editorId);
+
+	std::unordered_map<std::string, PBRLightingTemplateData> pbrLightingTemplates;
+
+	struct PBRWeatherData
+	{
+		float directionalLightColorScale = 1.f;
+		float directionalAmbientLightColorScale = 1.f;
+	};
+
+	void SetupWeatherData();
+	State::PBRWeatherData* GetPBRWeatherData(const RE::TESForm* weather);
+	bool IsPBRWeather(const RE::TESForm* weather);
+	void SavePBRWeatherData(const std::string& editorId);
+
+	std::unordered_map<std::string, PBRWeatherData> pbrWeathers;
 
 private:
 	std::shared_ptr<REX::W32::ID3DUserDefinedAnnotation> pPerf;

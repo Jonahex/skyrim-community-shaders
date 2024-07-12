@@ -31,5 +31,6 @@ std::pair<unsigned char*, size_t> GetFeatureBufferData()
 		DynamicCubemaps::GetSingleton()->settings,
 		TerrainOcclusion::GetSingleton()->GetCommonBufferData(),
 		WetnessEffects::GetSingleton()->GetCommonBufferData(),
-		LightLimitFix::GetSingleton()->GetCommonBufferData());
+		LightLimitFix::GetSingleton()->GetCommonBufferData(),
+		State::GetSingleton()->pbrSettings);
 }

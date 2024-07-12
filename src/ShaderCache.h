@@ -223,7 +223,6 @@ namespace SIE
 			Cloud = 17,  // unused
 			LODLandNoise = 18,
 			MTLandLODBlend = 19,
-			Outline = 20,
 		};
 
 		enum class LightingShaderFlags
@@ -233,6 +232,7 @@ namespace SIE
 			ModelSpaceNormals = 1 << 2,
 			// flags 3 to 8 are unused by vanilla
 			// Community Shaders start
+			TruePbr = 1 << 3,
 			Deferred = 1 << 4,
 			// Community Shaders end
 			Specular = 1 << 9,
@@ -286,6 +286,7 @@ namespace SIE
 		enum class GrassShaderTechniques
 		{
 			RenderDepth = 8,
+			TruePbr = 9,
 		};
 
 		enum class GrassShaderFlags

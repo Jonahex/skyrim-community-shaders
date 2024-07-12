@@ -118,6 +118,19 @@ struct LightLimitFixSettings
 	uint pad0;
 };
 
+struct PBRSettings
+{
+    float DirectColorMultiplier;
+    float DirectColorPower;
+    float AmbientColorMultiplier;
+    float AmbientColorPower;
+	uint DiffuseModel;
+	bool UseMultipleScattering;
+	bool UseMultiBounceAO;
+	bool UseDynamicCubemap;
+	bool MatchDynamicCubemapToAmbient;
+};
+
 cbuffer FeatureData : register(b6)
 {
 	GrassLightingSettings grassLightingSettings;
@@ -126,6 +139,7 @@ cbuffer FeatureData : register(b6)
 	TerraOccSettings terraOccSettings;
 	WetnessEffects wetnessEffects;
 	LightLimitFixSettings lightLimitFixSettings;
+	PBRSettings pbrSettings;
 };
 
 Texture2D<float4> TexDepthSampler : register(t20);
