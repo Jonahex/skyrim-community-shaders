@@ -389,7 +389,7 @@ struct PS_OUTPUT
 	float4 Specular : SV_Target4;
 	float4 Reflectance : SV_Target5;
 	float4 Masks : SV_Target6;
-#	if defined(SNOW)
+#	if defined(SNOW) || defined(TRUE_PBR)
 	float4 Parameters : SV_Target7;
 #	endif
 #	if defined(TERRAIN_BLENDING)
@@ -402,9 +402,9 @@ struct PS_OUTPUT
     float4 Diffuse : SV_Target0;
     float4 MotionVectors : SV_Target1;
     float4 ScreenSpaceNormals : SV_Target2;
-#	if defined(SNOW)
+#if defined(SNOW)
 	float4 Parameters : SV_Target3;
-#	endif
+#endif
 };
 #endif
 
@@ -1047,7 +1047,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float sh0;
 	float pixelOffset;
 
-#		if defined (CPM_AVAILABLE)
+#		if defined (EMAT)
 	DisplacementParams displacementParams[6];
 	displacementParams[0].DisplacementScale = 1.f;
 	displacementParams[0].DisplacementOffset = 0.f;
@@ -1058,7 +1058,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float sh0;
 	float pixelOffset;
 
-#		if defined (CPM_AVAILABLE)
+#		if defined (EMAT)
 	DisplacementParams displacementParams;
 	displacementParams.DisplacementScale = 1.f;
 	displacementParams.DisplacementOffset = 0.f;
@@ -1126,8 +1126,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 			refractedViewDirectionWS = normalize(mul(input.World[eyeIndex], float4(refractedViewDirection, 0)));
 		}
 		mipLevel = GetMipLevel(uv, TexParallaxSampler);
-		uv = GetParallaxCoords(viewPosition.z, uv, mipLevel, refractedViewDirection, tbnTr, TexParallaxSampler, SampParallaxSampler, 0, displacementParams, pixelOffset);
-		if (perPassParallax[0].EnableShadows && parallaxShadowQuality > 0.0f)
+		uv = GetParallaxCoords(viewPosition.z, uv, mipLevel, refractedViewDirection, tbnTr, screenNoise, TexParallaxSampler, SampParallaxSampler, 0, displacementParams, pixelOffset);
+		if (extendedMaterialSettings.EnableShadows && parallaxShadowQuality > 0.0f)
 			sh0 = TexParallaxSampler.SampleLevel(SampParallaxSampler, uv, mipLevel).x;
 	}
 #		endif  // TRUE_PBR
@@ -1984,6 +1984,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		float3 normalizedLightDirection = normalize(lightDirection);
 		float lightAngle = dot(worldSpaceNormal.xyz, normalizedLightDirection.xyz);
 
+		float contactShadow = 1;
 		[branch] if (strictLights[0].EnableGlobalLights && !FrameParams.z && FrameParams.y && (light.firstPersonShadow || lightLimitFixSettings.EnableContactShadows) && shadowComponent != 0.0 && lightAngle > 0.0)
 		{
 			float3 normalizedLightDirectionVS = normalize(light.positionVS[eyeIndex].xyz - viewPosition.xyz);
@@ -1999,6 +2000,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 			}
 		}
 
+		float3 refractedLightDirection = normalizedLightDirection;
 #			if defined(TRUE_PBR)
 		[branch] if ((PBRFlags & TruePBR_InterlayerParallax) != 0) {
 			refractedLightDirection = -refract(-normalizedLightDirection, coatWorldNormal, eta);
@@ -2200,6 +2202,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	GetAmbientLightInputPBR(diffuseIrradiance, specularIrradiance, worldSpaceNormal.xyz, worldSpaceViewDirection, baseColor.xyz, pbrSurfaceProperties);
 	color.xyz += diffuseIrradiance;
 	specularColorPBR += specularIrradiance;
+#		else
+	float3 indirectDiffuseLobeWeight, indirectSpecularLobeWeight;
+	GetPBRIndirectLobeWeights(indirectDiffuseLobeWeight, indirectSpecularLobeWeight, worldSpaceNormal.xyz, worldSpaceViewDirection, baseColor.xyz, pbrSurfaceProperties);
 #		endif
 	
 	color.xyz += emitColor.xyz;
@@ -2214,6 +2219,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float3 vertexColor = input.Color.xyz;
 #	endif  // defined (HAIR)
 	float3 realVertexColor = vertexColor;
+
+#		if defined(DEFERRED) && defined(TRUE_PBR)
+	indirectDiffuseLobeWeight *= realVertexColor;
+#		endif
 
 	vertexColor *= color.xyz;
 
@@ -2361,7 +2370,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	psout.Diffuse.w = 0;
 #	else
 	float alpha = baseColor.w;
-#		if defined (CPM_AVAILABLE) && !defined(LANDSCAPE)
+#		if defined (EMAT) && !defined(LANDSCAPE)
 #			if defined(PARALLAX)
 	alpha = TexColorSampler.Sample(SampColorSampler, uvOriginal).w;
 #			elif defined (TRUE_PBR)
@@ -2479,15 +2488,17 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 	float3 outputAlbedo = baseColor.xyz * realVertexColor;
 #		if defined(TRUE_PBR)
-	outputAlbedo = Lin2sRGB(baseColor.xyz) * realVertexColor;
+	outputAlbedo = Lin2sRGB(indirectDiffuseLobeWeight);
 #		endif
 	psout.Albedo = float4(outputAlbedo, psout.Diffuse.w);
 
 	float outGlossiness = saturate(glossiness * SSRParams.w);
 
 #		if defined(TRUE_PBR)
-	psout.Reflectance = float4(pbrSurfaceProperties.F0, psout.Diffuse.w);
-	psout.NormalGlossiness = float4(EncodeNormal(screenSpaceNormal), RGBToLuminanceAlternative(pbrSurfaceProperties.F0), psout.Diffuse.w);
+	psout.Parameters.z = 1;
+
+	psout.Reflectance = float4(indirectSpecularLobeWeight, psout.Diffuse.w);
+	psout.NormalGlossiness = float4(EncodeNormal(screenSpaceNormal), 1 - pbrSurfaceProperties.Roughness, psout.Diffuse.w);
 #		elif defined(WETNESS_EFFECTS)
 	psout.Reflectance = float4(wetnessReflectance, psout.Diffuse.w);
 	psout.NormalGlossiness = float4(EncodeNormal(screenSpaceNormal), wetnessGlossinessSpecular, psout.Diffuse.w);
@@ -2496,7 +2507,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	psout.NormalGlossiness = float4(EncodeNormal(screenSpaceNormal), outGlossiness, psout.Diffuse.w);
 #		endif
 
-#		if defined(SNOW)
+#		if defined(SNOW) || defined(TRUE_PBR)
 	psout.Parameters.w = psout.Diffuse.w;
 #		endif
 

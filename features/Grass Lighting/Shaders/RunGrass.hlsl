@@ -214,7 +214,13 @@ struct PS_OUTPUT
 	float4 NormalGlossiness : SV_Target2;
 	float4 Albedo : SV_Target3;
 	float4 Specular : SV_Target4;
+#	if defined(TRUE_PBR)
+	float4 Reflectance : SV_Target5;
+#	endif
 	float4 Masks : SV_Target6;
+#	if defined(TRUE_PBR)
+	float4 Parameters : SV_Target7;
+#	endif
 #endif  // RENDER_DEPTH
 };
 
@@ -470,7 +476,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		if defined(TRUE_PBR)
 	{
         float3 dirDiffuseColor, coatDirDiffuseColor, dirTransmissionColor, dirSpecularColor;
-        GetDirectLightInputPBR(dirDiffuseColor, coatDirDiffuseColor, dirTransmissionColor, dirSpecularColor, worldNormal, worldNormal, viewDirection, viewDirection, DirLightDirection, DirLightDirection, dirLightColor, dirLightColor, pbrSurfaceProperties);
+        GetDirectLightInputPBR(dirDiffuseColor, coatDirDiffuseColor, dirTransmissionColor, dirSpecularColor, normal, normal, viewDirection, viewDirection, DirLightDirection, DirLightDirection, dirLightColor, dirLightColor, pbrSurfaceProperties);
         lightsDiffuseColor += dirDiffuseColor;
         transmissionColor += dirTransmissionColor;
         specularColorPBR += dirSpecularColor;
@@ -526,7 +532,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 				{
                     float3 pointDiffuseColor, coatDirDiffuseColor, pointTransmissionColor, pointSpecularColor;
 					float3 pbrLightColor = AdjustDirectLightColorForPBR(lightColor * intensityMultiplier);
-                    GetDirectLightInputPBR(pointDiffuseColor, coatDirDiffuseColor, pointTransmissionColor, pointSpecularColor, worldNormal, worldNormal, viewDirection, viewDirection, normalizedLightDirection, normalizedLightDirection, pbrLightColor, pbrLightColor, pbrSurfaceProperties);
+                    GetDirectLightInputPBR(pointDiffuseColor, coatDirDiffuseColor, pointTransmissionColor, pointSpecularColor, normal, normal, viewDirection, viewDirection, normalizedLightDirection, normalizedLightDirection, pbrLightColor, pbrLightColor, pbrSurfaceProperties);
                     lightsDiffuseColor += pointDiffuseColor;
                     transmissionColor += pointTransmissionColor;
                     specularColorPBR += pointSpecularColor;
@@ -549,13 +555,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	diffuseColor += lightsDiffuseColor;
 
 #		if defined(TRUE_PBR)
-    float3 diffuseIrradiance, specularIrradiance;
-    GetAmbientLightInputPBR(diffuseIrradiance, specularIrradiance, worldNormal.xyz, viewDirection, baseColor.xyz, pbrSurfaceProperties);
-    diffuseColor.xyz += diffuseIrradiance;
-    specularColorPBR += specularIrradiance;
+	float3 indirectDiffuseLobeWeight, indirectSpecularLobeWeight;
+	GetPBRIndirectLobeWeights(indirectDiffuseLobeWeight, indirectSpecularLobeWeight, normal, viewDirection, baseColor.xyz, pbrSurfaceProperties);
 	
     diffuseColor.xyz += transmissionColor;
 	specularColor.xyz += specularColorPBR;
+    specularColor.xyz = Lin2sRGB(specularColor.xyz);
     diffuseColor.xyz = Lin2sRGB(diffuseColor.xyz);
 #		else
 	diffuseColor *= albedo;
@@ -581,12 +586,19 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	psout.Diffuse.xyz = float4(diffuseColor, 1);
 #		endif
 
-	psout.Specular = float4(specularColor, 1);
-	psout.Albedo = float4(albedo, 1);
-	psout.Masks = float4(0, 0, 0, 0);
-
 	float3 normalVS = normalize(WorldToView(normal, false, eyeIndex));
+#	if defined(TRUE_PBR)
+	psout.Albedo = float4(Lin2sRGB(indirectDiffuseLobeWeight), 1);
+	psout.NormalGlossiness = float4(EncodeNormal(normalVS), 1 - pbrSurfaceProperties.Roughness, 1);
+	psout.Reflectance = float4(indirectSpecularLobeWeight, 1);
+	psout.Parameters = float4(0, 0, 1, 1);
+#	else
+	psout.Albedo = float4(albedo, 1);
 	psout.NormalGlossiness = float4(EncodeNormal(normalVS), specColor.w, 1);
+#	endif
+
+	psout.Specular = float4(specularColor, 1);
+	psout.Masks = float4(0, 0, 0, 0);
 #	endif  // RENDER_DEPTH
 	return psout;
 }

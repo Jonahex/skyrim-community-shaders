@@ -71,7 +71,7 @@ float GetTerrainHeight(PS_INPUT input, float2 coords, float mipLevels[6], Displa
 #endif
 
 #if defined(LANDSCAPE)
-float2 GetParallaxCoords(PS_INPUT input, float distance, float2 coords, float mipLevels[6], float3 viewDir, float3x3 tbn, float noise, DisplacementParams params, out float pixelOffset)
+float2 GetParallaxCoords(PS_INPUT input, float distance, float2 coords, float mipLevels[6], float3 viewDir, float3x3 tbn, float noise, DisplacementParams params[6], out float pixelOffset)
 #else
 float2 GetParallaxCoords(float distance, float2 coords, float mipLevel, float3 viewDir, float3x3 tbn, float noise, Texture2D<float4> tex, SamplerState texSampler, uint channel, DisplacementParams params, out float pixelOffset)
 #endif
@@ -81,7 +81,11 @@ float2 GetParallaxCoords(float distance, float2 coords, float mipLevel, float3 v
 
 	float nearBlendToFar = saturate(distance / 2048.0);
 
+#	if defined(LANDSCAPE)
+	float maxHeight = 0.1 * (params[0].HeightScale + params[1].HeightScale + params[2].HeightScale + params[3].HeightScale + params[4].HeightScale + params[5].HeightScale) / 6;
+#	else
 	float maxHeight = 0.1 * params.HeightScale;
+#	endif
 	float minHeight = maxHeight * 0.5;
 
 	if (nearBlendToFar < 1.0) {

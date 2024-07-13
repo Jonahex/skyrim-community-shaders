@@ -431,11 +431,12 @@ void Deferred::DeferredPasses()
 
 	// Ambient Composite
 	{
-		ID3D11ShaderResourceView* srvs[4]{
+		ID3D11ShaderResourceView* srvs[5]{
 			albedo.SRV,
 			normalRoughness.SRV,
 			skylighting->loaded ? skylighting->skylightingTexture->srv.get() : nullptr,
 			ssgi->loaded ? ssgi->texGI[ssgi->outputGIIdx]->srv.get() : nullptr,
+			masks2.SRV,
 		};
 
 		context->CSSetShaderResources(0, ARRAYSIZE(srvs), srvs);

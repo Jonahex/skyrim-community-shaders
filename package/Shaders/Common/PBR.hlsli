@@ -302,6 +302,7 @@ float3 GetSpecularDominantDirection(float3 N, float3 R, float roughness)
 	return lerp(N, R, (1 - a) * (sqrt(1 - a) + a));	
 }
 
+#if !defined(DEFERRED) && !defined(GRASS)
 void GetAmbientLightInputPBR(out float3 diffuse, out float3 specular, float3 N, float3 V, float3 diffuseColor, PBRSurfaceProperties surfaceProperties)
 {
 	diffuse = 0;
@@ -408,4 +409,61 @@ void GetAmbientLightInputPBR(out float3 diffuse, out float3 specular, float3 N, 
 	
 	diffuse *= diffuseAO;
 	specular *= specularAO;
+}
+#endif
+
+void GetPBRIndirectLobeWeights(out float3 diffuseLobeWeight, out float3 specularLobeWeight, float3 N, float3 V, float3 diffuseColor, PBRSurfaceProperties surfaceProperties)
+{
+    diffuseLobeWeight = 0;
+    specularLobeWeight = 0;
+	
+	float NdotV = saturate(dot(N, V));
+
+    float2 specularBRDF = GetEnvBRDFApproxLazarov(surfaceProperties.Roughness, NdotV);
+	
+	float3 specularColor = surfaceProperties.F0;
+	[branch] if ((PBRFlags & TruePBR_Fuzz) != 0)
+	{
+		specularColor = lerp(specularColor, surfaceProperties.FuzzColor, surfaceProperties.FuzzWeight);
+    }
+	
+	specularLobeWeight = specularColor * specularBRDF.x + specularBRDF.y;
+	diffuseLobeWeight = diffuseColor * (1 - specularLobeWeight);
+	[branch] if (pbrSettings.UseMultipleScattering)
+	{
+        specularLobeWeight *= 1 + specularColor * (1 / (specularBRDF.x + specularBRDF.y) - 1);
+    }
+	
+	[branch] if ((PBRFlags & TruePBR_TwoLayer) != 0)
+    {
+        float2 coatSpecularBRDF = GetEnvBRDFApproxLazarov(surfaceProperties.CoatRoughness, NdotV);
+        float3 coatSpecularLobeWeight = surfaceProperties.CoatF0 * coatSpecularBRDF.x + coatSpecularBRDF.y;
+		[branch] if (pbrSettings.UseMultipleScattering)
+		{
+            coatSpecularLobeWeight *= 1 + surfaceProperties.CoatF0 * (1 / (coatSpecularBRDF.x + coatSpecularBRDF.y) - 1);
+        }
+        float3 coatF = GetFresnelFactorSchlick(surfaceProperties.CoatF0, NdotV);
+		
+		float3 layerAttenuation = 1 - coatF * surfaceProperties.CoatStrength;
+        diffuseLobeWeight *= layerAttenuation;
+        specularLobeWeight *= layerAttenuation;
+		
+        [branch] if ((PBRFlags & TruePBR_ColoredCoat) != 0)
+        {
+            float3 coatDiffuseLobeWeight = surfaceProperties.CoatColor * (1 - coatSpecularLobeWeight);
+            diffuseLobeWeight += coatDiffuseLobeWeight * surfaceProperties.CoatStrength;
+        }
+        specularLobeWeight += coatSpecularLobeWeight * surfaceProperties.CoatStrength;
+    }
+	
+    float3 diffuseAO = surfaceProperties.AO;
+    float3 specularAO = SpecularAOLagarde(NdotV, surfaceProperties.AO, surfaceProperties.Roughness);
+	[branch] if (pbrSettings.UseMultiBounceAO)
+	{
+		diffuseAO = MultiBounceAO(diffuseColor, diffuseAO).y;
+        specularAO = MultiBounceAO(specularColor, specularAO).y;
+    }
+	
+	diffuseLobeWeight *= diffuseAO;
+	specularLobeWeight *= specularAO;
 }
