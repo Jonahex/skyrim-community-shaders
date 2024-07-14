@@ -31,8 +31,9 @@ void BSLightingShaderMaterialPBRLandscape::CopyMembers(RE::BSShaderMaterial* tha
 
 	for (uint32_t textureIndex = 0; textureIndex < NumTiles; ++textureIndex)
 	{
-		pbrThat->landscapeBCDTextures[textureIndex] = landscapeBCDTextures[textureIndex];
+		pbrThat->landscapeBaseColorTextures[textureIndex] = landscapeBaseColorTextures[textureIndex];
 		pbrThat->landscapeNormalTextures[textureIndex] = landscapeNormalTextures[textureIndex];
+		pbrThat->landscapeDisplacementTextures[textureIndex] = landscapeDisplacementTextures[textureIndex];
 		pbrThat->landscapeRMAOSTextures[textureIndex] = landscapeRMAOSTextures[textureIndex];
 	}
 	pbrThat->terrainOverlayTexture = terrainOverlayTexture;
@@ -56,10 +57,13 @@ RE::BSShaderMaterial::Feature BSLightingShaderMaterialPBRLandscape::GetFeature()
 void BSLightingShaderMaterialPBRLandscape::ClearTextures()
 {
 	BSLightingShaderMaterialBase::ClearTextures();
-	for (auto& texture : landscapeBCDTextures) {
+	for (auto& texture : landscapeBaseColorTextures) {
 		texture.reset();
 	}
 	for (auto& texture : landscapeNormalTextures) {
+		texture.reset();
+	}
+	for (auto& texture : landscapeDisplacementTextures) {
 		texture.reset();
 	}
 	for (auto& texture : landscapeRMAOSTextures) {
@@ -81,11 +85,14 @@ void BSLightingShaderMaterialPBRLandscape::ReceiveValuesFromRootMaterial(bool sk
 	}
 	for (uint32_t textureIndex = 0; textureIndex < numLandscapeTextures; ++textureIndex)
 	{
-		if (landscapeBCDTextures[textureIndex] == nullptr) {
-			landscapeBCDTextures[textureIndex] = stateData.defaultTextureBlack;
+		if (landscapeBaseColorTextures[textureIndex] == nullptr) {
+			landscapeBaseColorTextures[textureIndex] = stateData.defaultTextureBlack;
 		}
 		if (landscapeNormalTextures[textureIndex] == nullptr) {
 			landscapeNormalTextures[textureIndex] = stateData.defaultTextureNormalMap;
+		}
+		if (landscapeDisplacementTextures[textureIndex] == nullptr) {
+			landscapeDisplacementTextures[textureIndex] = stateData.defaultTextureBlack;
 		}
 		if (landscapeRMAOSTextures[textureIndex] == nullptr) {
 			landscapeRMAOSTextures[textureIndex] = stateData.defaultTextureWhite;
@@ -109,11 +116,14 @@ uint32_t BSLightingShaderMaterialPBRLandscape::GetTextures(RE::NiSourceTexture**
 		textures[textureIndex++] = specularBackLightingTexture.get();
 	}
 	for (uint32_t tileIndex = 0; tileIndex < numLandscapeTextures; ++tileIndex) {
-		if (landscapeBCDTextures[tileIndex] != nullptr) {
-			textures[textureIndex++] = landscapeBCDTextures[tileIndex].get();
+		if (landscapeBaseColorTextures[tileIndex] != nullptr) {
+			textures[textureIndex++] = landscapeBaseColorTextures[tileIndex].get();
 		}
 		if (landscapeNormalTextures[tileIndex] != nullptr) {
 			textures[textureIndex++] = landscapeNormalTextures[tileIndex].get();
+		}
+		if (landscapeDisplacementTextures[tileIndex] != nullptr) {
+			textures[textureIndex++] = landscapeDisplacementTextures[tileIndex].get();
 		}
 		if (landscapeRMAOSTextures[tileIndex] != nullptr) {
 			textures[textureIndex++] = landscapeRMAOSTextures[tileIndex].get();

@@ -320,7 +320,7 @@ HRESULT WINAPI hk_IDXGISwapChain_Present(IDXGISwapChain* This, UINT SyncInterval
 
 struct ExtendedRendererState
 {
-	static constexpr uint32_t NumPSTextures = 6;
+	static constexpr uint32_t NumPSTextures = 12;
 	static constexpr uint32_t FirstPSTexture = 80;
 
 	uint32_t PSResourceModifiedBits = 0;
@@ -699,18 +699,24 @@ namespace Hooks
 					if (pbrMaterial->normalTexture != nullptr) {
 						shadowState->SetPSTexture(NormalStartIndex, pbrMaterial->normalTexture->rendererTexture);
 					}
+					if (pbrMaterial->landscapeDisplacementTextures[0] != nullptr) {
+						extendedRendererState.SetPSTexture(0, pbrMaterial->landscapeDisplacementTextures[0]->rendererTexture);
+					}
 					if (pbrMaterial->landscapeRMAOSTextures[0] != nullptr) {
-						extendedRendererState.SetPSTexture(0, pbrMaterial->landscapeRMAOSTextures[0]->rendererTexture);
+						extendedRendererState.SetPSTexture(BSLightingShaderMaterialPBRLandscape::NumTiles, pbrMaterial->landscapeRMAOSTextures[0]->rendererTexture);
 					}
 					for (uint32_t textureIndex = 1; textureIndex < BSLightingShaderMaterialPBRLandscape::NumTiles; ++textureIndex) {
-						if (pbrMaterial->landscapeBCDTextures[textureIndex - 1] != nullptr) {
-							shadowState->SetPSTexture(textureIndex, pbrMaterial->landscapeBCDTextures[textureIndex - 1]->rendererTexture);
+						if (pbrMaterial->landscapeBaseColorTextures[textureIndex - 1] != nullptr) {
+							shadowState->SetPSTexture(textureIndex, pbrMaterial->landscapeBaseColorTextures[textureIndex - 1]->rendererTexture);
 						}
 						if (pbrMaterial->landscapeNormalTextures[textureIndex - 1] != nullptr) {
 							shadowState->SetPSTexture(NormalStartIndex + textureIndex, pbrMaterial->landscapeNormalTextures[textureIndex - 1]->rendererTexture);
 						}
+						if (pbrMaterial->landscapeDisplacementTextures[textureIndex] != nullptr) {
+							extendedRendererState.SetPSTexture(textureIndex, pbrMaterial->landscapeDisplacementTextures[textureIndex]->rendererTexture);
+						}
 						if (pbrMaterial->landscapeRMAOSTextures[textureIndex] != nullptr) {
-							extendedRendererState.SetPSTexture(textureIndex, pbrMaterial->landscapeRMAOSTextures[textureIndex]->rendererTexture);
+							extendedRendererState.SetPSTexture(BSLightingShaderMaterialPBRLandscape::NumTiles + textureIndex, pbrMaterial->landscapeRMAOSTextures[textureIndex]->rendererTexture);
 						}
 					}
 
@@ -731,11 +737,12 @@ namespace Hooks
 
 					{
 						uint32_t flags = 0;
-						for (uint32_t textureIndex = 0; textureIndex < BSLightingShaderMaterialPBRLandscape::NumTiles; ++textureIndex)
-						{
-							if (pbrMaterial->isPbr[textureIndex])
-							{
+						for (uint32_t textureIndex = 0; textureIndex < BSLightingShaderMaterialPBRLandscape::NumTiles; ++textureIndex) {
+							if (pbrMaterial->isPbr[textureIndex]) {
 								flags |= (1 << textureIndex);
+								if (pbrMaterial->landscapeDisplacementTextures[textureIndex] != nullptr && pbrMaterial->landscapeDisplacementTextures[textureIndex] != RE::BSGraphics::State::GetSingleton()->GetRuntimeData().defaultTextureBlack) {
+									flags |= (1 << (BSLightingShaderMaterialPBRLandscape::NumTiles + textureIndex));
+								}
 							}
 						}
 						shadowState->SetPSConstant(flags, RE::BSGraphics::ConstantGroupLevel::PerMaterial, 36);
@@ -999,11 +1006,12 @@ namespace Hooks
 		auto* textureSetData = State::GetSingleton()->GetPBRTextureSetData(landTexture.textureSet);
 		const bool isPbr = textureSetData != nullptr;
 
-		textureSet->SetTexture(BSLightingShaderMaterialPBRLandscape::BcdTexture, textureIndex == 0 ? material.diffuseTexture : material.landscapeBCDTextures[textureIndex - 1]);
+		textureSet->SetTexture(BSLightingShaderMaterialPBRLandscape::BaseColorTexture, textureIndex == 0 ? material.diffuseTexture : material.landscapeBaseColorTextures[textureIndex - 1]);
 		textureSet->SetTexture(BSLightingShaderMaterialPBRLandscape::NormalTexture, textureIndex == 0 ? material.normalTexture : material.landscapeNormalTextures[textureIndex - 1]);
 
 		if (isPbr) {
 			textureSet->SetTexture(BSLightingShaderMaterialPBRLandscape::RmaosTexture, material.landscapeRMAOSTextures[textureIndex]);
+			textureSet->SetTexture(BSLightingShaderMaterialPBRLandscape::DisplacementTexture, material.landscapeDisplacementTextures[textureIndex]);
 			material.displacementScales[textureIndex] = textureSetData->displacementScale;
 			material.roughnessScales[textureIndex] = textureSetData->roughnessScale;
 			material.specularLevels[textureIndex] = textureSetData->specularLevel;
@@ -1015,7 +1023,7 @@ namespace Hooks
 				material.numLandscapeTextures = std::max(material.numLandscapeTextures, 1u);
 			}
 		} else {
-			if (material.landscapeBCDTextures[textureIndex] != nullptr) {
+			if (material.landscapeBaseColorTextures[textureIndex] != nullptr) {
 				material.numLandscapeTextures = std::max(material.numLandscapeTextures, textureIndex + 2);
 			}
 		}
@@ -1073,10 +1081,12 @@ namespace Hooks
 
 				material->diffuseTexture = stateData.defaultTextureBlack;
 				material->normalTexture = stateData.defaultTextureNormalMap;
+				material->landscapeDisplacementTextures[0] = stateData.defaultTextureBlack;
 				material->landscapeRMAOSTextures[0] = stateData.defaultTextureWhite;
 				for (uint32_t textureIndex = 0; textureIndex < BSLightingShaderMaterialPBRLandscape::NumTiles - 1; ++textureIndex) {
-					material->landscapeBCDTextures[textureIndex] = stateData.defaultTextureBlack;
+					material->landscapeBaseColorTextures[textureIndex] = stateData.defaultTextureBlack;
 					material->landscapeNormalTextures[textureIndex] = stateData.defaultTextureNormalMap;
+					material->landscapeDisplacementTextures[textureIndex + 1] = stateData.defaultTextureBlack;
 					material->landscapeRMAOSTextures[textureIndex + 1] = stateData.defaultTextureWhite;
 				}
 

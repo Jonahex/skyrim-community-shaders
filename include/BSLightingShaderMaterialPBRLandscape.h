@@ -5,8 +5,9 @@ class BSLightingShaderMaterialPBRLandscape : public RE::BSLightingShaderMaterial
 public:
 	inline static constexpr auto FEATURE = static_cast<RE::BSShaderMaterial::Feature>(33);
 
-	inline static constexpr auto BcdTexture = static_cast<RE::BSTextureSet::Texture>(0);
+	inline static constexpr auto BaseColorTexture = static_cast<RE::BSTextureSet::Texture>(0);
 	inline static constexpr auto NormalTexture = static_cast<RE::BSTextureSet::Texture>(1);
+	inline static constexpr auto DisplacementTexture = static_cast<RE::BSTextureSet::Texture>(3);
 	inline static constexpr auto RmaosTexture = static_cast<RE::BSTextureSet::Texture>(5);
 
 	inline static constexpr uint32_t NumTiles = 6;
@@ -26,11 +27,12 @@ public:
 
 	// members
 	std::uint32_t numLandscapeTextures = 0;
-	RE::NiPointer<RE::NiSourceTexture> landscapeBCDTextures[NumTiles - 1];
+	RE::NiPointer<RE::NiSourceTexture> landscapeBaseColorTextures[NumTiles - 1];
 	RE::NiPointer<RE::NiSourceTexture> landscapeNormalTextures[NumTiles - 1];
 	RE::NiPointer<RE::NiSourceTexture> terrainOverlayTexture;
 	RE::NiPointer<RE::NiSourceTexture> terrainNoiseTexture;
 	RE::NiColorA landBlendParams;
+	std::array<RE::NiPointer<RE::NiSourceTexture>, NumTiles> landscapeDisplacementTextures;
 	std::array<RE::NiPointer<RE::NiSourceTexture>, NumTiles> landscapeRMAOSTextures;
 	std::array<bool, NumTiles> isPbr;
 	std::array<float, NumTiles> roughnessScales;

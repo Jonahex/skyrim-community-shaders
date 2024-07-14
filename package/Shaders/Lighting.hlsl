@@ -511,12 +511,20 @@ Texture2D<float4> TexLandNormal6Sampler : register(t12);
 
 #		if defined(TRUE_PBR)
 
-Texture2D<float4> TexRMAOSSampler : register(t80);
-Texture2D<float4> TexLandRMAOS2Sampler : register(t81);
-Texture2D<float4> TexLandRMAOS3Sampler : register(t82);
-Texture2D<float4> TexLandRMAOS4Sampler : register(t83);
-Texture2D<float4> TexLandRMAOS5Sampler : register(t84);
-Texture2D<float4> TexLandRMAOS6Sampler : register(t85);
+Texture2D<float4> TexLandDisplacement0Sampler : register(t80);
+Texture2D<float4> TexLandDisplacement1Sampler : register(t81);
+Texture2D<float4> TexLandDisplacement2Sampler : register(t82);
+Texture2D<float4> TexLandDisplacement3Sampler : register(t83);
+Texture2D<float4> TexLandDisplacement4Sampler : register(t84);
+Texture2D<float4> TexLandDisplacement5Sampler : register(t85);
+
+Texture2D<float4> TexRMAOSSampler : register(t86);
+Texture2D<float4> TexLandRMAOS2Sampler : register(t87);
+Texture2D<float4> TexLandRMAOS3Sampler : register(t88);
+Texture2D<float4> TexLandRMAOS4Sampler : register(t89);
+Texture2D<float4> TexLandRMAOS5Sampler : register(t90);
+Texture2D<float4> TexLandRMAOS6Sampler : register(t91);
+
 
 #		endif
 
@@ -924,6 +932,14 @@ float GetSnowParameterY(float texProjTmp, float alpha)
 #		define EMAT
 #	endif
 
+#	if defined(DYNAMIC_CUBEMAPS)
+#		include "DynamicCubemaps/DynamicCubemaps.hlsli"
+#	endif
+
+#	if defined(TRUE_PBR)
+#		include "Common/PBR.hlsli"
+#	endif
+
 #	if defined(EMAT)
 #		include "ExtendedMaterials/ExtendedMaterials.hlsli"
 #	endif
@@ -940,16 +956,8 @@ float GetSnowParameterY(float texProjTmp, float alpha)
 #		include "LightLimitFix/LightLimitFix.hlsli"
 #	endif
 
-#	if defined(DYNAMIC_CUBEMAPS)
-#		include "DynamicCubemaps/DynamicCubemaps.hlsli"
-#	endif
-
 #	if defined(TREE_ANIM)
 #		undef WETNESS_EFFECTS
-#	endif
-
-#	if defined(TRUE_PBR)
-#		include "Common/PBR.hlsli"
 #	endif
 
 #	if defined(WETNESS_EFFECTS)
@@ -1258,7 +1266,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		if defined(LODLANDNOISE)
 	rawRMAOS = float4(1, 0, 1, 0.04);
 #		elif defined(LANDSCAPE)
-	[branch] if ((PBRFlags & 1) != 0)
+	[branch] if ((PBRFlags & TruePBR_LandTile0PBR) != 0)
 	{
 		rawRMAOS = input.LandBlendWeights1.x * TexRMAOSSampler.Sample(SampRMAOSSampler, diffuseUv) * float4(PBRParams1.x, 1, 1, PBRParams1.z);
 	}
@@ -1310,7 +1318,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		endif  // SNOW
 
 #		if defined(TRUE_PBR)
-		[branch] if ((PBRFlags & 2) != 0)
+		[branch] if ((PBRFlags & TruePBR_LandTile1PBR) != 0)
 		{
 			rawRMAOS += input.LandBlendWeights1.y * TexLandRMAOS2Sampler.Sample(SampLandRMAOS2Sampler, uv) * float4(LandscapeTexture2PBRParams.x, 1, 1, LandscapeTexture2PBRParams.z);
 		}
@@ -1334,7 +1342,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		endif  // SNOW
 
 #		if defined(TRUE_PBR)
-		[branch] if ((PBRFlags & 4) != 0)
+		[branch] if ((PBRFlags & TruePBR_LandTile2PBR) != 0)
 		{
 			rawRMAOS += input.LandBlendWeights1.z * TexLandRMAOS3Sampler.Sample(SampLandRMAOS3Sampler, uv) * float4(LandscapeTexture3PBRParams.x, 1, 1, LandscapeTexture3PBRParams.z);
 		}
@@ -1358,7 +1366,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		endif  // SNOW
 
 #		if defined(TRUE_PBR)
-		[branch] if ((PBRFlags & 8) != 0)
+		[branch] if ((PBRFlags & TruePBR_LandTile3PBR) != 0)
 		{
 			rawRMAOS += input.LandBlendWeights1.w * TexLandRMAOS4Sampler.Sample(SampLandRMAOS4Sampler, uv) * float4(LandscapeTexture4PBRParams.x, 1, 1, LandscapeTexture4PBRParams.z);
 		}
@@ -1382,7 +1390,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		endif  // SNOW
 
 #		if defined(TRUE_PBR)
-		[branch] if ((PBRFlags & 16) != 0)
+		[branch] if ((PBRFlags & TruePBR_LandTile4PBR) != 0)
 		{
 			rawRMAOS += input.LandBlendWeights2.x * TexLandRMAOS5Sampler.Sample(SampLandRMAOS5Sampler, uv) * float4(LandscapeTexture5PBRParams.x, 1, 1, LandscapeTexture5PBRParams.z);
 		}
@@ -1406,7 +1414,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		endif  // SNOW
 
 #		if defined(TRUE_PBR)
-		[branch] if ((PBRFlags & 32) != 0)
+		[branch] if ((PBRFlags & TruePBR_LandTile5PBR) != 0)
 		{
 			rawRMAOS += input.LandBlendWeights2.y * TexLandRMAOS6Sampler.Sample(SampLandRMAOS6Sampler, uv) * float4(LandscapeTexture6PBRParams.x, 1, 1, LandscapeTexture6PBRParams.z);
 		}

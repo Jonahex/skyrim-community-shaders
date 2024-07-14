@@ -54,18 +54,39 @@ float GetMipLevel(float2 coords, Texture2D<float4> tex)
 float GetTerrainHeight(PS_INPUT input, float2 coords, float mipLevels[6], DisplacementParams params[6])
 {
 	float height = 0.0;
+#	if defined(TRUE_PBR)
+	[branch] if ((PBRFlags & TruePBR_LandTile0HasDisplacement) != 0)
+		if (input.LandBlendWeights1.x > 0.0)
+			height = AdjustDisplacement(TexLandDisplacement0Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[0]).x, params[0]) * input.LandBlendWeights1.x;
+	[branch] if ((PBRFlags & TruePBR_LandTile1HasDisplacement) != 0)
+		if (input.LandBlendWeights1.y > 0.0)
+			height += AdjustDisplacement(TexLandDisplacement1Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[1]).x, params[1]) * input.LandBlendWeights1.y;
+	[branch] if ((PBRFlags & TruePBR_LandTile2HasDisplacement) != 0)
+		if (input.LandBlendWeights1.z > 0.0)
+			height += AdjustDisplacement(TexLandDisplacement2Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[2]).x, params[2]) * input.LandBlendWeights1.z;
+	[branch] if ((PBRFlags & TruePBR_LandTile3HasDisplacement) != 0)
+		if (input.LandBlendWeights1.w > 0.0)
+			height += AdjustDisplacement(TexLandDisplacement3Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[3]).w, params[3]) * input.LandBlendWeights1.w;
+	[branch] if ((PBRFlags & TruePBR_LandTile4HasDisplacement) != 0)
+		if (input.LandBlendWeights2.x > 0.0)
+			height += AdjustDisplacement(TexLandDisplacement4Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[4]).x, params[4]) * input.LandBlendWeights2.x;
+	[branch] if ((PBRFlags & TruePBR_LandTile5HasDisplacement) != 0)
+		if (input.LandBlendWeights2.y > 0.0)
+			height += AdjustDisplacement(TexLandDisplacement5Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[5]).x, params[5]) * input.LandBlendWeights2.y;
+#	else
 	if (input.LandBlendWeights1.x > 0.0)
-		height = AdjustDisplacement(TexColorSampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[0]).w, params[0]) * input.LandBlendWeights1.x;
+		height = TexColorSampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[0]).w * input.LandBlendWeights1.x;
 	if (input.LandBlendWeights1.y > 0.0)
-		height += AdjustDisplacement(TexLandColor2Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[1]).w, params[1]) * input.LandBlendWeights1.y;
+		height += TexLandColor2Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[1]).w * input.LandBlendWeights1.y;
 	if (input.LandBlendWeights1.z > 0.0)
-		height += AdjustDisplacement(TexLandColor3Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[2]).w, params[2]) * input.LandBlendWeights1.z;
+		height += TexLandColor3Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[2]).w * input.LandBlendWeights1.z;
 	if (input.LandBlendWeights1.w > 0.0)
-		height += AdjustDisplacement(TexLandColor4Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[3]).w, params[3]) * input.LandBlendWeights1.w;
+		height += TexLandColor4Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[3]).w * input.LandBlendWeights1.w;
 	if (input.LandBlendWeights2.x > 0.0)
-		height += AdjustDisplacement(TexLandColor5Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[4]).w, params[4]) * input.LandBlendWeights2.x;
+		height += TexLandColor5Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[4]).w * input.LandBlendWeights2.x;
 	if (input.LandBlendWeights2.y > 0.0)
-		height += AdjustDisplacement(TexLandColor6Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[5]).w, params[5]) * input.LandBlendWeights2.y;
+		height += TexLandColor6Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[5]).w * input.LandBlendWeights2.y;
+#	endif
 	return height;
 }
 #endif

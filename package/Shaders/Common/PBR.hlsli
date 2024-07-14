@@ -30,6 +30,18 @@ struct PBRSurfaceProperties
 #define TruePBR_InterlayerParallax (1 << 7)
 #define TruePBR_CoatNormal (1 << 8)
 #define TruePBR_Fuzz (1 << 9)
+#define TruePBR_LandTile0PBR (1 << 0)
+#define TruePBR_LandTile1PBR (1 << 1)
+#define TruePBR_LandTile2PBR (1 << 2)
+#define TruePBR_LandTile3PBR (1 << 3)
+#define TruePBR_LandTile4PBR (1 << 4)
+#define TruePBR_LandTile5PBR (1 << 5)
+#define TruePBR_LandTile0HasDisplacement (1 << 6)
+#define TruePBR_LandTile1HasDisplacement (1 << 7)
+#define TruePBR_LandTile2HasDisplacement (1 << 8)
+#define TruePBR_LandTile3HasDisplacement (1 << 9)
+#define TruePBR_LandTile4HasDisplacement (1 << 10)
+#define TruePBR_LandTile5HasDisplacement (1 << 11)
 
 float3 AdjustDirectionalLightColorForPBR(float3 lightColor)
 {
