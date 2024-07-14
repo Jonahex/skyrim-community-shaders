@@ -31,14 +31,19 @@ struct PBRSurfaceProperties
 #define TruePBR_CoatNormal (1 << 8)
 #define TruePBR_Fuzz (1 << 9)
 
-float3 AdjustDirectLightColorForPBR(float3 lightColor)
+float3 AdjustDirectionalLightColorForPBR(float3 lightColor)
 {
-    return pbrSettings.DirectColorMultiplier * pow(sRGB2Lin(lightColor), pbrSettings.DirectColorPower);
+    return pbrSettings.DirectionalLightColorMultiplier * pow(sRGB2Lin(lightColor), pbrSettings.DirectionalLightColorPower);
+}
+
+float3 AdjustPointLightColorForPBR(float3 lightColor)
+{
+    return pbrSettings.PointLightColorMultiplier * pow(sRGB2Lin(lightColor), pbrSettings.PointLightColorPower);
 }
 
 float3 AdjustAmbientLightColorForPBR(float3 lightColor)
 {
-    return pbrSettings.AmbientColorMultiplier * pow(sRGB2Lin(lightColor), pbrSettings.AmbientColorPower);
+    return pbrSettings.AmbientLightColorMultiplier * pow(sRGB2Lin(lightColor), pbrSettings.AmbientLightColorPower);
 }
 
 // [Jimenez et al. 2016, "Practical Realtime Strategies for Accurate Indirect Occlusion"]

@@ -120,10 +120,12 @@ struct LightLimitFixSettings
 
 struct PBRSettings
 {
-    float DirectColorMultiplier;
-    float DirectColorPower;
-    float AmbientColorMultiplier;
-    float AmbientColorPower;
+	float DirectionalLightColorMultiplier;
+	float DirectionalLightColorPower;
+    float PointLightColorMultiplier;
+    float PointLightColorPower;
+    float AmbientLightColorMultiplier;
+    float AmbientLightColorPower;
 	uint DiffuseModel;
 	bool UseMultipleScattering;
 	bool UseMultiBounceAO;

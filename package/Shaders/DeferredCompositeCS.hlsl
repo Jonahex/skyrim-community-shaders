@@ -86,12 +86,12 @@ Texture2D<half2> SkylightingTexture : register(t9);
 		half3 finalIrradiance = lerp(0, directionalAmbientColor, pbrWeight);
 
 #	if defined(INTERIOR)
-		finalIrradiance = specularIrradiance;
+		finalIrradiance += specularIrradiance;
 #	elif defined(SKYLIGHTING)
 		half skylightingSpecular = SkylightingTexture[dispatchID.xy].y;
-		finalIrradiance = lerp(specularIrradiance, specularIrradianceReflections, skylightingSpecular);
+		finalIrradiance += lerp(specularIrradiance, specularIrradianceReflections, skylightingSpecular);
 #	else
-		finalIrradiance = specularIrradianceReflections;
+		finalIrradiance += specularIrradianceReflections;
 #	endif
 	
 		color += reflectance * finalIrradiance;

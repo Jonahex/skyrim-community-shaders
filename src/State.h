@@ -168,8 +168,10 @@ public:
 #pragma warning(disable: 4324)
 	struct alignas(16) PBRSettings
 	{
-		float lightColorMultiplier = 1.f;
-		float lightColorPower = 1.f;
+		float directionalLightColorMultiplier = 1.f;
+		float directionalLightColorPower = 1.f;
+		float pointLightColorMultiplier = 1.f;
+		float pointLightColorPower = 1.f;
 		float ambientLightColorMultiplier = 1.f;
 		float ambientLightColorPower = 1.f;
 		PBRDiffuseModelType diffuseModel = PBRDiffuseModelType::Lambert;

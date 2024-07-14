@@ -437,7 +437,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		endif // TRUE_PBR
 
 	float3 dirLightColor = DirLightColorShared.xyz;
-	dirLightColor *= shadowColor.x;
+	float3 dirLightColorMultiplier = 1;
+	dirLightColorMultiplier *= shadowColor.x;
 
 	float dirLightAngle = dot(normal, DirLightDirectionShared.xyz);
 
@@ -473,10 +474,14 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float3 lightsDiffuseColor = 0;
 	float3 lightsSpecularColor = 0;
 	
+	dirLightColor *= dirLightColorMultiplier;
+	
 #		if defined(TRUE_PBR)
 	{
+		float3 pbrDirLightColor = AdjustDirectionalLightColorForPBR(DirLightColorShared.xyz) * dirLightColorMultiplier * dirShadow;
+		
         float3 dirDiffuseColor, coatDirDiffuseColor, dirTransmissionColor, dirSpecularColor;
-        GetDirectLightInputPBR(dirDiffuseColor, coatDirDiffuseColor, dirTransmissionColor, dirSpecularColor, normal, normal, viewDirection, viewDirection, DirLightDirection, DirLightDirection, dirLightColor, dirLightColor, pbrSurfaceProperties);
+        GetDirectLightInputPBR(dirDiffuseColor, coatDirDiffuseColor, dirTransmissionColor, dirSpecularColor, normal, normal, viewDirection, viewDirection, DirLightDirection, DirLightDirection, pbrDirLightColor, pbrDirLightColor, pbrSurfaceProperties);
         lightsDiffuseColor += dirDiffuseColor;
         transmissionColor += dirTransmissionColor;
         specularColorPBR += dirSpecularColor;
@@ -531,7 +536,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #			if defined(TRUE_PBR)
 				{
                     float3 pointDiffuseColor, coatDirDiffuseColor, pointTransmissionColor, pointSpecularColor;
-					float3 pbrLightColor = AdjustDirectLightColorForPBR(lightColor * intensityMultiplier);
+					float3 pbrLightColor = AdjustPointLightColorForPBR(lightColor * intensityMultiplier);
                     GetDirectLightInputPBR(pointDiffuseColor, coatDirDiffuseColor, pointTransmissionColor, pointSpecularColor, normal, normal, viewDirection, viewDirection, normalizedLightDirection, normalizedLightDirection, pbrLightColor, pbrLightColor, pbrSurfaceProperties);
                     lightsDiffuseColor += pointDiffuseColor;
                     transmissionColor += pointTransmissionColor;

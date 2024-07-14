@@ -511,12 +511,12 @@ Texture2D<float4> TexLandNormal6Sampler : register(t12);
 
 #		if defined(TRUE_PBR)
 
-Texture2D<float4> TexRMAOSSampler : register(t24);
-Texture2D<float4> TexLandRMAOS2Sampler : register(t25);
-Texture2D<float4> TexLandRMAOS3Sampler : register(t26);
-Texture2D<float4> TexLandRMAOS4Sampler : register(t27);
-Texture2D<float4> TexLandRMAOS5Sampler : register(t28);
-Texture2D<float4> TexLandRMAOS6Sampler : register(t29);
+Texture2D<float4> TexRMAOSSampler : register(t80);
+Texture2D<float4> TexLandRMAOS2Sampler : register(t81);
+Texture2D<float4> TexLandRMAOS3Sampler : register(t82);
+Texture2D<float4> TexLandRMAOS4Sampler : register(t83);
+Texture2D<float4> TexLandRMAOS5Sampler : register(t84);
+Texture2D<float4> TexLandRMAOS6Sampler : register(t85);
 
 #		endif
 
@@ -1182,11 +1182,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		displacementParams[5] = displacementParams[0];
 #		if defined(TRUE_PBR)
 		displacementParams[0].HeightScale = PBRParams1.y;
-		displacementParams[1].HeightScale = PBRParams1.z;
-		displacementParams[2].HeightScale = PBRParams1.w;
-		displacementParams[3].HeightScale = PBRParams2.x;
-		displacementParams[4].HeightScale = PBRParams2.y;
-		displacementParams[5].HeightScale = PBRParams2.z;
+		displacementParams[1].HeightScale = LandscapeTexture2PBRParams.y;
+		displacementParams[2].HeightScale = LandscapeTexture3PBRParams.y;
+		displacementParams[3].HeightScale = LandscapeTexture4PBRParams.y;
+		displacementParams[4].HeightScale = LandscapeTexture5PBRParams.y;
+		displacementParams[5].HeightScale = LandscapeTexture6PBRParams.y;
 #		endif
 
 		uv = GetParallaxCoords(input, viewPosition.z, uv, mipLevels, viewDirection, tbnTr, screenNoise, displacementParams, pixelOffset);
@@ -1423,13 +1423,14 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float lodBlendMask = TexLandLodBlend2Sampler.Sample(SampLandLodBlend2Sampler, 3.0.xx * input.TexCoord0.zw).x;
 	float lodLandFadeFactor = GetLodLandBlendMultiplier(lodBlendParameter, lodBlendMask);
 	float lodLandBlendFactor = LODTexParams.z * input.LandBlendWeights2.w;
-#		endif
-
-#		if defined(LOD_LAND_BLEND) && !defined(TRUE_PBR)
+	
+	normal.xyz = lerp(normal.xyz, float3(0, 0, 1), lodLandBlendFactor);
+	
+#			if !defined(TRUE_PBR)
 	baseColor.w = 0;
 	baseColor = lerp(baseColor, lodLandColor * lodLandFadeFactor, lodLandBlendFactor);
-	normal.xyz = lerp(normal.xyz, float3(0, 0, 1), lodLandBlendFactor);
 	glossiness = lerp(glossiness, 0, lodLandBlendFactor);
+#			endif
 #		endif  // LOD_LAND_BLEND
 
 #		if defined(SNOW)
@@ -1642,6 +1643,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	
 	float3 specularColorPBR = 0;
 	float3 transmissionColor = 0;
+	
+	float pbrWeight = 1;
+	float pbrGlossiness = 1 - pbrSurfaceProperties.Roughness;
 #	endif // TRUE_PBR
 
 #	if !defined(MODELSPACENORMALS)
@@ -1658,12 +1662,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 	float4 waterData = GetWaterData(input.WorldPosition.xyz);
 	float waterHeight = waterData.w;
-
+	
 	float3 dirLightColor = DirLightColor.xyz;
+	float3 dirLightColorMultiplier = 1;
 
 #	if defined(WATER_CAUSTICS)
 	if (perPassWaterCaustics[0].EnableWaterCaustics)
-		dirLightColor *= ComputeWaterCaustics(waterData, input.WorldPosition.xyz, worldSpaceNormal);
+		dirLightColorMultiplier *= ComputeWaterCaustics(waterData, input.WorldPosition.xyz, worldSpaceNormal);
 #	endif
 
 	float selfShadowFactor = 1.0f;
@@ -1678,7 +1683,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float dirLightAngle = dot(modelNormal.xyz, DirLightDirection.xyz);
 
 	if ((PixelShaderDescriptor & _DefShadow) && (PixelShaderDescriptor & _ShadowDir)) {
-		dirLightColor *= shadowColor.x;
+		dirLightColorMultiplier *= shadowColor.x;
 	}
 
 	bool inDirShadow = ((PixelShaderDescriptor & _DefShadow) && (PixelShaderDescriptor & _ShadowDir) && shadowColor.x == 0) || dirLightAngle <= 0.0;
@@ -1733,11 +1738,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	}
 #	endif
 
-	dirLightColor *= dirShadow;
+	dirLightColorMultiplier *= dirShadow;
 	
-	float3 noParallaxShadowDirLightColor = dirLightColor * dirDetailShadow;
+	float3 noParallaxShadowDirLightColorMultiplier = dirLightColorMultiplier * dirDetailShadow;
 	dirDetailShadow *= parallaxShadow;
-	float3 fullShadowDirLightColor = dirLightColor * dirDetailShadow;
+	float3 fullShadowDirLightColorMultiplier = dirLightColorMultiplier * dirDetailShadow;
 
 	float3 diffuseColor = 0.0.xxx;
 	float3 specularColor = 0.0.xxx;
@@ -1747,17 +1752,21 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float3 lightsSpecularColor = 0.0.xxx;
 
 	float3 lodLandDiffuseColor = 0;
-
+		
+	dirLightColor *= dirLightColorMultiplier;
+	
 #	if defined(TRUE_PBR)
 	{
+		float3 pbrDirLightColor = AdjustDirectionalLightColorForPBR(DirLightColor.xyz);
+		
 		float3 dirDiffuseColor, coatDirDiffuseColor, dirTransmissionColor, dirSpecularColor;
-		GetDirectLightInputPBR(dirDiffuseColor, coatDirDiffuseColor, dirTransmissionColor, dirSpecularColor, modelNormal.xyz, coatModelNormal, refractedViewDirection, viewDirection, refractedDirLightDirection, DirLightDirection, fullShadowDirLightColor, noParallaxShadowDirLightColor, pbrSurfaceProperties);
+		GetDirectLightInputPBR(dirDiffuseColor, coatDirDiffuseColor, dirTransmissionColor, dirSpecularColor, modelNormal.xyz, coatModelNormal, refractedViewDirection, viewDirection, refractedDirLightDirection, DirLightDirection, fullShadowDirLightColorMultiplier * pbrDirLightColor, noParallaxShadowDirLightColorMultiplier * pbrDirLightColor, pbrSurfaceProperties);
 		lightsDiffuseColor += dirDiffuseColor;
 		coatLightsDiffuseColor += coatDirDiffuseColor;
 		transmissionColor += dirTransmissionColor;
 		specularColorPBR += dirSpecularColor;
 #		if defined(LOD_LAND_BLEND)
-		lodLandDiffuseColor += fullShadowDirLightColor * saturate(dot(modelNormal.xyz, DirLightDirection.xyz));
+		lodLandDiffuseColor += dirLightColor * saturate(dirLightAngle) * dirDetailShadow;;
 #		endif
 	}
 #	else
@@ -2035,7 +2044,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #			if defined(TRUE_PBR)
 		{
 			float3 pointDiffuseColor, coatPointDiffuseColor, pointTransmissionColor, pointSpecularColor;
-			GetDirectLightInputPBR(pointDiffuseColor, coatPointDiffuseColor, pointTransmissionColor, pointSpecularColor, worldSpaceNormal.xyz, coatWorldNormal, refractedViewDirectionWS, worldSpaceViewDirection, refractedLightDirection, normalizedLightDirection, AdjustDirectLightColorForPBR(fullShadowLightColor), AdjustDirectLightColorForPBR(noParallaxShadowLightColor), pbrSurfaceProperties);
+			GetDirectLightInputPBR(pointDiffuseColor, coatPointDiffuseColor, pointTransmissionColor, pointSpecularColor, worldSpaceNormal.xyz, coatWorldNormal, refractedViewDirectionWS, worldSpaceViewDirection, refractedLightDirection, normalizedLightDirection, AdjustPointLightColorForPBR(fullShadowLightColor), AdjustPointLightColorForPBR(noParallaxShadowLightColor), pbrSurfaceProperties);
 			lightsDiffuseColor += pointDiffuseColor;
 			coatLightsDiffuseColor += coatPointDiffuseColor;
 			transmissionColor += pointTransmissionColor;
@@ -2081,7 +2090,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 			CharacterLightParams.y * saturate(dot(float2(0.164398998, -0.986393988), modelNormal.yz));
 		float charLightColor = min(CharacterLightParams.w, max(0, CharacterLightParams.z * TexCharacterLightProjNoiseSampler.Sample(SampCharacterLightProjNoiseSampler, baseShadowUV).x));
 #		if defined(TRUE_PBR)
-		charLightColor = AdjustDirectLightColorForPBR(charLightColor);
+		charLightColor = AdjustPointLightColorForPBR(charLightColor);
 #		endif
 		diffuseColor += (charLightMul * charLightColor).xxx;
 	}
@@ -2323,6 +2332,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #	if defined(LOD_LAND_BLEND) && defined(TRUE_PBR)
 	{
+		pbrWeight = 1 - lodLandBlendFactor;
+		
 		float3 litLodLandColor = input.Color.xyz * lodLandColor * lodLandFadeFactor * lodLandDiffuseColor;
 
 		float3 foggedLitLodLandColor = lerp(litLodLandColor, input.FogParam.xyz, input.FogParam.w);
@@ -2336,6 +2347,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		tmpColor = lerp(tmpColor, lodLandTmpColor, lodLandBlendFactor);
 #		if defined(DEFERRED)
 		specularColorPBR = lerp(specularColorPBR, 0, lodLandBlendFactor);
+		indirectDiffuseLobeWeight = lerp(indirectDiffuseLobeWeight, sRGB2Lin(input.Color.xyz * lodLandColor * lodLandFadeFactor), lodLandBlendFactor);
+		indirectSpecularLobeWeight = lerp(indirectSpecularLobeWeight, 0, lodLandBlendFactor);
+		pbrGlossiness = lerp(pbrGlossiness, 0, lodLandBlendFactor);
 #		endif
 	}
 #	endif  // defined(LOD_LAND_BLEND) && defined(TRUE_PBR)
@@ -2445,11 +2459,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	endif  // defined(LIGHT_LIMIT_FIX)
 
 #	if defined(SNOW)
-#	if defined(TRUE_PBR)
+#		if defined(TRUE_PBR)
 	psout.Parameters.x = RGBToLuminanceAlternative(specularColorPBR);
-#	else
+#		else
 	psout.Parameters.x = RGBToLuminanceAlternative(lightsSpecularColor);
-#	endif
+#		endif
 #	endif  // SNOW && !PBR
 
 	psout.MotionVectors.xy = SSRParams.z > 1e-5 ? float2(1, 0) : screenMotionVector.xy;
@@ -2495,10 +2509,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float outGlossiness = saturate(glossiness * SSRParams.w);
 
 #		if defined(TRUE_PBR)
-	psout.Parameters.z = 1;
+	psout.Parameters.z = pbrWeight;
 
 	psout.Reflectance = float4(indirectSpecularLobeWeight, psout.Diffuse.w);
-	psout.NormalGlossiness = float4(EncodeNormal(screenSpaceNormal), 1 - pbrSurfaceProperties.Roughness, psout.Diffuse.w);
+	psout.NormalGlossiness = float4(EncodeNormal(screenSpaceNormal), pbrGlossiness, psout.Diffuse.w);
 #		elif defined(WETNESS_EFFECTS)
 	psout.Reflectance = float4(wetnessReflectance, psout.Diffuse.w);
 	psout.NormalGlossiness = float4(EncodeNormal(screenSpaceNormal), wetnessGlossinessSpecular, psout.Diffuse.w);

@@ -676,8 +676,10 @@ void State::SetupFrame()
 	weatherPBRDirectionalLightColorMultiplier = newDirectionalLightScale;
 	weatherPBRDirectionalAmbientLightColorMultiplier = newDirectionalAmbientLightScale;
 
-	pbrSettings.lightColorMultiplier = globalPBRLightColorMultiplier;
-	pbrSettings.lightColorPower = globalPBRLightColorPower;
+	pbrSettings.directionalLightColorMultiplier = globalPBRLightColorMultiplier * weatherPBRDirectionalLightColorMultiplier;
+	pbrSettings.directionalLightColorPower = globalPBRLightColorPower;
+	pbrSettings.pointLightColorMultiplier = globalPBRLightColorMultiplier;
+	pbrSettings.pointLightColorPower = globalPBRLightColorPower;
 	pbrSettings.ambientLightColorMultiplier = globalPBRAmbientLightColorMultiplier * weatherPBRDirectionalAmbientLightColorMultiplier;
 	pbrSettings.ambientLightColorPower = globalPBRAmbientLightColorPower;
 }

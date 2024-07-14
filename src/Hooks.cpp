@@ -321,7 +321,7 @@ HRESULT WINAPI hk_IDXGISwapChain_Present(IDXGISwapChain* This, UINT SyncInterval
 struct ExtendedRendererState
 {
 	static constexpr uint32_t NumPSTextures = 6;
-	static constexpr uint32_t FirstPSTexture = 24;
+	static constexpr uint32_t FirstPSTexture = 80;
 
 	uint32_t PSResourceModifiedBits = 0;
 	ID3D11ShaderResourceView* PSTexture[NumPSTextures];
@@ -933,44 +933,14 @@ namespace Hooks
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
-	float sRGB2Lin(float color)
-	{
-		return color > 0.04045f ? pow(color / 1.055f + 0.055f / 1.055f, 2.4f) : color / 12.92f;
-	}
-
-	RE::NiColor sRGB2Lin(const RE::NiColor& color)
-	{
-		return RE::NiColor(sRGB2Lin(color.red), sRGB2Lin(color.green), sRGB2Lin(color.blue));
-	}
-
 	struct BSLightingShader_SetupGeometry
 	{
 		static void thunk(RE::BSLightingShader* shader, RE::BSRenderPass* pass, uint32_t renderFlags)
 		{
 			const uint32_t originalExtraFlags = shader->currentRawTechnique & 0b111000u;
 
-			auto* state = State::GetSingleton();
-
-			float originalFade = 0.f;
-			RE::NiColor originalColor;
-
 			if ((shader->currentRawTechnique & static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::TruePbr)) != 0) {
 				shader->currentRawTechnique |= static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::AmbientSpecular);
-
-				if (pass->numLights > 0) {
-					auto& data = pass->sceneLights[0]->light->GetLightRuntimeData();
-					originalFade = data.fade;
-					originalColor = data.diffuse;
-
-					data.fade = std::pow(sRGB2Lin(data.fade), state->pbrSettings.lightColorPower);
-
-					const auto linDiffuse = sRGB2Lin(data.diffuse);
-					data.diffuse = {
-						state->globalPBRLightColorMultiplier * state->weatherPBRDirectionalLightColorMultiplier * std::pow(linDiffuse.red, state->pbrSettings.lightColorPower),
-						state->globalPBRLightColorMultiplier * state->weatherPBRDirectionalLightColorMultiplier * std::pow(linDiffuse.green, state->pbrSettings.lightColorPower),
-						state->globalPBRLightColorMultiplier * state->weatherPBRDirectionalLightColorMultiplier * std::pow(linDiffuse.blue, state->pbrSettings.lightColorPower)
-					};
-				}
 			}
 
 			shader->currentRawTechnique &= ~0b111000u;
@@ -983,12 +953,6 @@ namespace Hooks
 
 			if ((shader->currentRawTechnique & static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::TruePbr)) != 0) {
 				shader->currentRawTechnique &= ~static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::AmbientSpecular);
-
-				if (pass->numLights > 0) {
-					auto& data = pass->sceneLights[0]->light->GetLightRuntimeData();
-					data.fade = originalFade;
-					data.diffuse = originalColor;
-				}
 			}
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
@@ -1572,46 +1536,6 @@ namespace Hooks
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
-	struct BSGrassShader_SetupGeometry
-	{
-		static void thunk(RE::BSShader* shader, RE::BSRenderPass* pass, uint32_t renderFlags)
-		{
-			auto* state = State::GetSingleton();
-			const auto technique = static_cast<SIE::ShaderCache::GrassShaderTechniques>(state->currentPixelDescriptor & 0b1111);
-
-			float originalFade = 0.f;
-			RE::NiColor originalColor;
-
-			if (technique == SIE::ShaderCache::GrassShaderTechniques::TruePbr) {
-				if (pass->numLights > 0) {
-					auto& data = pass->sceneLights[0]->light->GetLightRuntimeData();
-					originalFade = data.fade;
-					originalColor = data.diffuse;
-
-					data.fade = std::pow(sRGB2Lin(data.fade), state->pbrSettings.lightColorPower);
-
-					const auto linDiffuse = sRGB2Lin(data.diffuse);
-					data.diffuse = {
-						state->pbrSettings.lightColorMultiplier * std::pow(linDiffuse.red, state->pbrSettings.lightColorPower),
-						state->pbrSettings.lightColorMultiplier * std::pow(linDiffuse.green, state->pbrSettings.lightColorPower),
-						state->pbrSettings.lightColorMultiplier * std::pow(linDiffuse.blue, state->pbrSettings.lightColorPower)
-					};
-				}
-			}
-
-			func(shader, pass, renderFlags);
-
-			if (technique == SIE::ShaderCache::GrassShaderTechniques::TruePbr) {
-				if (pass->numLights > 0) {
-					auto& data = pass->sceneLights[0]->light->GetLightRuntimeData();
-					data.fade = originalFade;
-					data.diffuse = originalColor;
-				}
-			}
-		}
-		static inline REL::Relocation<decltype(thunk)> func;
-	};
-
 	struct TESBoundObject_Clone3D
 	{
 		static RE::NiAVObject* thunk(RE::TESBoundObject* object, RE::TESObjectREFR* ref, bool arg3)
@@ -1731,7 +1655,6 @@ namespace Hooks
 		logger::info("Hooking BSGrassShader");
 		stl::write_vfunc<0x2, BSGrassShader_SetupTechnique>(RE::VTABLE_BSGrassShader[0]);
 		stl::write_vfunc<0x4, BSGrassShader_SetupMaterial>(RE::VTABLE_BSGrassShader[0]);
-		stl::write_vfunc<0x6, BSGrassShader_SetupGeometry>(RE::VTABLE_BSGrassShader[0]);
 
 		logger::info("Hooking TESObjectSTAT");
 		stl::write_vfunc<0x4A, TESBoundObject_Clone3D>(RE::VTABLE_TESObjectSTAT[0]);
