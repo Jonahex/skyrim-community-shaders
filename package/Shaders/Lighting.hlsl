@@ -1585,6 +1585,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	
 	baseColor.xyz *= 1 - pbrSurfaceProperties.Metallic;
 
+	pbrSurfaceProperties.BaseColor = baseColor.xyz;
+
 	float3 coatModelNormal = modelNormal.xyz;
 	float3 coatWorldNormal = worldSpaceNormal;
 	

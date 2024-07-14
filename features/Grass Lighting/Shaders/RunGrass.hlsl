@@ -422,6 +422,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	pbrSurfaceProperties.FuzzWeight = 0;
 	
     baseColor.xyz *= 1 - pbrSurfaceProperties.Metallic;
+
+	pbrSurfaceProperties.BaseColor = baseColor.xyz;
 	
     pbrSurfaceProperties.SubsurfaceColor = PBRParams2.xyz;
     pbrSurfaceProperties.Thickness = PBRParams2.w;

@@ -8,6 +8,7 @@ enum class PBRFlags : uint32_t
 	InterlayerParallax = 1 << 3,
 	CoatNormal = 1 << 4,
 	Fuzz = 1 << 5,
+	HairMarschner = 1 << 6,
 };
 
 enum class PBRShaderFlags : uint32_t
@@ -22,6 +23,7 @@ enum class PBRShaderFlags : uint32_t
 	InterlayerParallax = 1 << 7,
 	CoatNormal = 1 << 8,
 	Fuzz = 1 << 9,
+	HairMarschner = 1 << 10,
 };
 
 class BSLightingShaderMaterialPBR : public RE::BSLightingShaderMaterialBase

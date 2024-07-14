@@ -619,6 +619,8 @@ namespace Hooks
 					if (property->flags.any(kEffectLighting)) {
 						pbrMaterial->pbrFlags.set(PBRFlags::ColoredCoat);
 					}
+				} else if (property->flags.any(kBackLighting)) {
+					pbrMaterial->pbrFlags.set(PBRFlags::HairMarschner);
 				} else {
 					if (property->flags.any(kRimLighting)) {
 						pbrMaterial->pbrFlags.set(PBRFlags::Subsurface);
@@ -812,6 +814,8 @@ namespace Hooks
 						PBRParams3[0] = pbrMaterial->GetCoatRoughness();
 						PBRParams3[1] = pbrMaterial->GetCoatSpecularLevel();
 						shadowState->SetPSConstant(PBRParams3, RE::BSGraphics::ConstantGroupLevel::PerMaterial, 27);
+					} else if (pbrMaterial->pbrFlags.any(PBRFlags::HairMarschner)) {
+						shaderFlags.set(PBRShaderFlags::HairMarschner);
 					} else {
 						if (pbrMaterial->pbrFlags.any(PBRFlags::Subsurface)) {
 							shaderFlags.set(PBRShaderFlags::Subsurface);
