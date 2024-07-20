@@ -283,15 +283,13 @@ bool hk_BSShader_BeginTechnique(RE::BSShader* shader, uint32_t vertexDescriptor,
 
 	bool shaderFound = (ptr_BSShader_BeginTechnique)(shader, vertexDescriptor, pixelDescriptor, skipPixelShader);
 
-	if (!shaderFound)
-	{
+	if (!shaderFound) {
 		auto& shaderCache = SIE::ShaderCache::Instance();
 		RE::BSGraphics::VertexShader* vertexShader = shaderCache.GetVertexShader(*shader, state->modifiedVertexDescriptor);
 		RE::BSGraphics::PixelShader* pixelShader = shaderCache.GetPixelShader(*shader, state->modifiedPixelDescriptor);
 		if (vertexShader == nullptr || (!skipPixelShader && pixelShader == nullptr)) {
 			shaderFound = false;
-		}
-		else {
+		} else {
 			state->settingCustomShader = true;
 			RE::BSGraphics::RendererShadowState::GetSingleton()->SetVertexShader(vertexShader);
 			if (skipPixelShader) {
@@ -329,7 +327,7 @@ struct ExtendedRendererState
 	void SetPSTexture(size_t textureIndex, RE::BSGraphics::Texture* newTexture)
 	{
 		ID3D11ShaderResourceView* resourceView = newTexture ? newTexture->resourceView : nullptr;
-		//if (PSTexture[textureIndex] != resourceView) 
+		//if (PSTexture[textureIndex] != resourceView)
 		{
 			PSTexture[textureIndex] = resourceView;
 			PSResourceModifiedBits |= (1 << textureIndex);
@@ -457,11 +455,11 @@ void hk_PollInputDevices(RE::BSTEventSource<RE::InputEvent*>* a_dispatcher, RE::
 				bool vrDevice = false;
 #ifdef ENABLE_SKYRIM_VR
 				vrDevice = (REL::Module::IsVR() && ((device == RE::INPUT_DEVICES::INPUT_DEVICE::kVivePrimary) ||
-															(device == RE::INPUT_DEVICES::INPUT_DEVICE::kViveSecondary) ||
-															(device == RE::INPUT_DEVICES::INPUT_DEVICE::kOculusPrimary) ||
-															(device == RE::INPUT_DEVICES::INPUT_DEVICE::kOculusSecondary) ||
-															(device == RE::INPUT_DEVICES::INPUT_DEVICE::kWMRPrimary) ||
-															(device == RE::INPUT_DEVICES::INPUT_DEVICE::kWMRSecondary)));
+													   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kViveSecondary) ||
+													   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kOculusPrimary) ||
+													   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kOculusSecondary) ||
+													   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kWMRPrimary) ||
+													   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kWMRSecondary)));
 #endif
 				blockedDevice = !((device == RE::INPUT_DEVICES::INPUT_DEVICE::kGamepad) || vrDevice);
 			}
@@ -605,8 +603,7 @@ namespace Hooks
 
 			static_cast<RE::BSLightingShaderMaterialBase*>(property->material)->LoadBinary(stream);
 
-			if (isPbr)
-			{
+			if (isPbr) {
 				auto pbrMaterial = static_cast<BSLightingShaderMaterialPBR*>(property->material);
 				if (property->flags.any(kMultiLayerParallax)) {
 					pbrMaterial->pbrFlags.set(PBRFlags::TwoLayer);
@@ -641,15 +638,13 @@ namespace Hooks
 		static RE::BSShaderProperty::RenderPassArray* thunk(RE::BSLightingShaderProperty* property, RE::BSGeometry* geometry, std::uint32_t renderFlags, RE::BSShaderAccumulator* accumulator)
 		{
 			auto renderPasses = func(property, geometry, renderFlags, accumulator);
-			if (renderPasses == nullptr)
-			{
+			if (renderPasses == nullptr) {
 				return renderPasses;
 			}
 
 			bool isPbr = false;
 
-			if (property->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kVertexLighting) && (property->material->GetFeature() == RE::BSShaderMaterial::Feature::kDefault || property->material->GetFeature() == RE::BSShaderMaterial::Feature::kMultiTexLandLODBlend))
-			{
+			if (property->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kVertexLighting) && (property->material->GetFeature() == RE::BSShaderMaterial::Feature::kDefault || property->material->GetFeature() == RE::BSShaderMaterial::Feature::kMultiTexLandLODBlend)) {
 				isPbr = true;
 			}
 
@@ -689,7 +684,7 @@ namespace Hooks
 
 				RE::BSGraphics::Renderer::PrepareVSConstantGroup(RE::BSGraphics::ConstantGroupLevel::PerMaterial);
 				RE::BSGraphics::Renderer::PreparePSConstantGroup(RE::BSGraphics::ConstantGroupLevel::PerMaterial);
-				
+
 				if (lightingType == MTLand || lightingType == MTLandLODBlend) {
 					auto* pbrMaterial = static_cast<const BSLightingShaderMaterialPBRLandscape*>(material);
 
@@ -770,13 +765,11 @@ namespace Hooks
 						lodTexParams[3] = pbrMaterial->terrainTexFade;
 						shadowState->SetPSConstant(lodTexParams, RE::BSGraphics::ConstantGroupLevel::PerMaterial, 24);
 					}
-				} 
-				else if (lightingType == None || lightingType == TreeAnim) {
+				} else if (lightingType == None || lightingType == TreeAnim) {
 					auto* pbrMaterial = static_cast<const BSLightingShaderMaterialPBR*>(material);
 					if (pbrMaterial->diffuseRenderTargetSourceIndex != -1) {
 						shadowState->SetPSTexture(0, renderer->GetRuntimeData().renderTargets[pbrMaterial->diffuseRenderTargetSourceIndex]);
-					}
-					else {
+					} else {
 						shadowState->SetPSTexture(0, pbrMaterial->diffuseTexture->rendererTexture);
 					}
 					shadowState->SetPSTextureAddressMode(0, static_cast<RE::BSGraphics::TextureAddressMode>(pbrMaterial->textureClampMode));
@@ -924,9 +917,7 @@ namespace Hooks
 					std::array<float, 4> characterLightParams;
 					if (smState.characterLightEnabled) {
 						std::copy_n(smState.characterLightParams, 4, characterLightParams.data());
-					}
-					else
-					{
+					} else {
 						std::fill_n(characterLightParams.data(), 4, 0.f);
 					}
 					shadowState->SetPSConstant(characterLightParams, RE::BSGraphics::ConstantGroupLevel::PerMaterial, 35);
@@ -936,8 +927,7 @@ namespace Hooks
 				RE::BSGraphics::Renderer::FlushPSConstantGroup(RE::BSGraphics::ConstantGroupLevel::PerMaterial);
 				RE::BSGraphics::Renderer::ApplyVSConstantGroup(RE::BSGraphics::ConstantGroupLevel::PerMaterial);
 				RE::BSGraphics::Renderer::ApplyPSConstantGroup(RE::BSGraphics::ConstantGroupLevel::PerMaterial);
-			}
-			else {
+			} else {
 				func(shader, material);
 			}
 		};
@@ -974,8 +964,7 @@ namespace Hooks
 		uint32_t pixelTechnique = rawTechnique;
 
 		pixelTechnique &= ~0b111000000u;
-		if ((pixelTechnique & static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::ModelSpaceNormals)) == 0) 
-		{
+		if ((pixelTechnique & static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::ModelSpaceNormals)) == 0) {
 			pixelTechnique &= ~static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::Skinned);
 		}
 		pixelTechnique |= static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::VC);
@@ -987,8 +976,7 @@ namespace Hooks
 	{
 		if (feature == BSLightingShaderMaterialPBR::FEATURE) {
 			return BSLightingShaderMaterialPBR::Make();
-		}
-		else if (feature == BSLightingShaderMaterialPBRLandscape::FEATURE) {
+		} else if (feature == BSLightingShaderMaterialPBRLandscape::FEATURE) {
 			return BSLightingShaderMaterialPBRLandscape::Make();
 		}
 		return RE::BSLightingShaderMaterialBase::CreateMaterial(feature);
@@ -996,14 +984,12 @@ namespace Hooks
 
 	void SetupLandscapeTexture(BSLightingShaderMaterialPBRLandscape& material, RE::TESLandTexture& landTexture, uint32_t textureIndex)
 	{
-		if (textureIndex >= 6)
-		{
+		if (textureIndex >= 6) {
 			return;
 		}
 
 		auto textureSet = landTexture.textureSet;
-		if (textureSet == nullptr)
-		{
+		if (textureSet == nullptr) {
 			return;
 		}
 
@@ -1109,10 +1095,8 @@ namespace Hooks
 
 				bool noLODLandBlend = false;
 				auto tes = RE::TES::GetSingleton();
-				if (tes->worldSpace != nullptr) 
-				{
-					if (auto terrainManager = tes->worldSpace->GetTerrainManager())
-					{
+				if (tes->worldSpace != nullptr) {
+					if (auto terrainManager = tes->worldSpace->GetTerrainManager()) {
 						noLODLandBlend = reinterpret_cast<bool*>(terrainManager)[0x36];
 					}
 				}
@@ -1126,8 +1110,7 @@ namespace Hooks
 				const auto& children = land->loadedData->mesh[quadIndex]->GetChildren();
 				auto geometry = children.empty() ? nullptr : static_cast<RE::BSGeometry*>(children[0].get());
 				shaderProperty->SetupGeometry(geometry);
-				if (geometry != nullptr)
-				{
+				if (geometry != nullptr) {
 					geometry->GetGeometryRuntimeData().properties[1] = RE::NiPointer(shaderProperty);
 				}
 
@@ -1222,7 +1205,7 @@ namespace Hooks
 								state->context->VSSetShader(reinterpret_cast<ID3D11VertexShader*>(vertexShader->shader), NULL, NULL);
 								auto shadowState = RE::BSGraphics::RendererShadowState::GetSingleton();
 								GET_INSTANCE_MEMBER(currentVertexShader, shadowState)
-									currentVertexShader = a_vertexShader;
+								currentVertexShader = a_vertexShader;
 								return;
 							}
 						}
@@ -1251,14 +1234,13 @@ namespace Hooks
 									state->context->PSSetShader(reinterpret_cast<ID3D11PixelShader*>(pixelShader->shader), NULL, NULL);
 									auto shadowState = RE::BSGraphics::RendererShadowState::GetSingleton();
 									GET_INSTANCE_MEMBER(currentPixelShader, shadowState)
-										currentPixelShader = a_pixelShader;
+									currentPixelShader = a_pixelShader;
 									return;
 								}
-							}
-							else {
+							} else {
 								auto shadowState = RE::BSGraphics::RendererShadowState::GetSingleton();
 								GET_INSTANCE_MEMBER(currentPixelShader, shadowState)
-									currentPixelShader = a_pixelShader;
+								currentPixelShader = a_pixelShader;
 								return;
 							}
 						}
@@ -1413,8 +1395,7 @@ namespace Hooks
 		static RE::BSShaderProperty::RenderPassArray* thunk(RE::BSLightingShaderProperty* property, RE::BSGeometry* geometry, std::uint32_t renderFlags, RE::BSShaderAccumulator* accumulator)
 		{
 			auto renderPasses = func(property, geometry, renderFlags, accumulator);
-			if (renderPasses == nullptr)
-			{
+			if (renderPasses == nullptr) {
 				return renderPasses;
 			}
 
@@ -1445,14 +1426,12 @@ namespace Hooks
 
 				const uint32_t localTechnique = static_cast<uint32_t>(SIE::ShaderCache::GrassShaderTechniques::TruePbr);
 				uint32_t shaderDescriptor = localTechnique;
-				if (graphicsState->useEarlyZ)
-				{
+				if (graphicsState->useEarlyZ) {
 					shaderDescriptor |= static_cast<uint32_t>(SIE::ShaderCache::GrassShaderFlags::AlphaTest);
 				}
 
 				const bool began = hk_BSShader_BeginTechnique(shader, shaderDescriptor, shaderDescriptor, false);
-				if (!began)
-				{
+				if (!began) {
 					return false;
 				}
 
@@ -1464,9 +1443,7 @@ namespace Hooks
 					shadowState->SetPSTexture(1, graphicsState->defaultTextureWhite->rendererTexture);
 					shadowState->SetPSTextureAddressMode(1, RE::BSGraphics::TextureAddressMode::kClampSClampT);
 					shadowState->SetPSTextureFilterMode(1, RE::BSGraphics::TextureFilterMode::kNearest);
-				}
-				else
-				{
+				} else {
 					shadowState->SetPSTexture(1, renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kSHADOW_MASK]);
 					shadowState->SetPSTextureAddressMode(1, RE::BSGraphics::TextureAddressMode::kClampSClampT);
 
@@ -1488,7 +1465,7 @@ namespace Hooks
 		{
 			const auto& state = State::GetSingleton();
 			const auto technique = static_cast<SIE::ShaderCache::GrassShaderTechniques>(state->currentPixelDescriptor & 0b1111);
-			
+
 			if (technique == SIE::ShaderCache::GrassShaderTechniques::TruePbr) {
 				auto shadowState = RE::BSGraphics::RendererShadowState::GetSingleton();
 
@@ -1555,15 +1532,13 @@ namespace Hooks
 		static RE::NiAVObject* thunk(RE::TESBoundObject* object, RE::TESObjectREFR* ref, bool arg3)
 		{
 			auto* result = func(object, ref, arg3);
-			if (result != nullptr && ref != nullptr && ref->data.objectReference != nullptr && ref->data.objectReference->formType == RE::FormType::Static)
-			{
+			if (result != nullptr && ref != nullptr && ref->data.objectReference != nullptr && ref->data.objectReference->formType == RE::FormType::Static) {
 				auto* stat = static_cast<RE::TESObjectSTAT*>(ref->data.objectReference);
-				if (stat->data.materialObj != nullptr && stat->data.materialObj->directionalData.singlePass)
-				{
+				if (stat->data.materialObj != nullptr && stat->data.materialObj->directionalData.singlePass) {
 					if (auto* pbrData = State::GetSingleton()->GetPBRMaterialObjectData(stat->data.materialObj)) {
 						RE::BSVisit::TraverseScenegraphGeometries(result, [pbrData](RE::BSGeometry* geometry) {
 							if (auto* shaderProperty = static_cast<RE::BSShaderProperty*>(geometry->GetGeometryRuntimeData().properties[1].get())) {
-								if (shaderProperty->GetMaterialType() == RE::BSShaderMaterial::Type::kLighting && 
+								if (shaderProperty->GetMaterialType() == RE::BSShaderMaterial::Type::kLighting &&
 									shaderProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kVertexLighting)) {
 									if (auto* material = static_cast<BSLightingShaderMaterialPBR*>(shaderProperty->material)) {
 										material->projectedMaterialBaseColorScale = pbrData->baseColorScale;

@@ -41,14 +41,14 @@ Texture2D<half2> SkylightingTexture : register(t9);
 	half3 specularColor = SpecularTexture[dispatchID.xy];
 	half3 albedo = AlbedoTexture[dispatchID.xy];
 	half3 masks2 = Masks2Texture[dispatchID.xy];
-	
-    half2 snowParameters = masks2.xy;
-    half pbrWeight = masks2.z;
+
+	half2 snowParameters = masks2.xy;
+	half pbrWeight = masks2.z;
 
 	half glossiness = normalGlossiness.z;
-	
-    half3 color = lerp(diffuseColor + specularColor, Lin2sRGB(sRGB2Lin(diffuseColor) + sRGB2Lin(specularColor)), pbrWeight);
-	
+
+	half3 color = lerp(diffuseColor + specularColor, Lin2sRGB(sRGB2Lin(diffuseColor) + sRGB2Lin(specularColor)), pbrWeight);
+
 #if defined(DYNAMIC_CUBEMAPS)
 
 	half3 reflectance = ReflectanceTexture[dispatchID.xy];
@@ -75,13 +75,13 @@ Texture2D<half2> SkylightingTexture : register(t9);
 
 		half roughness = 1.0 - glossiness;
 		half level = roughness * 9.0;
-	
+
 		half3 specularIrradiance = EnvTexture.SampleLevel(LinearSampler, R, level).xyz;
 		specularIrradiance = sRGB2Lin(specularIrradiance);
 
 		half3 specularIrradianceReflections = EnvReflectionsTexture.SampleLevel(LinearSampler, R, level).xyz;
 		specularIrradianceReflections = sRGB2Lin(specularIrradianceReflections);
-	
+
 		half3 directionalAmbientColor = sRGB2Lin(mul(DirectionalAmbient, half4(R, 1.0)));
 		half3 finalIrradiance = lerp(0, directionalAmbientColor, pbrWeight);
 
@@ -93,7 +93,7 @@ Texture2D<half2> SkylightingTexture : register(t9);
 #	else
 		finalIrradiance += specularIrradianceReflections;
 #	endif
-	
+
 		color += reflectance * finalIrradiance;
 
 		color = Lin2sRGB(color);

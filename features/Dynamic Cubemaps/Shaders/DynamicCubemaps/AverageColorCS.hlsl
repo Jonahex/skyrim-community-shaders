@@ -1,5 +1,5 @@
-#include "Common.hlsli"
 #include "../Common/Color.hlsl"
+#include "Common.hlsli"
 
 TextureCube EnvInferredTexture : register(t0);
 
@@ -8,7 +8,7 @@ RWStructuredBuffer<PerPassDynamicCubemaps> AverageColor : register(u0);
 SamplerState LinearSampler : register(s0);
 
 [numthreads(1, 1, 1)] void main(uint3 ThreadID
-								  : SV_DispatchThreadID) {
+								: SV_DispatchThreadID) {
 	uint width, height, levelCount;
 	EnvInferredTexture.GetDimensions(0, width, height, levelCount);
 

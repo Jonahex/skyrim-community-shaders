@@ -80,8 +80,7 @@ std::uint32_t BSLightingShaderMaterialPBR::ComputeCRC32(uint32_t srcHash)
 	hashes.projectedMaterialBaseColorScale[2] = projectedMaterialBaseColorScale[2] * 100.f;
 	hashes.projectedMaterialRoughness = projectedMaterialRoughness * 100.f;
 	hashes.projectedMaterialSpecularLevel = projectedMaterialSpecularLevel * 100.f;
-	if (textureSet != nullptr)
-	{
+	if (textureSet != nullptr) {
 		hashes.rmaodHash = RE::BSCRC32<const char*>()(textureSet->GetTexturePath(RmaosTexture));
 		hashes.emissiveHash = RE::BSCRC32<const char*>()(textureSet->GetTexturePath(EmissiveTexture));
 		hashes.displacementHash = RE::BSCRC32<const char*>()(textureSet->GetTexturePath(DisplacementTexture));
@@ -134,8 +133,7 @@ void BSLightingShaderMaterialPBR::OnLoadTextureSet(std::uint64_t arg1, RE::BSTex
 						subSurfaceLightRolloff = textureSetData->coatStrength;
 						coatRoughness = textureSetData->coatRoughness;
 						coatSpecularLevel = textureSetData->coatSpecularLevel;
-					}
-					else {
+					} else {
 						if (pbrFlags.any(PBRFlags::Subsurface)) {
 							specularColor = textureSetData->subsurfaceColor;
 							subSurfaceLightRolloff = textureSetData->subsurfaceOpacity;
@@ -226,8 +224,7 @@ void BSLightingShaderMaterialPBR::LoadBinary(RE::NiStream& stream)
 {
 	BSLightingShaderMaterialBase::LoadBinary(stream);
 
-	if (loadedWithFeature == RE::BSLightingShaderMaterial::Feature::kMultilayerParallax)
-	{
+	if (loadedWithFeature == RE::BSLightingShaderMaterial::Feature::kMultilayerParallax) {
 		std::array<float, 4> parameters;
 		stream.iStr->read(parameters.data(), 4);
 

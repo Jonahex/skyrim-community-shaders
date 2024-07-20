@@ -29,8 +29,7 @@ void BSLightingShaderMaterialPBRLandscape::CopyMembers(RE::BSShaderMaterial* tha
 
 	pbrThat->numLandscapeTextures = numLandscapeTextures;
 
-	for (uint32_t textureIndex = 0; textureIndex < NumTiles; ++textureIndex)
-	{
+	for (uint32_t textureIndex = 0; textureIndex < NumTiles; ++textureIndex) {
 		pbrThat->landscapeBaseColorTextures[textureIndex] = landscapeBaseColorTextures[textureIndex];
 		pbrThat->landscapeNormalTextures[textureIndex] = landscapeNormalTextures[textureIndex];
 		pbrThat->landscapeDisplacementTextures[textureIndex] = landscapeDisplacementTextures[textureIndex];
@@ -83,8 +82,7 @@ void BSLightingShaderMaterialPBRLandscape::ReceiveValuesFromRootMaterial(bool sk
 	if (terrainNoiseTexture == nullptr) {
 		terrainNoiseTexture = stateData.defaultTextureNormalMap;
 	}
-	for (uint32_t textureIndex = 0; textureIndex < numLandscapeTextures; ++textureIndex)
-	{
+	for (uint32_t textureIndex = 0; textureIndex < numLandscapeTextures; ++textureIndex) {
 		if (landscapeBaseColorTextures[textureIndex] == nullptr) {
 			landscapeBaseColorTextures[textureIndex] = stateData.defaultTextureBlack;
 		}

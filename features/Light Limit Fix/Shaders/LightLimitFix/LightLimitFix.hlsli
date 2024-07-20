@@ -7,12 +7,12 @@ struct LightGrid
 
 struct StructuredLight
 {
-    float3 color;
-    float radius;
-    float4 positionWS[2];
-    float4 positionVS[2];
-    uint firstPersonShadow;
-    float pad0[3];
+	float3 color;
+	float radius;
+	float4 positionWS[2];
+	float4 positionVS[2];
+	uint firstPersonShadow;
+	float pad0[3];
 };
 
 struct StrictLightData

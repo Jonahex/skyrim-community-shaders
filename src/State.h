@@ -181,7 +181,7 @@ public:
 		uint32_t useDynamicCubemap = true;
 		uint32_t matchDynamicCubemapColorToAmbient = true;
 	} pbrSettings{};
-#pragma warning(pop) 
+#pragma warning(pop)
 
 	struct PBRTextureSetData
 	{

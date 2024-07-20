@@ -16,7 +16,7 @@
 
 namespace PNState
 {
-	template<typename ResultType>
+	template <typename ResultType>
 	bool Read(const json& config, ResultType& result)
 	{
 		if constexpr (std::is_same_v<ResultType, std::array<float, 3>> || std::is_same_v<ResultType, RE::NiColor>) {
@@ -659,8 +659,7 @@ void State::SetupFrame()
 						newDirectionalAmbientLightScale = it->second.directionalAmbientLightColorScale;
 					}
 				}
-			}
-			else if (RE::Sky* sky = RE::Sky::GetSingleton()) {
+			} else if (RE::Sky* sky = RE::Sky::GetSingleton()) {
 				if (const auto* weather = sky->currentWeather) {
 					const auto* editorId = weather->GetFormEditorID();
 					if (auto it = pbrWeathers.find(editorId); it != pbrWeathers.cend()) {
@@ -706,7 +705,7 @@ void State::SetupTextureSetData()
 		PNState::Read(config["fuzzWeight"], textureSetData.fuzzWeight);
 
 		pbrTextureSets.insert_or_assign(editorId, textureSetData);
-		});
+	});
 }
 
 State::PBRTextureSetData* State::GetPBRTextureSetData(const RE::TESForm* textureSet)
@@ -741,7 +740,7 @@ void State::SetupMaterialObjectData()
 		PNState::Read(config["specularLevel"], materialObjectData.specularLevel);
 
 		pbrMaterialObjects.insert_or_assign(editorId, materialObjectData);
-		});
+	});
 }
 
 State::PBRMaterialObjectData* State::GetPBRMaterialObjectData(const RE::TESForm* materialObject)
@@ -775,7 +774,7 @@ void State::SetupLightingTemplateData()
 		PNState::Read(config["directionalAmbientLightColorScale"], lightingTemplateData.directionalAmbientLightColorScale);
 
 		pbrLightingTemplates.insert_or_assign(editorId, lightingTemplateData);
-		});
+	});
 }
 
 State::PBRLightingTemplateData* State::GetPBRLightingTemplateData(const RE::TESForm* lightingTemplate)
@@ -820,7 +819,7 @@ void State::SetupWeatherData()
 		PNState::Read(config["directionalAmbientLightColorScale"], weatherData.directionalAmbientLightColorScale);
 
 		pbrWeathers.insert_or_assign(editorId, weatherData);
-		});
+	});
 }
 
 State::PBRWeatherData* State::GetPBRWeatherData(const RE::TESForm* weather)

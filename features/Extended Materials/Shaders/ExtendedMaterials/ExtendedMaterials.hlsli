@@ -7,19 +7,19 @@
 
 struct DisplacementParams
 {
-    float DisplacementScale;
-    float DisplacementOffset;
-    float HeightScale;
+	float DisplacementScale;
+	float DisplacementOffset;
+	float HeightScale;
 };
 
 float AdjustDisplacement(float displacement, DisplacementParams params)
 {
-    return (displacement - 0.5) * params.DisplacementScale + 0.5 + params.DisplacementOffset;
+	return (displacement - 0.5) * params.DisplacementScale + 0.5 + params.DisplacementOffset;
 }
 
 float4 AdjustDisplacement(float4 displacement, DisplacementParams params)
 {
-    return float4(AdjustDisplacement(displacement.x, params), AdjustDisplacement(displacement.y, params), AdjustDisplacement(displacement.z, params), AdjustDisplacement(displacement.w, params));
+	return float4(AdjustDisplacement(displacement.x, params), AdjustDisplacement(displacement.y, params), AdjustDisplacement(displacement.z, params), AdjustDisplacement(displacement.w, params));
 }
 
 float GetMipLevel(float2 coords, Texture2D<float4> tex)
@@ -66,24 +66,18 @@ float GetTerrainHeight(PS_INPUT input, float2 coords, float mipLevels[6], float 
 	pixelOffset[4] = 0;
 	pixelOffset[5] = 0;
 #	if defined(TRUE_PBR)
-	[branch] if ((PBRFlags & TruePBR_LandTile0HasDisplacement) != 0)
-		if (w1.x > 0.0)
-			pixelOffset[0] = w1.x * pow(AdjustDisplacement(TexLandDisplacement0Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[0]).x, params[0]), blendPower);
-	[branch] if ((PBRFlags & TruePBR_LandTile1HasDisplacement) != 0)
-		if (w1.y > 0.0)
-			pixelOffset[1] = w1.y * pow(AdjustDisplacement(TexLandDisplacement1Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[1]).x, params[1]), blendPower);
-	[branch] if ((PBRFlags & TruePBR_LandTile2HasDisplacement) != 0)
-		if (w1.z > 0.0)
-			pixelOffset[2] = w1.z * pow(AdjustDisplacement(TexLandDisplacement2Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[2]).x, params[2]), blendPower);
-	[branch] if ((PBRFlags & TruePBR_LandTile3HasDisplacement) != 0)
-		if (w1.w > 0.0)
-			pixelOffset[3] = w1.w * pow(AdjustDisplacement(TexLandDisplacement3Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[3]).x, params[3]), blendPower);
-	[branch] if ((PBRFlags & TruePBR_LandTile4HasDisplacement) != 0)
-		if (w2.x > 0.0)
-			pixelOffset[4] = w2.x * pow(AdjustDisplacement(TexLandDisplacement4Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[4]).x, params[4]), blendPower);
-	[branch] if ((PBRFlags & TruePBR_LandTile5HasDisplacement) != 0)
-		if (w2.y > 0.0)
-			pixelOffset[5] = w2.y * pow(AdjustDisplacement(TexLandDisplacement5Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[5]).x, params[5]), blendPower);
+	[branch] if ((PBRFlags & TruePBR_LandTile0HasDisplacement) != 0) if (w1.x > 0.0)
+		pixelOffset[0] = w1.x * pow(AdjustDisplacement(TexLandDisplacement0Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[0]).x, params[0]), blendPower);
+	[branch] if ((PBRFlags & TruePBR_LandTile1HasDisplacement) != 0) if (w1.y > 0.0)
+		pixelOffset[1] = w1.y * pow(AdjustDisplacement(TexLandDisplacement1Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[1]).x, params[1]), blendPower);
+	[branch] if ((PBRFlags & TruePBR_LandTile2HasDisplacement) != 0) if (w1.z > 0.0)
+		pixelOffset[2] = w1.z * pow(AdjustDisplacement(TexLandDisplacement2Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[2]).x, params[2]), blendPower);
+	[branch] if ((PBRFlags & TruePBR_LandTile3HasDisplacement) != 0) if (w1.w > 0.0)
+		pixelOffset[3] = w1.w * pow(AdjustDisplacement(TexLandDisplacement3Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[3]).x, params[3]), blendPower);
+	[branch] if ((PBRFlags & TruePBR_LandTile4HasDisplacement) != 0) if (w2.x > 0.0)
+		pixelOffset[4] = w2.x * pow(AdjustDisplacement(TexLandDisplacement4Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[4]).x, params[4]), blendPower);
+	[branch] if ((PBRFlags & TruePBR_LandTile5HasDisplacement) != 0) if (w2.y > 0.0)
+		pixelOffset[5] = w2.y * pow(AdjustDisplacement(TexLandDisplacement5Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[5]).x, params[5]), blendPower);
 #	else
 	if (w1.x > 0.0)
 		pixelOffset[0] = w1.x * pow(TexColorSampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[0]).w, blendPower);
@@ -128,11 +122,11 @@ float2 GetParallaxCoords(float distance, float2 coords, float mipLevel, float3 v
 	float blendFactor = extendedMaterialSettings.EnableComplexMaterial ? saturate(1 - nearBlendToFar) : INV_HEIGHT_POWER;
 #endif
 
-#	if defined(LANDSCAPE)
+#if defined(LANDSCAPE)
 	float maxHeight = 0.1 * (params[0].HeightScale + params[1].HeightScale + params[2].HeightScale + params[3].HeightScale + params[4].HeightScale + params[5].HeightScale) / 6;
-#	else
+#else
 	float maxHeight = 0.1 * params.HeightScale;
-#	endif
+#endif
 	float minHeight = maxHeight * 0.5;
 
 	if (nearBlendToFar < 1.0) {
@@ -170,7 +164,7 @@ float2 GetParallaxCoords(float distance, float2 coords, float mipLevel, float3 v
 			currHeight.z = tex.SampleLevel(texSampler, currentOffset[1].xy, mipLevel)[channel];
 			currHeight.w = tex.SampleLevel(texSampler, currentOffset[1].zw, mipLevel)[channel];
 
-            currHeight = AdjustDisplacement(currHeight, params);
+			currHeight = AdjustDisplacement(currHeight, params);
 #endif
 
 			bool4 testResult = currHeight >= currentBound;

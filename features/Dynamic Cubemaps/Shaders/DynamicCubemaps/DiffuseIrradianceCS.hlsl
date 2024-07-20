@@ -27,7 +27,7 @@ float radicalInverse_VdC(uint bits)
 	bits = ((bits & 0x33333333u) << 2u) | ((bits & 0xCCCCCCCCu) >> 2u);
 	bits = ((bits & 0x0F0F0F0Fu) << 4u) | ((bits & 0xF0F0F0F0u) >> 4u);
 	bits = ((bits & 0x00FF00FFu) << 8u) | ((bits & 0xFF00FF00u) >> 8u);
-	return float(bits) * 2.3283064365386963e-10; // / 0x100000000
+	return float(bits) * 2.3283064365386963e-10;  // / 0x100000000
 }
 
 // Sample i-th point from Hammersley point set of NumSamples points total.
@@ -42,8 +42,8 @@ float2 sampleHammersley(uint i)
 // See: "Physically Based Rendering" 2nd ed., section 13.6.1.
 float3 sampleHemisphere(float u1, float u2)
 {
-	const float u1p = sqrt(max(0.0, 1.0 - u1*u1));
-	return float3(cos(TwoPI*u2) * u1p, sin(TwoPI*u2) * u1p, u1);
+	const float u1p = sqrt(max(0.0, 1.0 - u1 * u1));
+	return float3(cos(TwoPI * u2) * u1p, sin(TwoPI * u2) * u1p, u1);
 }
 
 // Calculate normalized sampling direction vector based on current fragment coordinates.
@@ -54,21 +54,32 @@ float3 getSamplingVector(uint3 ThreadID)
 	float outputWidth, outputHeight, outputDepth;
 	outputTexture.GetDimensions(outputWidth, outputHeight, outputDepth);
 
-    float2 st = ThreadID.xy/float2(outputWidth, outputHeight);
-    float2 uv = 2.0 * float2(st.x, 1.0-st.y) - 1.0;
+	float2 st = ThreadID.xy / float2(outputWidth, outputHeight);
+	float2 uv = 2.0 * float2(st.x, 1.0 - st.y) - 1.0;
 
 	// Select vector based on cubemap face index.
 	float3 ret;
-	switch(ThreadID.z)
-	{
-	case 0: ret = float3(1.0,  uv.y, -uv.x); break;
-	case 1: ret = float3(-1.0, uv.y,  uv.x); break;
-	case 2: ret = float3(uv.x, 1.0, -uv.y); break;
-	case 3: ret = float3(uv.x, -1.0, uv.y); break;
-	case 4: ret = float3(uv.x, uv.y, 1.0); break;
-	case 5: ret = float3(-uv.x, uv.y, -1.0); break;
+	switch (ThreadID.z) {
+	case 0:
+		ret = float3(1.0, uv.y, -uv.x);
+		break;
+	case 1:
+		ret = float3(-1.0, uv.y, uv.x);
+		break;
+	case 2:
+		ret = float3(uv.x, 1.0, -uv.y);
+		break;
+	case 3:
+		ret = float3(uv.x, -1.0, uv.y);
+		break;
+	case 4:
+		ret = float3(uv.x, uv.y, 1.0);
+		break;
+	case 5:
+		ret = float3(-uv.x, uv.y, -1.0);
+		break;
 	}
-    return normalize(ret);
+	return normalize(ret);
 }
 
 // Compute orthonormal basis for converting from tanget/shading space to world space.
@@ -88,11 +99,10 @@ float3 tangentToWorld(const float3 v, const float3 N, const float3 S, const floa
 	return S * v.x + T * v.y + N * v.z;
 }
 
-[numthreads(32, 32, 1)]
-void main(uint3 ThreadID : SV_DispatchThreadID)
-{
+[numthreads(32, 32, 1)] void main(uint3 ThreadID
+								  : SV_DispatchThreadID) {
 	float3 N = getSamplingVector(ThreadID);
-	
+
 	float3 S, T;
 	computeBasisVectors(N, S, T);
 
@@ -100,8 +110,8 @@ void main(uint3 ThreadID : SV_DispatchThreadID)
 	// As a small optimization this also includes Lambertian BRDF assuming perfectly white surface (albedo of 1.0)
 	// so we don't need to normalize in PBR fragment shader (so technically it encodes exitant radiance rather than irradiance).
 	float3 irradiance = 0.0;
-	for(uint i=0; i<NumSamples; ++i) {
-		float2 u  = sampleHammersley(i);
+	for (uint i = 0; i < NumSamples; ++i) {
+		float2 u = sampleHammersley(i);
 		float3 Li = tangentToWorld(sampleHemisphere(u.x, u.y), N, S, T);
 		float cosTheta = max(0.0, dot(Li, N));
 
