@@ -473,19 +473,11 @@ void Menu::DrawSettings()
 				}
 				bool useMultipleScattering = state->pbrSettings.useMultipleScattering;
 				bool useMultiBounceAO = state->pbrSettings.useMultiBounceAO;
-				bool useDynamicCubemap = state->pbrSettings.useDynamicCubemap;
-				bool matchDynamicCubemapColorToAmbient = state->pbrSettings.matchDynamicCubemapColorToAmbient;
 				if (ImGui::Checkbox("Use Multiple Scattering", &useMultipleScattering)) {
 					state->pbrSettings.useMultipleScattering = useMultipleScattering;
 				}
 				if (ImGui::Checkbox("Use Multi-bounce AO", &useMultiBounceAO)) {
 					state->pbrSettings.useMultiBounceAO = useMultiBounceAO;
-				}
-				if (ImGui::Checkbox("Use Dynamic Cubemap", &useDynamicCubemap)) {
-					state->pbrSettings.useDynamicCubemap = useDynamicCubemap;
-				}
-				if (ImGui::Checkbox("Match Dynamic Cubemap Color To Ambient", &matchDynamicCubemapColorToAmbient)) {
-					state->pbrSettings.matchDynamicCubemapColorToAmbient = matchDynamicCubemapColorToAmbient;
 				}
 
 				ImGui::SliderFloat("Light Color Multiplier", &state->globalPBRLightColorMultiplier, 1e-3f, 1e2f, "%.3f", ImGuiSliderFlags_Logarithmic);

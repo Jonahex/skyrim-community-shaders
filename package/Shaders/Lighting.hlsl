@@ -399,9 +399,9 @@ struct PS_OUTPUT
 #else
 struct PS_OUTPUT
 {
-	float4 Diffuse : SV_Target0;
-	float4 MotionVectors : SV_Target1;
-	float4 ScreenSpaceNormals : SV_Target2;
+    float4 Diffuse : SV_Target0;
+    float4 MotionVectors : SV_Target1;
+    float4 ScreenSpaceNormals : SV_Target2;
 #	if defined(SNOW)
 	float4 Parameters : SV_Target3;
 #	endif
@@ -1792,7 +1792,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		specularColorPBR += dirSpecularColor;
 #		if defined(LOD_LAND_BLEND)
 		lodLandDiffuseColor += dirLightColor * saturate(dirLightAngle) * dirDetailShadow;
-		;
 #		endif
 	}
 #	else
@@ -2235,14 +2234,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		color.xyz += directLightsDiffuseInput;
 	}
 
-#		if !defined(DEFERRED)
-	float3 diffuseIrradiance, specularIrradiance;
-	GetAmbientLightInputPBR(diffuseIrradiance, specularIrradiance, worldSpaceNormal.xyz, worldSpaceViewDirection, baseColor.xyz, pbrSurfaceProperties);
-	color.xyz += diffuseIrradiance;
-	specularColorPBR += specularIrradiance;
-#		else
 	float3 indirectDiffuseLobeWeight, indirectSpecularLobeWeight;
 	GetPBRIndirectLobeWeights(indirectDiffuseLobeWeight, indirectSpecularLobeWeight, worldSpaceNormal.xyz, worldSpaceViewDirection, baseColor.xyz, pbrSurfaceProperties);
+
+#		if !defined(DEFERRED)
+	color.xyz += indirectDiffuseLobeWeight * directionalAmbientColor;
+	specularColorPBR += indirectSpecularLobeWeight * GetDynamicCubemapSpecularIrradiance(screenUV, worldSpaceNormal, worldSpaceVertexNormal, worldSpaceViewDirection, pbrSurfaceProperties.Roughness, viewPosition.z);
 #		endif
 
 	color.xyz += emitColor.xyz;
@@ -2403,10 +2400,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	envRoughness = 0.0;
 #			endif
 #		endif
-#	endif
-
-#	if defined(TRUE_PBR)
-	//color.xyz = 5 * directionalAmbientColor.xyz;//0.5 * input.ViewVector.xyz + 0.5;
 #	endif
 
 #	if defined(LANDSCAPE) && !defined(LOD_LAND_BLEND)

@@ -129,8 +129,6 @@ struct PBRSettings
 	uint DiffuseModel;
 	bool UseMultipleScattering;
 	bool UseMultiBounceAO;
-	bool UseDynamicCubemap;
-	bool MatchDynamicCubemapToAmbient;
 };
 
 cbuffer FeatureData : register(b6)

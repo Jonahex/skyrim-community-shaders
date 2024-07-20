@@ -267,12 +267,6 @@ void State::Load(ConfigMode a_configMode)
 	if (settings["PBR"].is_object()) {
 		json& pbr = settings["PBR"];
 
-		if (pbr["Use Dynamic Cubemap"].is_boolean()) {
-			pbrSettings.useDynamicCubemap = pbr["Use Dynamic Cubemap"];
-		}
-		if (pbr["Match Dynamic Cubemap Color To Ambient"].is_boolean()) {
-			pbrSettings.matchDynamicCubemapColorToAmbient = pbr["Match Dynamic Cubemap Color To Ambient"];
-		}
 		if (pbr["Use Multiple Scattering"].is_boolean()) {
 			pbrSettings.useMultipleScattering = pbr["Use Multiple Scattering"];
 		}
@@ -334,8 +328,6 @@ void State::Save(ConfigMode a_configMode)
 
 	{
 		json pbr;
-		pbr["Use Dynamic Cubemap"] = pbrSettings.useDynamicCubemap;
-		pbr["Match Dynamic Cubemap Color To Ambient"] = pbrSettings.matchDynamicCubemapColorToAmbient;
 		pbr["Use Multiple Scattering"] = pbrSettings.useMultipleScattering;
 		pbr["Use Multi-bounce AO"] = pbrSettings.useMultiBounceAO;
 		pbr["Diffuse Model"] = pbrSettings.diffuseModel;

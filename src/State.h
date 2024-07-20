@@ -178,8 +178,6 @@ public:
 		PBRDiffuseModelType diffuseModel = PBRDiffuseModelType::Lambert;
 		uint32_t useMultipleScattering = true;
 		uint32_t useMultiBounceAO = true;
-		uint32_t useDynamicCubemap = true;
-		uint32_t matchDynamicCubemapColorToAmbient = true;
 	} pbrSettings{};
 #pragma warning(pop)
 
