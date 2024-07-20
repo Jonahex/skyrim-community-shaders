@@ -53,7 +53,7 @@ float GetMipLevel(float2 coords, Texture2D<float4> tex)
 #	define HEIGHT_POWER 4.0
 #	define INV_HEIGHT_POWER 0.25
 
-float GetTerrainHeight(PS_INPUT input, float2 coords, float mipLevels[6], float blendFactor, out float pixelOffset[6])
+float GetTerrainHeight(PS_INPUT input, float2 coords, float mipLevels[6], DisplacementParams params[6], float blendFactor, out float pixelOffset[6])
 {
 	float4 w1 = pow(input.LandBlendWeights1, 1 + 1 * blendFactor);
 	float2 w2 = pow(input.LandBlendWeights2.xy, 1 + 1 * blendFactor);
@@ -108,7 +108,7 @@ float GetTerrainHeight(PS_INPUT input, float2 coords, float mipLevels[6], float 
 #endif
 
 #if defined(LANDSCAPE)
-float2 GetParallaxCoords(PS_INPUT input, float distance, float2 coords, float mipLevels[6], float3 viewDir, float3x3 tbn, float noise, DisplacementParams params[6], out float pixelOffsett, out float heights[6])
+float2 GetParallaxCoords(PS_INPUT input, float distance, float2 coords, float mipLevels[6], float3 viewDir, float3x3 tbn, float noise, DisplacementParams params[6], out float pixelOffset, out float heights[6])
 #else
 float2 GetParallaxCoords(float distance, float2 coords, float mipLevel, float3 viewDir, float3x3 tbn, float noise, Texture2D<float4> tex, SamplerState texSampler, uint channel, DisplacementParams params, out float pixelOffset)
 #endif

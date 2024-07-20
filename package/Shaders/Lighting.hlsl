@@ -1454,7 +1454,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #			endif
 #		endif  // LOD_LAND_BLEND
 
-#		if defined(SNOW)
+#		if defined(SNOW) && !defined(TRUE_PBR)
 	useSnowSpecular = landSnowMask != 0.0;
 #		endif  // SNOW
 #	endif      // LANDSCAPE
@@ -1556,7 +1556,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #			endif  // SPECULAR
 #		endif      // SPARKLE
 
-#	elif defined(SNOW)
+#	elif defined(SNOW) && !defined(TRUE_PBR)
 #		if defined(LANDSCAPE)
 	psout.Parameters.y = landSnowMask;
 #		else
