@@ -1,9 +1,4 @@
-#include "DynamicCubemaps/Common.hlsli"
-
 TextureCube<float4> specularTexture : register(t64);
-TextureCube<float4> diffuseTexture : register(t66);
-
-StructuredBuffer<PerPassDynamicCubemaps> perPassDynamicCubemaps : register(t67);
 
 // https://www.unrealengine.com/en-US/blog/physically-based-shading-on-mobile
 half2 EnvBRDFApprox(half Roughness, half NoV)
