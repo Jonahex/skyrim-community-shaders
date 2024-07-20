@@ -136,8 +136,9 @@ public:
 
 	// Skyrim constants
 	bool isVR = false;
-	float screenWidth = 0;
-	float screenHeight = 0;
+	float2 screenSize = {};
+	ID3D11DeviceContext* context = nullptr;
+	ID3D11Device* device = nullptr;
 
 	enum class PBRDiffuseModelType : uint32_t
 	{
@@ -181,9 +182,6 @@ public:
 		uint32_t matchDynamicCubemapColorToAmbient = true;
 	} pbrSettings{};
 #pragma warning(pop) 
-
-	ID3D11DeviceContext* context = nullptr;
-	ID3D11Device* device = nullptr;
 
 	struct PBRTextureSetData
 	{

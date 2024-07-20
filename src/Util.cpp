@@ -240,9 +240,9 @@ namespace Util
 
 	float4 TryGetWaterData(float offsetX, float offsetY)
 	{
-		if (auto shadowState = RE::BSGraphics::RendererShadowState::GetSingleton()) {
+		if (RE::BSGraphics::RendererShadowState::GetSingleton()) {
 			if (auto tes = RE::TES::GetSingleton()) {
-				auto position = !REL::Module::IsVR() ? shadowState->GetRuntimeData().posAdjust.getEye() : shadowState->GetVRRuntimeData().posAdjust.getEye();
+				auto position = GetEyePosition(0);
 				position.x += offsetX;
 				position.y += offsetY;
 				if (auto cell = tes->GetCell(position)) {
@@ -270,7 +270,7 @@ namespace Util
 					}
 
 					if (!extraCellWater) {
-						if (auto worldSpace = tes->worldSpace) {
+						if (auto worldSpace = tes->GetRuntimeData2().worldSpace) {
 							if (auto water = worldSpace->worldWater) {
 								data = { float(water->data.deepWaterColor.red) + float(water->data.shallowWaterColor.red),
 									float(water->data.deepWaterColor.green) + float(water->data.shallowWaterColor.green),
@@ -334,16 +334,20 @@ namespace Util
 		return cameraData;
 	}
 
-	DispatchCount GetScreenDispatchCount()
+	float2 ConvertToDynamic(float2 size)
 	{
-		auto state = State::GetSingleton();
 		auto viewport = RE::BSGraphics::State::GetSingleton();
 
-		float resolutionX = state->screenWidth * viewport->GetRuntimeData().dynamicResolutionCurrentWidthScale;
-		float resolutionY = state->screenHeight * viewport->GetRuntimeData().dynamicResolutionCurrentHeightScale;
+		return float2(
+			size.x * viewport->GetRuntimeData().dynamicResolutionWidthRatio,
+			size.y * viewport->GetRuntimeData().dynamicResolutionHeightRatio);
+	}
 
-		uint dispatchX = (uint)std::ceil(resolutionX / 8.0f);
-		uint dispatchY = (uint)std::ceil(resolutionY / 8.0f);
+	DispatchCount GetScreenDispatchCount()
+	{
+		float2 resolution = ConvertToDynamic(State::GetSingleton()->screenSize);
+		uint dispatchX = (uint)std::ceil(resolution.x / 8.0f);
+		uint dispatchY = (uint)std::ceil(resolution.y / 8.0f);
 
 		return { dispatchX, dispatchY };
 	}
