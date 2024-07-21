@@ -399,9 +399,9 @@ struct PS_OUTPUT
 #else
 struct PS_OUTPUT
 {
-	float4 Diffuse : SV_Target0;
-	float4 MotionVectors : SV_Target1;
-	float4 ScreenSpaceNormals : SV_Target2;
+    float4 Diffuse : SV_Target0;
+    float4 MotionVectors : SV_Target1;
+    float4 ScreenSpaceNormals : SV_Target2;
 #	if defined(SNOW)
 	float4 Parameters : SV_Target3;
 #	endif
@@ -910,7 +910,13 @@ float GetSnowParameterY(float texProjTmp, float alpha)
 #	endif
 }
 
-#	if defined(WATER_CAUSTICS)
+float3 ApplyFogAndClampColor(float3 srcColor, float4 fogParam, float3 clampColor, out float3 preClampColor)
+{
+	preClampColor = (srcColor - lerp(srcColor, fogParam.xyz, fogParam.w) * FogColor.w) * FrameParams.y;
+	return min(preClampColor + clampColor, srcColor);
+}
+
+#if defined(WATER_CAUSTICS)
 #		include "WaterCaustics/WaterCaustics.hlsli"
 #	endif
 
@@ -1034,13 +1040,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 	float3 viewDirection = normalize(input.ViewVector.xyz);
 	float3 worldSpaceViewDirection = -normalize(input.WorldPosition.xyz);
-
-	//	float3 worldSpaceViewDirection = viewDirection;
-	//#	if !defined(DRAW_IN_WORLDSPACE)
-	//	if (!input.WorldSpace) {
-	//	float3 worldSpaceViewDirection = normalize(mul(input.World[eyeIndex], float4(input.ViewVector.xyz, 0)));
-	//	}
-	//#	endif
 
 	float2 uv = input.TexCoord0.xy;
 	float2 uvOriginal = uv;
@@ -2221,6 +2220,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		endif
 #	endif
 
+#	if defined(HAIR)
+	float3 vertexColor = lerp(1, TintColor.xyz, input.Color.y);
+#	else
+	float3 vertexColor = input.Color.xyz;
+#	endif  // defined (HAIR)
+
 	float4 color = 0;
 
 #	if defined(TRUE_PBR)
@@ -2240,6 +2245,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		if !defined(DEFERRED)
 	color.xyz += indirectDiffuseLobeWeight * directionalAmbientColor;
 	specularColorPBR += indirectSpecularLobeWeight * GetDynamicCubemapSpecularIrradiance(screenUV, worldSpaceNormal, worldSpaceVertexNormal, worldSpaceViewDirection, pbrSurfaceProperties.Roughness, viewPosition.z);
+#		else
+	indirectDiffuseLobeWeight *= vertexColor;
 #		endif
 
 	color.xyz += emitColor.xyz;
@@ -2248,18 +2255,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	color.xyz += diffuseColor * baseColor.xyz;
 #	endif
 
-#	if defined(HAIR)
-	float3 vertexColor = (input.Color.yyy * (TintColor.xyz - 1.0.xxx) + 1.0.xxx);
-#	else
-	float3 vertexColor = input.Color.xyz;
-#	endif  // defined (HAIR)
-	float3 realVertexColor = vertexColor;
-
-#	if defined(DEFERRED) && defined(TRUE_PBR)
-	indirectDiffuseLobeWeight *= realVertexColor;
-#	endif
-
-	vertexColor *= color.xyz;
+	color.xyz *= vertexColor;
 
 #	if defined(MULTI_LAYER_PARALLAX)
 	float layerValue = MultiLayerParallaxData.x * TexLayerSampler.Sample(SampLayerSampler, uv).w;
@@ -2272,7 +2268,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float3 layerColor = TexLayerSampler.Sample(SampLayerSampler, layerUv).xyz;
 
 	float mlpBlendFactor = saturate(viewNormalAngle) * (1.0 - baseColor.w);
-	vertexColor = lerp(vertexColor, (directionalAmbientColor + lightsDiffuseColor) * (input.Color.xyz * layerColor), mlpBlendFactor);
+	color.xyz = lerp(color.xyz, diffuseColor * vertexColor * layerColor, mlpBlendFactor);
 
 #		if defined(DEFERRED)
 	baseColor.xyz *= 1.0 - mlpBlendFactor;
@@ -2327,12 +2323,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		endif
 #	endif
 
-	color.xyz = lerp(vertexColor.xyz, input.FogParam.xyz, input.FogParam.w);
-	color.xyz = vertexColor.xyz - color.xyz * FogColor.w;
-
-	float3 tmpColor = color.xyz * FrameParams.yyy;
-	color.xyz = tmpColor.xyz + ColourOutputClamp.xxx;
-	color.xyz = min(vertexColor.xyz, color.xyz);
+	float3 preClampColor;
+	color.xyz = ApplyFogAndClampColor(color.xyz, input.FogParam, ColourOutputClamp.x, preClampColor);
 
 #	if defined(EMAT) && defined(ENVMAP)
 	specularColor *= complexSpecular;
@@ -2360,17 +2352,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	{
 		pbrWeight = 1 - lodLandBlendFactor;
 
-		float3 litLodLandColor = input.Color.xyz * lodLandColor * lodLandFadeFactor * lodLandDiffuseColor;
+		float3 litLodLandColor = vertexColor * lodLandColor * lodLandFadeFactor * lodLandDiffuseColor;
 
-		float3 foggedLitLodLandColor = lerp(litLodLandColor, input.FogParam.xyz, input.FogParam.w);
-		foggedLitLodLandColor = litLodLandColor - foggedLitLodLandColor * FogColor.w;
+		float3 preClampLitLodLandColor;
+		float3 foggedClampedLitLodLandColor = ApplyFogAndClampColor(litLodLandColor, input.FogParam, ColourOutputClamp.x, preClampLitLodLandColor);
 
-		float3 lodLandTmpColor = foggedLitLodLandColor * FrameParams.y;
-		foggedLitLodLandColor = lodLandTmpColor + ColourOutputClamp.xxx;
-		foggedLitLodLandColor = min(litLodLandColor, foggedLitLodLandColor);
-
-		color.xyz = lerp(color.xyz, foggedLitLodLandColor, lodLandBlendFactor);
-		tmpColor = lerp(tmpColor, lodLandTmpColor, lodLandBlendFactor);
+		color.xyz = lerp(color.xyz, foggedClampedLitLodLandColor, lodLandBlendFactor);
+		preClampColor = lerp(preClampColor, preClampLitLodLandColor, lodLandBlendFactor);
 #		if defined(DEFERRED)
 		specularColorPBR = lerp(specularColorPBR, 0, lodLandBlendFactor);
 		indirectDiffuseLobeWeight = lerp(indirectDiffuseLobeWeight, sRGB2Lin(input.Color.xyz * lodLandColor * lodLandFadeFactor), lodLandBlendFactor);
@@ -2381,12 +2369,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	endif  // defined(LOD_LAND_BLEND) && defined(TRUE_PBR)
 
 #	if defined(SPECULAR) || defined(SPARKLE)
-	float3 specularTmp = lerp(color.xyz, input.FogParam.xyz, input.FogParam.w);
-	specularTmp = color.xyz - specularTmp.xyz * FogColor.w;
-
-	tmpColor = specularTmp.xyz * FrameParams.yyy;
-	specularTmp.xyz = tmpColor.xyz + ColourOutputClamp.zzz;
-	color.xyz = min(specularTmp.xyz, color.xyz);
+	color.xyz = ApplyFogAndClampColor(color.xyz, input.FogParam, ColourOutputClamp.z, preClampColor);
 #	endif  // defined (SPECULAR) || defined(SPARKLE)
 
 #	if defined(TESTCUBEMAP)
@@ -2474,7 +2457,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		}
 		baseColor.xyz = 0.0;
 	} else {
-		psout.Diffuse.xyz = color.xyz - tmpColor.xyz * FrameParams.zzz;
+		psout.Diffuse.xyz = color.xyz - preClampColor * FrameParams.z;
 	}
 #	else
 	psout.Diffuse.xyz = color.xyz;
@@ -2522,7 +2505,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		endif
 	psout.Specular = float4(outputSpecular, psout.Diffuse.w);
 
-	float3 outputAlbedo = baseColor.xyz * realVertexColor;
+	float3 outputAlbedo = baseColor.xyz * vertexColor;
 #		if defined(TRUE_PBR)
 	outputAlbedo = Lin2sRGB(indirectDiffuseLobeWeight);
 #		endif
