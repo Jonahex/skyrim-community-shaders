@@ -340,7 +340,7 @@ void GetDirectLightInputPBR(out float3 diffuse, out float3 coatDiffuse, out floa
 #endif
 	{
 		diffuse += lightColor * satNdotL;
-		
+
 		float3 F;
 		specular += PI * GetSpecularDirectLightMultiplierMicrofacet(surfaceProperties.Roughness, surfaceProperties.F0, satNdotL, satNdotV, satNdotH, satVdotH, F) * lightColor * satNdotL;
 
@@ -386,7 +386,7 @@ void GetDirectLightInputPBR(out float3 diffuse, out float3 coatDiffuse, out floa
 				coatNdotH = saturate(dot(coatN, coatH));
 				coatVdotH = saturate(dot(coatV, coatH));
 			}
-			
+
 			float3 coatF;
 			float3 coatSpecular = PI * GetSpecularDirectLightMultiplierMicrofacet(surfaceProperties.CoatRoughness, surfaceProperties.CoatF0, coatNdotL, coatNdotV, coatNdotH, coatVdotH, coatF) * coatLightColor * coatNdotL;
 

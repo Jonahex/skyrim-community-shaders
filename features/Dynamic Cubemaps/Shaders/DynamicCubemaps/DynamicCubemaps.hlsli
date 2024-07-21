@@ -22,11 +22,11 @@ float3 GetDynamicCubemapSpecularIrradiance(float2 uv, float3 N, float3 VN, float
 	// https://marmosetco.tumblr.com/post/81245981087
 	float horizon = min(1.0 + dot(R, VN), 1.0);
 	horizon *= horizon * horizon;
-	
+
 	float3 specularIrradiance = specularTexture.SampleLevel(SampColorSampler, R, level).xyz;
-    specularIrradiance *= horizon;
+	specularIrradiance *= horizon;
 	specularIrradiance = sRGB2Lin(specularIrradiance);
-	
+
 	return specularIrradiance;
 }
 
