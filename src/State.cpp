@@ -273,21 +273,12 @@ void State::Load(ConfigMode a_configMode)
 		if (pbr["Use Multi-bounce AO"].is_boolean()) {
 			pbrSettings.useMultiBounceAO = pbr["Use Multi-bounce AO"];
 		}
-		if (pbr["Diffuse Model"].is_number_integer()) {
-			pbrSettings.diffuseModel = pbr["Diffuse Model"];
-		}
 
-		if (pbr["Light Color Multiplier"].is_number_float()) {
-			globalPBRLightColorMultiplier = pbr["Light Color Multiplier"];
-		}
-		if (pbr["Light Color Power"].is_number_float()) {
-			globalPBRLightColorPower = pbr["Light Color Power"];
+		if (pbr["Direct Light Color Multiplier"].is_number_float()) {
+			globalPBRDirectLightColorMultiplier = pbr["Direct Light Color Multiplier"];
 		}
 		if (pbr["Ambient Light Color Multiplier"].is_number_float()) {
 			globalPBRAmbientLightColorMultiplier = pbr["Ambient Light Color Multiplier"];
-		}
-		if (pbr["Ambient Light Color Power"].is_number_float()) {
-			globalPBRAmbientLightColorPower = pbr["Ambient Light Color Power"];
 		}
 	}
 
@@ -330,12 +321,9 @@ void State::Save(ConfigMode a_configMode)
 		json pbr;
 		pbr["Use Multiple Scattering"] = pbrSettings.useMultipleScattering;
 		pbr["Use Multi-bounce AO"] = pbrSettings.useMultiBounceAO;
-		pbr["Diffuse Model"] = pbrSettings.diffuseModel;
 
-		pbr["Light Color Multiplier"] = globalPBRLightColorMultiplier;
-		pbr["Light Color Power"] = globalPBRLightColorPower;
+		pbr["Direct Light Color Multiplier"] = globalPBRDirectLightColorMultiplier;
 		pbr["Ambient Light Color Multiplier"] = globalPBRAmbientLightColorMultiplier;
-		pbr["Ambient Light Color Power"] = globalPBRAmbientLightColorPower;
 		settings["PBR"] = pbr;
 	}
 
@@ -666,12 +654,9 @@ void State::SetupFrame()
 	weatherPBRDirectionalLightColorMultiplier = newDirectionalLightScale;
 	weatherPBRDirectionalAmbientLightColorMultiplier = newDirectionalAmbientLightScale;
 
-	pbrSettings.directionalLightColorMultiplier = globalPBRLightColorMultiplier * weatherPBRDirectionalLightColorMultiplier;
-	pbrSettings.directionalLightColorPower = globalPBRLightColorPower;
-	pbrSettings.pointLightColorMultiplier = globalPBRLightColorMultiplier;
-	pbrSettings.pointLightColorPower = globalPBRLightColorPower;
+	pbrSettings.directionalLightColorMultiplier = globalPBRDirectLightColorMultiplier * weatherPBRDirectionalLightColorMultiplier;
+	pbrSettings.pointLightColorMultiplier = globalPBRDirectLightColorMultiplier;
 	pbrSettings.ambientLightColorMultiplier = globalPBRAmbientLightColorMultiplier * weatherPBRDirectionalAmbientLightColorMultiplier;
-	pbrSettings.ambientLightColorPower = globalPBRAmbientLightColorPower;
 }
 
 void State::SetupTextureSetData()

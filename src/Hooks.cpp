@@ -972,16 +972,6 @@ namespace Hooks
 		return pixelTechnique;
 	}
 
-	RE::BSLightingShaderMaterialBase* hk_BSLightingShaderMaterialBase_CreateMaterial(RE::BSShaderMaterial::Feature feature)
-	{
-		if (feature == BSLightingShaderMaterialPBR::FEATURE) {
-			return BSLightingShaderMaterialPBR::Make();
-		} else if (feature == BSLightingShaderMaterialPBRLandscape::FEATURE) {
-			return BSLightingShaderMaterialPBRLandscape::Make();
-		}
-		return RE::BSLightingShaderMaterialBase::CreateMaterial(feature);
-	}
-
 	void SetupLandscapeTexture(BSLightingShaderMaterialPBRLandscape& material, RE::TESLandTexture& landTexture, uint32_t textureIndex)
 	{
 		if (textureIndex >= 6) {
@@ -1123,13 +1113,13 @@ namespace Hooks
 		return false;
 	}
 
-	std::unordered_map<uint32_t, std::string> EditorIDs;
 	struct TESForm_GetFormEditorID
 	{
 		static const char* thunk(const RE::TESForm* form)
 		{
-			auto it = EditorIDs.find(form->GetFormID());
-			if (it == EditorIDs.cend()) {
+			auto* state = State::GetSingleton();
+			auto it = state->editorIDs.find(form->GetFormID());
+			if (it == state->editorIDs.cend()) {
 				return "";
 			}
 			return it->second.c_str();
@@ -1141,7 +1131,8 @@ namespace Hooks
 	{
 		static bool thunk(RE::TESForm* form, const char* editorId)
 		{
-			EditorIDs[form->GetFormID()] = editorId;
+			auto* state = State::GetSingleton();
+			state->editorIDs[form->GetFormID()] = editorId;
 			return true;
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
@@ -1598,6 +1589,7 @@ namespace Hooks
 		stl::write_thunk_call<CreateRenderTarget_ShadowMask>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x555, 0x554, 0x6b9));
 
 		stl::write_thunk_call<CreateDepthStencil_PrecipitationMask>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x1245, 0x123B, 0x1917));
+		
 		logger::info("Hooking BSLightingShaderProperty");
 		stl::write_vfunc<0x18, BSLightingShaderProperty_LoadBinary>(RE::VTABLE_BSLightingShaderProperty[0]);
 		stl::write_vfunc<0x2A, BSLightingShaderProperty_GetRenderPasses>(RE::VTABLE_BSLightingShaderProperty[0]);
@@ -1606,9 +1598,6 @@ namespace Hooks
 		stl::write_vfunc<0x4, BSLightingShader_SetupMaterial>(RE::VTABLE_BSLightingShader[0]);
 		stl::write_vfunc<0x6, BSLightingShader_SetupGeometry>(RE::VTABLE_BSLightingShader[0]);
 		std::ignore = Detours::X64::DetourFunction(REL::RelocationID(101633, 108700).address(), (uintptr_t)&hk_BSLightingShader_GetPixelTechnique);
-
-		logger::info("Hooking BSLightingShaderMaterialBase");
-		std::ignore = Detours::X64::DetourFunction(REL::RelocationID(100016, 106723).address(), (uintptr_t)&hk_BSLightingShaderMaterialBase_CreateMaterial);
 
 		logger::info("Hooking TESObjectLAND");
 		*(uintptr_t*)&ptr_TESObjectLAND_SetupMaterial = Detours::X64::DetourFunction(REL::RelocationID(18368, 18791).address(), (uintptr_t)&hk_TESObjectLAND_SetupMaterial);

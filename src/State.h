@@ -140,27 +140,10 @@ public:
 	ID3D11DeviceContext* context = nullptr;
 	ID3D11Device* device = nullptr;
 
-	enum class PBRDiffuseModelType : uint32_t
-	{
-		Lambert,
-		Burley,
-		OrenNayar,
-		Gotanda,
-		Chan,
+	std::unordered_map<uint32_t, std::string> editorIDs;
 
-		Total
-	};
-
-	enum class PBRFlags : uint32_t
-	{
-		EnableEnergyConservation,
-		UseDynamicCubemap,
-	};
-
-	float globalPBRLightColorMultiplier = 1.f;
-	float globalPBRLightColorPower = 1.f;
+	float globalPBRDirectLightColorMultiplier = 1.f;
 	float globalPBRAmbientLightColorMultiplier = 1.f;
-	float globalPBRAmbientLightColorPower = 1.f;
 
 	float weatherPBRDirectionalLightColorMultiplier = 1.f;
 	float weatherPBRDirectionalAmbientLightColorMultiplier = 1.f;
@@ -170,12 +153,8 @@ public:
 	struct alignas(16) PBRSettings
 	{
 		float directionalLightColorMultiplier = 1.f;
-		float directionalLightColorPower = 1.f;
 		float pointLightColorMultiplier = 1.f;
-		float pointLightColorPower = 1.f;
 		float ambientLightColorMultiplier = 1.f;
-		float ambientLightColorPower = 1.f;
-		PBRDiffuseModelType diffuseModel = PBRDiffuseModelType::Lambert;
 		uint32_t useMultipleScattering = true;
 		uint32_t useMultiBounceAO = true;
 	} pbrSettings{};

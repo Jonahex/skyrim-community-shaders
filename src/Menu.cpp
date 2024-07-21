@@ -453,24 +453,6 @@ void Menu::DrawSettings()
 					}
 				}
 
-				{
-					static const char* diffuseModels[static_cast<size_t>(State::PBRDiffuseModelType::Total)] = {
-						"Lambert",
-						"Burley",
-						"OrenNayar",
-						"Gotanda",
-						"Chan",
-					};
-
-					if (ImGui::BeginCombo("Diffuse Model", diffuseModels[static_cast<size_t>(state->pbrSettings.diffuseModel)])) {
-						for (size_t modelIndex = 0; modelIndex < static_cast<size_t>(State::PBRDiffuseModelType::Total); ++modelIndex) {
-							if (ImGui::Selectable(diffuseModels[modelIndex], modelIndex == static_cast<size_t>(state->pbrSettings.diffuseModel))) {
-								state->pbrSettings.diffuseModel = static_cast<State::PBRDiffuseModelType>(modelIndex);
-							}
-						}
-						ImGui::EndCombo();
-					}
-				}
 				bool useMultipleScattering = state->pbrSettings.useMultipleScattering;
 				bool useMultiBounceAO = state->pbrSettings.useMultiBounceAO;
 				if (ImGui::Checkbox("Use Multiple Scattering", &useMultipleScattering)) {
@@ -480,10 +462,8 @@ void Menu::DrawSettings()
 					state->pbrSettings.useMultiBounceAO = useMultiBounceAO;
 				}
 
-				ImGui::SliderFloat("Light Color Multiplier", &state->globalPBRLightColorMultiplier, 1e-3f, 1e2f, "%.3f", ImGuiSliderFlags_Logarithmic);
-				ImGui::SliderFloat("Light Color Power", &state->globalPBRLightColorPower, 1e-3f, 1e2f, "%.3f", ImGuiSliderFlags_Logarithmic);
+				ImGui::SliderFloat("Direct Light Color Multiplier", &state->globalPBRDirectLightColorMultiplier, 1e-3f, 1e2f, "%.3f", ImGuiSliderFlags_Logarithmic);
 				ImGui::SliderFloat("Ambient Light Color Multiplier", &state->globalPBRAmbientLightColorMultiplier, 1e-3f, 1e2f, "%.3f", ImGuiSliderFlags_Logarithmic);
-				ImGui::SliderFloat("Ambient Light Color Power", &state->globalPBRAmbientLightColorPower, 1e-3f, 1e2f, "%.3f", ImGuiSliderFlags_Logarithmic);
 				ImGui::TreePop();
 			}
 		}

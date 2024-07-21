@@ -15,12 +15,6 @@ struct PBRSurfaceProperties
 	float FuzzWeight;
 };
 
-#define TruePBR_Lambert 0
-#define TruePBR_Burley 1
-#define TruePBR_OrenNayar 2
-#define TruePBR_Gotanda 3
-#define TruePBR_Chan 4
-
 #define TruePBR_HasEmissive (1 << 0)
 #define TruePBR_HasDisplacement (1 << 1)
 #define TruePBR_HasFeatureTexture0 (1 << 2)
@@ -47,17 +41,17 @@ struct PBRSurfaceProperties
 
 float3 AdjustDirectionalLightColorForPBR(float3 lightColor)
 {
-	return pbrSettings.DirectionalLightColorMultiplier * pow(sRGB2Lin(lightColor), pbrSettings.DirectionalLightColorPower);
+	return pbrSettings.DirectionalLightColorMultiplier * sRGB2Lin(lightColor);
 }
 
 float3 AdjustPointLightColorForPBR(float3 lightColor)
 {
-	return pbrSettings.PointLightColorMultiplier * pow(sRGB2Lin(lightColor), pbrSettings.PointLightColorPower);
+	return pbrSettings.PointLightColorMultiplier * sRGB2Lin(lightColor);
 }
 
 float3 AdjustAmbientLightColorForPBR(float3 lightColor)
 {
-	return pbrSettings.AmbientLightColorMultiplier * pow(sRGB2Lin(lightColor), pbrSettings.AmbientLightColorPower);
+	return pbrSettings.AmbientLightColorMultiplier * sRGB2Lin(lightColor);
 }
 
 // [Jimenez et al. 2016, "Practical Realtime Strategies for Accurate Indirect Occlusion"]
@@ -345,30 +339,8 @@ void GetDirectLightInputPBR(out float3 diffuse, out float3 coatDiffuse, out floa
 	else
 #endif
 	{
-		float diffuseMultiplier = 1;
-		[branch] if (pbrSettings.DiffuseModel == TruePBR_Lambert)
-		{
-			diffuseMultiplier = GetDiffuseDirectLightMultiplierLambert();
-		}
-		else if (pbrSettings.DiffuseModel == TruePBR_Burley)
-		{
-			diffuseMultiplier = GetDiffuseDirectLightMultiplierBurley(surfaceProperties.Roughness, satNdotV, satNdotL, satVdotH);
-		}
-		else if (pbrSettings.DiffuseModel == TruePBR_OrenNayar)
-		{
-			diffuseMultiplier = GetDiffuseDirectLightMultiplierOrenNayar(surfaceProperties.Roughness, N, V, L, NdotV, NdotL);
-		}
-		else if (pbrSettings.DiffuseModel == TruePBR_Gotanda)
-		{
-			diffuseMultiplier = GetDiffuseDirectLightMultiplierGotanda(surfaceProperties.Roughness, satNdotV, satNdotL, satVdotL);
-		}
-		else
-		{
-			diffuseMultiplier = GetDiffuseDirectLightMultiplierChan(surfaceProperties.Roughness, satNdotV, satNdotL, satVdotH, satNdotH);
-		}
-
-		diffuse += PI * diffuseMultiplier * lightColor * satNdotL;
-
+		diffuse += lightColor * satNdotL;
+		
 		float3 F;
 		specular += PI * GetSpecularDirectLightMultiplierMicrofacet(surfaceProperties.Roughness, surfaceProperties.F0, satNdotL, satNdotV, satNdotH, satVdotH, F) * lightColor * satNdotL;
 
@@ -397,7 +369,7 @@ void GetDirectLightInputPBR(out float3 diffuse, out float3 coatDiffuse, out floa
 			float forwardScatter = exp2(saturate(-VdotL) * subsurfacePower - subsurfacePower);
 			float backScatter = saturate(satNdotL * surfaceProperties.Thickness + (1.0 - surfaceProperties.Thickness)) * 0.5;
 			float subsurface = lerp(backScatter, 1, forwardScatter) * (1.0 - surfaceProperties.Thickness);
-			transmission += PI * diffuseMultiplier * surfaceProperties.SubsurfaceColor * subsurface * lightColor;
+			transmission += surfaceProperties.SubsurfaceColor * subsurface * lightColor;
 		}
 		else if ((PBRFlags & TruePBR_TwoLayer) != 0)
 		{
@@ -414,7 +386,7 @@ void GetDirectLightInputPBR(out float3 diffuse, out float3 coatDiffuse, out floa
 				coatNdotH = saturate(dot(coatN, coatH));
 				coatVdotH = saturate(dot(coatV, coatH));
 			}
-
+			
 			float3 coatF;
 			float3 coatSpecular = PI * GetSpecularDirectLightMultiplierMicrofacet(surfaceProperties.CoatRoughness, surfaceProperties.CoatF0, coatNdotL, coatNdotV, coatNdotH, coatVdotH, coatF) * coatLightColor * coatNdotL;
 
@@ -497,8 +469,8 @@ void GetPBRIndirectLobeWeights(out float3 diffuseLobeWeight, out float3 specular
 	float3 specularAO = SpecularAOLagarde(NdotV, surfaceProperties.AO, surfaceProperties.Roughness);
 	[branch] if (pbrSettings.UseMultiBounceAO)
 	{
-		diffuseAO = MultiBounceAO(diffuseColor, diffuseAO).y;
-		specularAO = MultiBounceAO(surfaceProperties.F0, specularAO).y;
+		diffuseAO = MultiBounceAO(diffuseColor, diffuseAO.x).y;
+		specularAO = MultiBounceAO(surfaceProperties.F0, specularAO.x).y;
 	}
 
 	diffuseLobeWeight *= diffuseAO;
