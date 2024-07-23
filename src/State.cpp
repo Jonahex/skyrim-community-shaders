@@ -10,6 +10,7 @@
 #include "Util.h"
 
 #include "Deferred.h"
+#include "Features/Skylighting.h"
 #include "Features/TerrainBlending.h"
 
 #include "VariableRateShading.h"
@@ -94,19 +95,24 @@ namespace PNState
 
 void State::Draw()
 {
-	auto terrainBlending = TerrainBlending::GetSingleton();
-	if (terrainBlending->loaded)
-		terrainBlending->TerrainShaderHacks();
+	auto& shaderCache = SIE::ShaderCache::Instance();
+	if (shaderCache.IsEnabled()) {
+		auto terrainBlending = TerrainBlending::GetSingleton();
+		if (terrainBlending->loaded)
+			terrainBlending->TerrainShaderHacks();
 
-	if (currentShader && updateShader) {
-		auto type = currentShader->shaderType.get();
-		if (type == RE::BSShader::Type::Utility) {
-			if (currentPixelDescriptor & static_cast<uint32_t>(SIE::ShaderCache::UtilityShaderFlags::RenderShadowmask)) {
-				Deferred::GetSingleton()->CopyShadowData();
+		auto skylighting = Skylighting::GetSingleton();
+		if (skylighting->loaded)
+			skylighting->SkylightingShaderHacks();
+
+		if (currentShader && updateShader) {
+			auto type = currentShader->shaderType.get();
+			if (type == RE::BSShader::Type::Utility) {
+				if (currentPixelDescriptor & static_cast<uint32_t>(SIE::ShaderCache::UtilityShaderFlags::RenderShadowmask)) {
+					Deferred::GetSingleton()->CopyShadowData();
+				}
 			}
-		}
-		auto& shaderCache = SIE::ShaderCache::Instance();
-		if (shaderCache.IsEnabled()) {
+
 			VariableRateShading::GetSingleton()->UpdateViews(type != RE::BSShader::Type::ImageSpace && type != RE::BSShader::Type::Sky && type != RE::BSShader::Type::Water);
 			if (type > 0 && type < RE::BSShader::Type::Total) {
 				if (enabledClasses[type - 1]) {
@@ -122,8 +128,11 @@ void State::Draw()
 						lastVertexDescriptor = currentVertexDescriptor;
 						lastPixelDescriptor = currentPixelDescriptor;
 
-						ID3D11Buffer* buffers[3] = { permutationCB->CB(), sharedDataCB->CB(), featureDataCB->CB() };
-						context->PSSetConstantBuffers(4, 3, buffers);
+						static Util::FrameChecker frameChecker;
+						if (frameChecker.isNewFrame()) {
+							ID3D11Buffer* buffers[3] = { permutationCB->CB(), sharedDataCB->CB(), featureDataCB->CB() };
+							context->PSSetConstantBuffers(4, 3, buffers);
+						}
 					}
 
 					if (IsDeveloperMode()) {
@@ -134,8 +143,8 @@ void State::Draw()
 				}
 			}
 		}
+		updateShader = false;
 	}
-	updateShader = false;
 }
 
 void State::Reset()
@@ -620,8 +629,11 @@ void State::UpdateSharedData()
 		delete[] data;
 	}
 
-	auto depth = RE::BSGraphics::Renderer::GetSingleton()->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY].depthSRV;
-	context->PSSetShaderResources(20, 1, &depth);
+	auto& depth = RE::BSGraphics::Renderer::GetSingleton()->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
+	auto terrainBlending = TerrainBlending::GetSingleton();
+	auto srv = (terrainBlending->loaded ? terrainBlending->blendedDepthTexture16->srv.get() : depth.depthSRV);
+
+	context->PSSetShaderResources(20, 1, &srv);
 }
 
 void State::SetupFrame()

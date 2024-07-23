@@ -11,6 +11,8 @@
 #include "Feature.h"
 #include "State.h"
 
+#include "Features/DynamicCubemaps.h"
+
 namespace SIE
 {
 	namespace SShaderCache
@@ -2037,6 +2039,7 @@ namespace SIE
 		processedTasks.insert(task);
 		tasksInProgress.erase(task);
 		conditionVariable.notify_one();
+		DynamicCubemaps::GetSingleton()->resetCapture = true;
 	}
 
 	void CompilationSet::Clear()

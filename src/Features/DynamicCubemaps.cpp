@@ -6,7 +6,7 @@
 #include <DDSTextureLoader.h>
 #include <DirectXTex.h>
 
-constexpr auto MIPLEVELS = 10;
+constexpr auto MIPLEVELS = 8;
 
 void DynamicCubemaps::DrawSettings()
 {
@@ -228,9 +228,9 @@ void DynamicCubemaps::UpdateCubemapCapture()
 	auto& context = State::GetSingleton()->context;
 
 	auto& depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
-	auto& snowSwap = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kSNOW_SWAP];
+	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 
-	ID3D11ShaderResourceView* srvs[2] = { depth.depthSRV, snowSwap.SRV };
+	ID3D11ShaderResourceView* srvs[2] = { depth.depthSRV, main.SRV };
 	context->CSSetShaderResources(0, 2, srvs);
 
 	ID3D11UnorderedAccessView* uavs[3] = { envCaptureTexture->uav.get(), envCaptureRawTexture->uav.get(), envCapturePositionTexture->uav.get() };
@@ -240,7 +240,6 @@ void DynamicCubemaps::UpdateCubemapCapture()
 	context->PSGetConstantBuffers(12, 1, buffers);
 
 	UpdateCubemapCB updateData{};
-	updateData.CameraData = Util::GetCameraData();
 	updateData.Reset = resetCapture;
 
 	static float3 cameraPreviousPosAdjust = { 0, 0, 0 };
@@ -372,24 +371,34 @@ void DynamicCubemaps::Irradiance(bool a_reflections)
 
 void DynamicCubemaps::UpdateCubemap()
 {
-	if (nextTask == NextTask::kInferrence) {
+	switch (nextTask) {
+	case NextTask::kInferrence:
 		nextTask = NextTask::kIrradiance;
 		Inferrence(false);
-	} else if (nextTask == NextTask::kIrradiance) {
+		break;
+
+	case NextTask::kIrradiance:
 		if (activeReflections)
 			nextTask = NextTask::kInferrence2;
 		else
 			nextTask = NextTask::kCapture;
 		Irradiance(false);
-	} else if (nextTask == NextTask::kInferrence2) {
+		break;
+
+	case NextTask::kInferrence2:
 		Inferrence(true);
 		nextTask = NextTask::kIrradiance2;
-	} else if (nextTask == NextTask::kIrradiance2) {
+		break;
+
+	case NextTask::kIrradiance2:
 		nextTask = NextTask::kCapture;
 		Irradiance(true);
-	} else if (nextTask == NextTask::kCapture) {
+		break;
+
+	case NextTask::kCapture:
 		UpdateCubemapCapture();
 		nextTask = NextTask::kInferrence;
+		break;
 	}
 }
 
@@ -399,14 +408,6 @@ void DynamicCubemaps::PostDeferred()
 
 	ID3D11ShaderResourceView* views[2] = { envReflectionsTexture->srv.get(), envTexture->srv.get() };
 	context->PSSetShaderResources(64, 2, views);
-}
-
-void DynamicCubemaps::Prepass()
-{
-}
-
-void DynamicCubemaps::Draw(const RE::BSShader*, const uint32_t)
-{
 }
 
 void DynamicCubemaps::SetupResources()
@@ -520,17 +521,4 @@ void DynamicCubemaps::Reset()
 		activeReflections = sky->mode.get() == RE::Sky::Mode::kFull;
 	else
 		activeReflections = false;
-}
-
-void DynamicCubemaps::Load(json& o_json)
-{
-	Feature::Load(o_json);
-}
-
-void DynamicCubemaps::Save(json&)
-{
-}
-
-void DynamicCubemaps::RestoreDefaultSettings()
-{
 }

@@ -223,17 +223,14 @@ void ScreenSpaceShadows::Prepass()
 	context->PSSetShaderResources(17, 1, &view);
 }
 
-void ScreenSpaceShadows::Load(json& o_json)
+void ScreenSpaceShadows::LoadSettings(json& o_json)
 {
-	if (o_json[GetName()].is_object())
-		bendSettings = o_json[GetName()];
-
-	Feature::Load(o_json);
+	bendSettings = o_json;
 }
 
-void ScreenSpaceShadows::Save(json& o_json)
+void ScreenSpaceShadows::SaveSettings(json& o_json)
 {
-	o_json[GetName()] = bendSettings;
+	o_json = bendSettings;
 }
 
 void ScreenSpaceShadows::RestoreDefaultSettings()
@@ -274,18 +271,20 @@ void ScreenSpaceShadows::SetupResources()
 
 		D3D11_TEXTURE2D_DESC texDesc{};
 		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-		D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
 
 		shadowMask.texture->GetDesc(&texDesc);
 		shadowMask.SRV->GetDesc(&srvDesc);
-		shadowMask.UAV->GetDesc(&uavDesc);
 
 		texDesc.Format = DXGI_FORMAT_R8_UNORM;
 		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
 
 		srvDesc.Format = texDesc.Format;
-		uavDesc.Format = texDesc.Format;
 
+		D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {
+			.Format = texDesc.Format,
+			.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D,
+			.Texture2D = { .MipSlice = 0 }
+		};
 		screenSpaceShadowsTexture = new Texture2D(texDesc);
 		screenSpaceShadowsTexture->CreateSRV(srvDesc);
 		screenSpaceShadowsTexture->CreateUAV(uavDesc);

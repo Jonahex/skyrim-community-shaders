@@ -17,7 +17,7 @@ RWTexture2D<half2> SnowParametersRW : register(u2);
 
 #if defined(DYNAMIC_CUBEMAPS)
 Texture2D<float> DepthTexture : register(t5);
-Texture2D<unorm half3> ReflectanceTexture : register(t6);
+Texture2D<half3> ReflectanceTexture : register(t6);
 TextureCube<half3> EnvTexture : register(t7);
 TextureCube<half3> EnvReflectionsTexture : register(t8);
 
@@ -25,7 +25,8 @@ SamplerState LinearSampler : register(s0);
 #endif
 
 #if defined(SKYLIGHTING)
-Texture2D<half2> SkylightingTexture : register(t9);
+#	include "Common/Spherical Harmonics/SphericalHarmonics.hlsli"
+Texture2D<unorm float4> SkylightingTexture : register(t9);
 #endif
 
 [numthreads(8, 8, 1)] void main(uint3 dispatchID
@@ -74,23 +75,37 @@ Texture2D<half2> SkylightingTexture : register(t9);
 		half3 R = reflect(V, normalWS);
 
 		half roughness = 1.0 - glossiness;
-		half level = roughness * 9.0;
-
-		half3 specularIrradiance = EnvTexture.SampleLevel(LinearSampler, R, level).xyz;
-		specularIrradiance = sRGB2Lin(specularIrradiance);
-
-		half3 specularIrradianceReflections = EnvReflectionsTexture.SampleLevel(LinearSampler, R, level).xyz;
-		specularIrradianceReflections = sRGB2Lin(specularIrradianceReflections);
+		half level = roughness * 7.0;
+	
 
 		half3 directionalAmbientColor = sRGB2Lin(mul(DirectionalAmbient, half4(R, 1.0)));
 		half3 finalIrradiance = lerp(0, directionalAmbientColor, pbrWeight);
 
 #	if defined(INTERIOR)
+		half3 specularIrradiance = EnvTexture.SampleLevel(LinearSampler, R, level).xyz;
+		specularIrradiance = sRGB2Lin(specularIrradiance);
+
 		finalIrradiance += specularIrradiance;
 #	elif defined(SKYLIGHTING)
-		half skylightingSpecular = SkylightingTexture[dispatchID.xy].y;
-		finalIrradiance += lerp(specularIrradiance, specularIrradianceReflections, skylightingSpecular);
+		sh2 skylightingSH = SkylightingTexture[dispatchID.xy];
+		half skylighting = saturate(shUnproject(skylightingSH, R));
+	
+		half3 specularIrradiance = 1;
+		if (skylighting < 1.0) {
+			specularIrradiance = EnvTexture.SampleLevel(LinearSampler, R, level).xyz;
+			specularIrradiance = sRGB2Lin(specularIrradiance);
+		}
+
+		half3 specularIrradianceReflections = 1.0;
+		if (skylighting > 0.0) {
+			specularIrradianceReflections = EnvReflectionsTexture.SampleLevel(LinearSampler, R, level).xyz;
+			specularIrradianceReflections = sRGB2Lin(specularIrradianceReflections);
+		}
+		finalIrradiance += lerp(specularIrradiance, specularIrradianceReflections, skylighting);
 #	else
+		half3 specularIrradianceReflections = EnvReflectionsTexture.SampleLevel(LinearSampler, R, level).xyz;
+		specularIrradianceReflections = sRGB2Lin(specularIrradianceReflections);
+
 		finalIrradiance += specularIrradianceReflections;
 #	endif
 
@@ -119,7 +134,7 @@ Texture2D<half2> SkylightingTexture : register(t9);
 
 #endif
 
-	MainRW[dispatchID.xy] = color;
-	NormalTAAMaskSpecularMaskRW[dispatchID.xy] = half4(EncodeNormalVanilla(normalVS), 0.0, glossiness);
+	MainRW[dispatchID.xy] = min(color, 128);  // Vanilla bloom fix
+	NormalTAAMaskSpecularMaskRW[dispatchID.xy] = half4(EncodeNormalVanilla(normalVS), 0.0, 0.0);
 	SnowParametersRW[dispatchID.xy] = snowParameters;
 }

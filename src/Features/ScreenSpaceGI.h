@@ -11,22 +11,28 @@ struct ScreenSpaceGI : Feature
 		return &singleton;
 	}
 
+	bool inline SupportsVR() override { return true; }
+
 	virtual inline std::string GetName() override { return "Screen Space GI"; }
 	virtual inline std::string GetShortName() override { return "ScreenSpaceGI"; }
+	virtual inline std::string_view GetShaderDefineName() override { return "SSGI"; }
+	virtual inline bool HasShaderDefine(RE::BSShader::Type t) override
+	{
+		return t == RE::BSShader::Type::Lighting ||
+		       t == RE::BSShader::Type::Grass ||
+		       t == RE::BSShader::Type::DistantTree;
+	};
 
 	virtual void RestoreDefaultSettings() override;
 	virtual void DrawSettings() override;
 
-	virtual void Load(json& o_json) override;
-	virtual void Save(json& o_json) override;
+	virtual void LoadSettings(json& o_json) override;
+	virtual void SaveSettings(json& o_json) override;
 
-	virtual inline void Reset() override{};
 	virtual void SetupResources() override;
 	virtual void ClearShaderCache() override;
 	void CompileComputeShaders();
 	bool ShadersOK();
-
-	virtual inline void Draw(const RE::BSShader*, const uint32_t) override{};
 
 	void DrawSSGI(Texture2D* srcPrevAmbient);
 	void UpdateSB();
@@ -57,20 +63,19 @@ struct ScreenSpaceGI : Feature
 		float BackfaceStrength = 0.f;
 		bool EnableGIBounce = true;
 		float GIBounceFade = 1.f;
-		float GIDistanceCompensation = 1.f;
-		float GICompensationMaxDist = 500;
+		float GIDistanceCompensation = 0.f;
 		// mix
 		float AOPower = 1.f;
-		float GIStrength = 6.f;
+		float GIStrength = 4.f;
 		// denoise
 		bool EnableTemporalDenoiser = true;
 		bool EnableBlur = true;
-		float DepthDisocclusion = .1f;
+		float DepthDisocclusion = .02f;
 		float NormalDisocclusion = .1f;
 		uint MaxAccumFrames = 16;
-		float BlurRadius = 6.f;
+		float BlurRadius = 15.f;
 		uint BlurPasses = 1;
-		float DistanceNormalisation = 1.f;
+		float DistanceNormalisation = 2.f;
 	} settings;
 
 	struct alignas(16) SSGICB
