@@ -84,7 +84,6 @@ Texture3D<sh2> SkylightingProbeArray : register(t9);
 
 		half roughness = 1.0 - glossiness;
 		half level = roughness * 7.0;
-	
 
 		half3 directionalAmbientColor = sRGB2Lin(mul(DirectionalAmbient, half4(R, 1.0)));
 		half3 finalIrradiance = lerp(0, directionalAmbientColor, pbrWeight);

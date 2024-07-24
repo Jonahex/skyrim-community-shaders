@@ -89,8 +89,8 @@ RWTexture2D<half3> DiffuseAmbientRW : register(u1);
 #	endif
 	linDiffuseColor += ssgiDiffuse.rgb;
 #endif
-	
-    linAmbient *= visibility;
+
+	linAmbient *= visibility;
 
 	half3 ambient = Lin2sRGB(linAmbient);
 	diffuseColor = Lin2sRGB(linDiffuseColor);

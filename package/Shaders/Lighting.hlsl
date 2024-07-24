@@ -403,9 +403,9 @@ struct PS_OUTPUT
 #else
 struct PS_OUTPUT
 {
-    float4 Diffuse : SV_Target0;
-    float4 MotionVectors : SV_Target1;
-    float4 ScreenSpaceNormals : SV_Target2;
+	float4 Diffuse : SV_Target0;
+	float4 MotionVectors : SV_Target1;
+	float4 ScreenSpaceNormals : SV_Target2;
 #	if defined(SNOW)
 	float4 Parameters : SV_Target3;
 #	endif
@@ -920,7 +920,7 @@ float3 ApplyFogAndClampColor(float3 srcColor, float4 fogParam, float3 clampColor
 	return min(preClampColor + clampColor, srcColor);
 }
 
-#if defined(WATER_CAUSTICS)
+#	if defined(WATER_CAUSTICS)
 #		include "WaterCaustics/WaterCaustics.hlsli"
 #	endif
 
