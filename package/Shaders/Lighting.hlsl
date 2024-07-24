@@ -993,7 +993,7 @@ float3 ApplyFogAndClampColor(float3 srcColor, float4 fogParam, float3 clampColor
 #	endif
 
 #	if defined(SKYLIGHTING)
-#		define LinearSampler SampColorSampler
+#		define SL_INCL_METHODS
 #		include "Skylighting/Skylighting.hlsli"
 #	endif
 
@@ -1841,7 +1841,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float nearFactor = smoothstep(4096.0 * 2.5, 0.0, viewPosition.z);
 
 #	if defined(SKYLIGHTING)
-	float4 skylightingSH = SkylightingTexture.Load(int3(input.Position.xy, 0));
+#		if defined(VR)
+	float3 positionMSSkylight = input.WorldPosition.xyz + (eyeIndex == 1 ? CameraPosAdjust[1] - CameraPosAdjust[0] : 0);
+#		else
+	float3 positionMSSkylight = input.WorldPosition.xyz;
+#		endif
+
+	sh2 skylightingSH = sampleSkylighting(skylightingSettings, SkylightingProbeArray, positionMSSkylight, worldSpaceNormal);
 #	endif
 
 #	if defined(WETNESS_EFFECTS)
@@ -1859,13 +1865,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float maxOcclusion = 1;
 	float minWetnessAngle = 0;
 	minWetnessAngle = saturate(max(minWetnessValue, worldSpaceNormal.z));
-
 #		if defined(SKYLIGHTING)
-	float wetnessOcclusion = saturate(shUnproject(skylightingSH, float3(0, 0, -1)));
-	wetnessOcclusion = saturate(wetnessOcclusion * 1.5);
-#		endif
-
-	bool raindropOccluded = false;
+	float wetnessOcclusion = saturate(shUnproject(skylightingSH, float3(0, 0, 1)) * 10);
+#		endif  // SKYLIGHTING
 
 	float4 raindropInfo = float4(0, 0, 1, 0);
 	if (worldSpaceNormal.z > 0 && wetnessEffects.Raining > 0.0f && wetnessEffects.EnableRaindropFx &&
@@ -2176,10 +2178,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 	float3 directionalAmbientColor = mul(DirectionalAmbient, modelNormal);
 
-#	if defined(SKYLIGHTING) && !defined(SSGI)
-	// Will look incorrect on objects which have depth which deviates a lot
-	float skylighting = saturate(shUnproject(skylightingSH, worldSpaceNormal));
-	directionalAmbientColor *= lerp(1.0 / 3.0, 1.0, skylighting);
+	float3 reflectionDiffuseColor = diffuseColor + directionalAmbientColor;
+
+#	if defined(SKYLIGHTING)
+	float skylightingDiffuse = shHallucinateZH3Irradiance(skylightingSH, worldSpaceNormal);
+	skylightingDiffuse = lerp(skylightingSettings.MixParams.x, 1, saturate(skylightingDiffuse * skylightingSettings.MixParams.y));
+	skylightingDiffuse = applySkylightingFadeout(skylightingDiffuse, viewPosition.z);
+	directionalAmbientColor *= skylightingDiffuse;
 #	endif
 
 #	if defined(TRUE_PBR) && defined(LOD_LAND_BLEND) && !defined(DEFERRED)
@@ -2250,7 +2255,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 	// This also applies fresnel
 	float3 wetnessReflectance = GetWetnessAmbientSpecular(screenUV, wetnessNormal, worldSpaceVertexNormal, worldSpaceViewDirection, 1.0 - wetnessGlossinessSpecular);
-	;
 
 #		if !defined(DEFERRED)
 	wetnessSpecular += wetnessReflectance;
@@ -2329,9 +2333,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		specularColor = 0;
 #	endif
 
-#	if defined(DEFERRED)
-	diffuseColor += directionalAmbientColor;
-#	endif
+	diffuseColor = reflectionDiffuseColor;
 
 #	if (defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX) || defined(EYE))
 #		if defined(DYNAMIC_CUBEMAPS)

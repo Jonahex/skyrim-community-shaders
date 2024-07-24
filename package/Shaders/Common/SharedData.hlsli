@@ -44,10 +44,6 @@ struct CubemapCreatorSettings
 	float3 pad0;
 
 	float4 CubemapColor;
-
-	float scatterCoeffMult;
-	float absorpCoeffMult;
-	float2 pad1;
 };
 
 struct TerraOccSettings
@@ -118,6 +114,10 @@ struct LightLimitFixSettings
 	uint pad0;
 };
 
+#	define SL_INCL_STRUCT
+#	include "Skylighting/Skylighting.hlsli"
+#	undef SL_INCL_STRUCT
+
 struct PBRSettings
 {
 	float DirectionalLightColorMultiplier;
@@ -135,6 +135,7 @@ cbuffer FeatureData : register(b6)
 	TerraOccSettings terraOccSettings;
 	WetnessEffects wetnessEffects;
 	LightLimitFixSettings lightLimitFixSettings;
+	SkylightingSettings skylightingSettings;
 	PBRSettings pbrSettings;
 };
 
