@@ -2268,7 +2268,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 	float4 color = 0;
 
-#	if defined(TRUE_PBR)
+#	if defined(TRUE_PBR) && defined(DYNAMIC_CUBEMAPS)
 	{
 		float3 directLightsDiffuseInput = diffuseColor * baseColor.xyz;
 		[branch] if ((PBRFlags & TruePBR_ColoredCoat) != 0)
