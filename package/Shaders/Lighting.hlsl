@@ -1894,14 +1894,14 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #	if defined(TRUE_PBR)
 	{
-		float3 pbrDirLightColor = PBR::AdjustDirectionalLightColor(DirLightColor.xyz);
-		float3 mainLayerFinalLightColor = fullShadowDirLightColorMultiplier * pbrDirLightColor;
+		float3 linLightColor = DirLightColor.xyz;
+		float3 mainLayerFinalLightColor = fullShadowDirLightColorMultiplier * linLightColor;
 		float coatShadowDirLightColorMultiplier = fullShadowDirLightColorMultiplier;
 		[branch] if ((PBRFlags & TruePBR_InterlayerParallax) != 0)
 		{
 			coatShadowDirLightColorMultiplier = noParallaxShadowDirLightColorMultiplier;
 		}
-		float3 coatFinalLightColor = coatShadowDirLightColorMultiplier * pbrDirLightColor;
+		float3 coatFinalLightColor = coatShadowDirLightColorMultiplier * linLightColor;
 
 		float3 dirDiffuseColor, coatDirDiffuseColor, dirTransmissionColor, dirSpecularColor;
 		PBR::GetDirectLightInput(dirDiffuseColor, coatDirDiffuseColor, dirTransmissionColor, dirSpecularColor, modelNormal.xyz, coatModelNormal, refractedViewDirection, viewDirection, refractedDirLightDirection, DirLightDirection, mainLayerFinalLightColor, coatFinalLightColor, pbrSurfaceProperties);
@@ -1975,8 +1975,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 		float3 normalizedLightDirection = normalize(lightDirection);
 
-		lightColor *= lightShadow;
-
 #			if defined(TRUE_PBR)
 		{
 			float3 pointDiffuseColor, coatPointDiffuseColor, pointTransmissionColor, pointSpecularColor;
@@ -1985,14 +1983,16 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 			{
 				refractedLightDirection = -refract(-normalizedLightDirection, coatModelNormal, eta);
 			}
-			float3 pbrLightColor = PBR::AdjustPointLightColor(lightColor);
-			PBR::GetDirectLightInput(pointDiffuseColor, coatPointDiffuseColor, pointTransmissionColor, pointSpecularColor, modelNormal.xyz, coatModelNormal, refractedViewDirection, viewDirection, refractedLightDirection, normalizedLightDirection, pbrLightColor, pbrLightColor, pbrSurfaceProperties);
+			float3 linLightColor = PBR::AdjustPointLightColor(lightColor) * lightShadow;
+			PBR::GetDirectLightInput(pointDiffuseColor, coatPointDiffuseColor, pointTransmissionColor, pointSpecularColor, modelNormal.xyz, coatModelNormal, refractedViewDirection, viewDirection, refractedLightDirection, normalizedLightDirection, linLightColor, linLightColor, pbrSurfaceProperties);
 			lightsDiffuseColor += pointDiffuseColor;
 			coatLightsDiffuseColor += coatPointDiffuseColor;
 			transmissionColor += pointTransmissionColor;
 			specularColorPBR += pointSpecularColor;
 		}
 #			else
+		lightColor *= lightShadow;
+		
 		float lightAngle = dot(modelNormal.xyz, normalizedLightDirection.xyz);
 		float3 lightDiffuseColor = lightColor * saturate(lightAngle.xxx);
 
@@ -2111,17 +2111,14 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		}
 #			endif
 
-		float3 noParallaxShadowLightColor = lightColor * lightShadow;
-		lightColor = parallaxShadow * noParallaxShadowLightColor;
-		float3 fullShadowLightColor = lightColor * contactShadow;
-
 #			if defined(TRUE_PBR)
 		{
-			float3 mainLayerFinalLightColor = PBR::AdjustPointLightColor(fullShadowLightColor);
+			float3 linLightColor = PBR::AdjustPointLightColor(lightColor);
+			float3 mainLayerFinalLightColor = linLightColor * lightShadow * parallaxShadow * contactShadow;
 			float3 coatFinalLightColor = mainLayerFinalLightColor;
 			[branch] if ((PBRFlags & TruePBR_InterlayerParallax) != 0)
 			{
-				coatFinalLightColor = PBR::AdjustPointLightColor(noParallaxShadowLightColor);
+				coatFinalLightColor = linLightColor * lightShadow * contactShadow;
 			}
 
 			float3 pointDiffuseColor, coatPointDiffuseColor, pointTransmissionColor, pointSpecularColor;
@@ -2136,6 +2133,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #				endif
 		}
 #			else
+		lightColor = lightColor * lightShadow * parallaxShadow;
+		
 		float3 lightDiffuseColor = lightColor * contactShadow * saturate(lightAngle.xxx);
 
 #				if defined(SOFT_LIGHTING)

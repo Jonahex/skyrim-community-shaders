@@ -9,7 +9,7 @@
 #include "ShaderCache.h"
 #include "State.h"
 
-namespace PNState
+namespace PNTruePBR
 {
 	template <typename ResultType>
 	bool Read(const json& config, const std::string_view& key, ResultType& result)
@@ -95,6 +95,16 @@ namespace PNState
 			logger::error("[TruePBR] failed to serialize {} : {}", outputPath, e.what());
 			return;
 		}
+	}
+
+	float sRGB2Lin(float color)
+	{
+		return pow(color, 2.2f);
+	}
+
+	RE::NiColor sRGB2Lin(const RE::NiColor& color)
+	{
+		return RE::NiColor(sRGB2Lin(color.red), sRGB2Lin(color.green), sRGB2Lin(color.blue));
 	}
 }
 
@@ -233,21 +243,21 @@ void TruePBR::SetupTextureSetData()
 
 	pbrTextureSets.clear();
 
-	PNState::ReadPBRRecordConfigs("Data\\PBRTextureSets", [this](const std::string& editorId, const json& config) {
+	PNTruePBR::ReadPBRRecordConfigs("Data\\PBRTextureSets", [this](const std::string& editorId, const json& config) {
 		PBRTextureSetData textureSetData;
 
-		PNState::Read(config, "roughnessScale", textureSetData.roughnessScale);
-		PNState::Read(config, "displacementScale", textureSetData.displacementScale);
-		PNState::Read(config, "specularLevel", textureSetData.specularLevel);
-		PNState::Read(config, "subsurfaceColor", textureSetData.subsurfaceColor);
-		PNState::Read(config, "subsurfaceOpacity", textureSetData.subsurfaceOpacity);
-		PNState::Read(config, "coatColor", textureSetData.coatColor);
-		PNState::Read(config, "coatStrength", textureSetData.coatStrength);
-		PNState::Read(config, "coatRoughness", textureSetData.coatRoughness);
-		PNState::Read(config, "coatSpecularLevel", textureSetData.coatSpecularLevel);
-		PNState::Read(config, "innerLayerDisplacementOffset", textureSetData.innerLayerDisplacementOffset);
-		PNState::Read(config, "fuzzColor", textureSetData.fuzzColor);
-		PNState::Read(config, "fuzzWeight", textureSetData.fuzzWeight);
+		PNTruePBR::Read(config, "roughnessScale", textureSetData.roughnessScale);
+		PNTruePBR::Read(config, "displacementScale", textureSetData.displacementScale);
+		PNTruePBR::Read(config, "specularLevel", textureSetData.specularLevel);
+		PNTruePBR::Read(config, "subsurfaceColor", textureSetData.subsurfaceColor);
+		PNTruePBR::Read(config, "subsurfaceOpacity", textureSetData.subsurfaceOpacity);
+		PNTruePBR::Read(config, "coatColor", textureSetData.coatColor);
+		PNTruePBR::Read(config, "coatStrength", textureSetData.coatStrength);
+		PNTruePBR::Read(config, "coatRoughness", textureSetData.coatRoughness);
+		PNTruePBR::Read(config, "coatSpecularLevel", textureSetData.coatSpecularLevel);
+		PNTruePBR::Read(config, "innerLayerDisplacementOffset", textureSetData.innerLayerDisplacementOffset);
+		PNTruePBR::Read(config, "fuzzColor", textureSetData.fuzzColor);
+		PNTruePBR::Read(config, "fuzzWeight", textureSetData.fuzzWeight);
 
 		pbrTextureSets.insert_or_assign(editorId, textureSetData);
 	});
@@ -277,12 +287,12 @@ void TruePBR::SetupMaterialObjectData()
 
 	pbrMaterialObjects.clear();
 
-	PNState::ReadPBRRecordConfigs("Data\\PBRMaterialObjects", [this](const std::string& editorId, const json& config) {
+	PNTruePBR::ReadPBRRecordConfigs("Data\\PBRMaterialObjects", [this](const std::string& editorId, const json& config) {
 		PBRMaterialObjectData materialObjectData;
 
-		PNState::Read(config, "baseColorScale", materialObjectData.baseColorScale);
-		PNState::Read(config, "roughness", materialObjectData.roughness);
-		PNState::Read(config, "specularLevel", materialObjectData.specularLevel);
+		PNTruePBR::Read(config, "baseColorScale", materialObjectData.baseColorScale);
+		PNTruePBR::Read(config, "roughness", materialObjectData.roughness);
+		PNTruePBR::Read(config, "specularLevel", materialObjectData.specularLevel);
 
 		pbrMaterialObjects.insert_or_assign(editorId, materialObjectData);
 	});
@@ -312,11 +322,11 @@ void TruePBR::SetupLightingTemplateData()
 
 	pbrLightingTemplates.clear();
 
-	PNState::ReadPBRRecordConfigs("Data\\PBRLightingTemplates", [this](const std::string& editorId, const json& config) {
+	PNTruePBR::ReadPBRRecordConfigs("Data\\PBRLightingTemplates", [this](const std::string& editorId, const json& config) {
 		PBRLightingTemplateData lightingTemplateData;
 
-		PNState::Read(config, "directionalLightColorScale", lightingTemplateData.directionalLightColorScale);
-		PNState::Read(config, "directionalAmbientLightColorScale", lightingTemplateData.directionalAmbientLightColorScale);
+		PNTruePBR::Read(config, "directionalLightColorScale", lightingTemplateData.directionalLightColorScale);
+		PNTruePBR::Read(config, "directionalAmbientLightColorScale", lightingTemplateData.directionalAmbientLightColorScale);
 
 		pbrLightingTemplates.insert_or_assign(editorId, lightingTemplateData);
 	});
@@ -348,7 +358,7 @@ void TruePBR::SavePBRLightingTemplateData(const std::string& editorId)
 	config["directionalLightColorScale"] = pbrLightingTemplateData.directionalLightColorScale;
 	config["directionalAmbientLightColorScale"] = pbrLightingTemplateData.directionalAmbientLightColorScale;
 
-	PNState::SavePBRRecordConfig("Data\\PBRLightingTemplates\\", editorId, config);
+	PNTruePBR::SavePBRRecordConfig("Data\\PBRLightingTemplates\\", editorId, config);
 }
 
 void TruePBR::SetupWeatherData()
@@ -357,11 +367,11 @@ void TruePBR::SetupWeatherData()
 
 	pbrWeathers.clear();
 
-	PNState::ReadPBRRecordConfigs("Data\\PBRWeathers", [this](const std::string& editorId, const json& config) {
+	PNTruePBR::ReadPBRRecordConfigs("Data\\PBRWeathers", [this](const std::string& editorId, const json& config) {
 		PBRWeatherData weatherData;
 
-		PNState::Read(config, "directionalLightColorScale", weatherData.directionalLightColorScale);
-		PNState::Read(config, "directionalAmbientLightColorScale", weatherData.directionalAmbientLightColorScale);
+		PNTruePBR::Read(config, "directionalLightColorScale", weatherData.directionalLightColorScale);
+		PNTruePBR::Read(config, "directionalAmbientLightColorScale", weatherData.directionalAmbientLightColorScale);
 
 		pbrWeathers.insert_or_assign(editorId, weatherData);
 	});
@@ -393,7 +403,7 @@ void TruePBR::SavePBRWeatherData(const std::string& editorId)
 	config["directionalLightColorScale"] = pbrWeatherData.directionalLightColorScale;
 	config["directionalAmbientLightColorScale"] = pbrWeatherData.directionalAmbientLightColorScale;
 
-	PNState::SavePBRRecordConfig("Data\\PBRWeathers\\", editorId, config);
+	PNTruePBR::SavePBRRecordConfig("Data\\PBRWeathers\\", editorId, config);
 }
 
 namespace Permutations
@@ -954,8 +964,22 @@ struct BSLightingShader_SetupGeometry
 	{
 		const uint32_t originalExtraFlags = shader->currentRawTechnique & 0b111000u;
 
+		const auto* truePbr = TruePBR::GetSingleton();
+
+		RE::NiColor originalColor;
+
 		if ((shader->currentRawTechnique & static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::TruePbr)) != 0) {
 			shader->currentRawTechnique |= static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::AmbientSpecular);
+
+			auto& data = pass->sceneLights[0]->light->GetLightRuntimeData();
+			originalColor = data.diffuse;
+
+			const auto linDiffuse = PNTruePBR::sRGB2Lin(data.diffuse);
+			data.diffuse = {
+				truePbr->settings.directionalLightColorMultiplier * linDiffuse.red,
+				truePbr->settings.directionalLightColorMultiplier * linDiffuse.green,
+				truePbr->settings.directionalLightColorMultiplier * linDiffuse.blue
+			};
 		}
 
 		shader->currentRawTechnique &= ~0b111000u;
@@ -968,6 +992,11 @@ struct BSLightingShader_SetupGeometry
 
 		if ((shader->currentRawTechnique & static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::TruePbr)) != 0) {
 			shader->currentRawTechnique &= ~static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::AmbientSpecular);
+
+			if (pass->numLights > 0) {
+				auto& data = pass->sceneLights[0]->light->GetLightRuntimeData();
+				data.diffuse = originalColor;
+			}
 		}
 	}
 	static inline REL::Relocation<decltype(thunk)> func;
@@ -1401,6 +1430,43 @@ struct BSGrassShader_SetupMaterial
 			func(shader, material);
 		}
 	};
+	static inline REL::Relocation<decltype(thunk)> func;
+};
+
+struct BSGrassShader_SetupGeometry
+{
+	static void thunk(RE::BSShader* shader, RE::BSRenderPass* pass, uint32_t renderFlags)
+	{
+		auto* state = State::GetSingleton();
+		const auto technique = static_cast<SIE::ShaderCache::GrassShaderTechniques>(state->currentPixelDescriptor & 0b1111);
+
+		const auto* truePbr = TruePBR::GetSingleton();
+
+		RE::NiColor originalColor;
+
+		if (technique == SIE::ShaderCache::GrassShaderTechniques::TruePbr) {
+			if (pass->numLights > 0) {
+				auto& data = pass->sceneLights[0]->light->GetLightRuntimeData();
+				originalColor = data.diffuse;
+
+				const auto linDiffuse = PNTruePBR::sRGB2Lin(data.diffuse);
+				data.diffuse = {
+					truePbr->settings.directionalLightColorMultiplier * linDiffuse.red,
+					truePbr->settings.directionalLightColorMultiplier * linDiffuse.green,
+					truePbr->settings.directionalLightColorMultiplier * linDiffuse.blue
+				};
+			}
+		}
+
+		func(shader, pass, renderFlags);
+
+		if (technique == SIE::ShaderCache::GrassShaderTechniques::TruePbr) {
+			if (pass->numLights > 0) {
+				auto& data = pass->sceneLights[0]->light->GetLightRuntimeData();
+				data.diffuse = originalColor;
+			}
+		}
+	}
 	static inline REL::Relocation<decltype(thunk)> func;
 };
 
