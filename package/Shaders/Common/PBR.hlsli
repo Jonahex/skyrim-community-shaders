@@ -8,7 +8,7 @@
 #define TruePBR_InterlayerParallax (1 << 7)
 #define TruePBR_CoatNormal (1 << 8)
 #define TruePBR_Fuzz (1 << 9)
-#define TruePBR_HairMarschner (1 << 9)
+#define TruePBR_HairMarschner (1 << 10)
 #define TruePBR_LandTile0PBR (1 << 0)
 #define TruePBR_LandTile1PBR (1 << 1)
 #define TruePBR_LandTile2PBR (1 << 2)
