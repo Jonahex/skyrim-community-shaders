@@ -1992,7 +1992,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		}
 #			else
 		lightColor *= lightShadow;
-		
+
 		float lightAngle = dot(modelNormal.xyz, normalizedLightDirection.xyz);
 		float3 lightDiffuseColor = lightColor * saturate(lightAngle.xxx);
 
@@ -2134,7 +2134,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		}
 #			else
 		lightColor = lightColor * lightShadow * parallaxShadow;
-		
+
 		float3 lightDiffuseColor = lightColor * contactShadow * saturate(lightAngle.xxx);
 
 #				if defined(SOFT_LIGHTING)
