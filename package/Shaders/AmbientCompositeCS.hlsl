@@ -48,8 +48,8 @@ RWTexture2D<half3> DiffuseAmbientRW : register(u1);
 	half pbrWeight = masks2.z;
 
 	half3 normalWS = normalize(mul(CameraViewInverse[eyeIndex], half4(normalVS, 0)).xyz);
-
-	half3 directionalAmbientColor = mul(DirectionalAmbient, half4(normalWS, 1.0));
+	
+	half3 directionalAmbientColor = sRGB2Lin(mul(DirectionalAmbient, half4(normalWS, 1.0)));
 
 	half3 ambient = albedo * directionalAmbientColor;
 

@@ -40,13 +40,13 @@ cbuffer PerGeometry : register(b2)
 
 float GetTonemapFactorReinhard(float luminance)
 {
-	return (luminance * (luminance * Param.y + 1)) / (luminance + 1);
+	return (luminance * (luminance * sRGB2Lin(Param.y) + 1)) / (luminance + 1);
 }
 
 float GetTonemapFactorHejlBurgessDawson(float luminance)
 {
 	float tmp = max(0, luminance - 0.004);
-	return Param.y *
+	return sRGB2Lin(Param.y) *
 	       pow(((tmp * 6.2 + 0.5) * tmp) / (tmp * (tmp * 6.2 + 1.7) + 0.06), GammaCorrectionValue);
 }
 
@@ -103,7 +103,7 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 
 	float3 blendedColor =
-		blendColor * (blendFactor / luminance) + saturate(Param.x - blendFactor) * imageColor;
+		blendColor * (blendFactor / luminance) /*+ saturate(Param.x - blendFactor) * imageColor*/;
 	float blendedLuminance = RGBToLuminance(blendedColor);
 
 	float4 linearColor = lerp(avgValue.x,
@@ -114,6 +114,7 @@ PS_OUTPUT main(PS_INPUT input)
 #		if defined(FADE)
 	srgbColor = lerp(srgbColor, Fade, Fade.w);
 #		endif
+	srgbColor.rgb = Lin2sRGB(srgbColor.rgb);
 	psout.Color = srgbColor;
 
 #	endif

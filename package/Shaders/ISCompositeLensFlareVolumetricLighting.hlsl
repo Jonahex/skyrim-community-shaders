@@ -1,3 +1,4 @@
+#include "Common/Color.hlsli"
 #include "Common/DummyVSTexCoord.hlsl"
 #include "Common/FrameBuffer.hlsli"
 
@@ -29,7 +30,7 @@ PS_OUTPUT main(PS_INPUT input)
 #	if defined(VOLUMETRIC_LIGHTING)
 	float2 screenPosition = GetDynamicResolutionAdjustedScreenPosition(input.TexCoord);
 	float volumetricLightingPower = VLSourceTex.Sample(VLSourceSampler, screenPosition).x;
-	color += VolumetricLightingColor.xyz * volumetricLightingPower;
+	color += sRGB2Lin(VolumetricLightingColor.xyz * volumetricLightingPower);
 #	endif
 
 #	if defined(LENS_FLARE)

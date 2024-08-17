@@ -1,3 +1,4 @@
+#include "Common/Color.hlsli"
 #include "Common/DummyVSTexCoord.hlsl"
 #include "Common/FrameBuffer.hlsli"
 
@@ -164,7 +165,7 @@ PS_OUTPUT main(PS_INPUT input)
 #	if defined(APPLY_FOG)
 	float fogDistanceFactor = (2 * CameraNearFar.x * CameraNearFar.y) / ((CameraNearFar.y + CameraNearFar.x) - (2 * (1.01 * depth - 0.01) - 1) * (CameraNearFar.y - CameraNearFar.x));
 	float fogFactor = min(FogParam.w, pow(saturate(fogDistanceFactor * FogParam.y - FogParam.x), FogParam.z));
-	float3 fogColor = lerp(FogNearColor.xyz, FogFarColor.xyz, fogFactor);
+	float3 fogColor = lerp(sRGB2Lin(FogNearColor.xyz), sRGB2Lin(FogFarColor.xyz), fogFactor);
 	if (depth < 1) {
 		composedColor.xyz = FogNearColor.w * lerp(composedColor.xyz, fogColor, fogFactor);
 	}

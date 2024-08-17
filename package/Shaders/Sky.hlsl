@@ -1,3 +1,4 @@
+#include "Common/Color.hlsli"
 #include "Common/Constants.hlsli"
 #include "Common/FrameBuffer.hlsli"
 #include "Common/VR.hlsli"
@@ -98,7 +99,7 @@ VS_OUTPUT main(VS_INPUT input)
 
 	vsout.TexCoord0.xy = input.TexCoord;
 	vsout.TexCoord2.x = saturate((1.0 / 17.0) * eyeHeightDelta);
-	vsout.Color.xyz = BlendColor[0].xyz * VParams;
+	vsout.Color.xyz = sRGB2Lin(BlendColor[0].xyz) * VParams;
 	vsout.Color.w = BlendColor[0].w;
 
 #	else  // MOONMASK HORIZFADE
@@ -200,12 +201,15 @@ PS_OUTPUT main(PS_INPUT input)
 #	ifndef OCCLUSION
 #		ifndef TEXLERP
 	float4 baseColor = TexBaseSampler.Sample(SampBaseSampler, input.TexCoord0.xy);
+	baseColor.rgb = sRGB2Lin(baseColor.rgb);
 #			ifdef TEXFADE
 	baseColor.w *= PParams.x;
 #			endif
 #		else
 	float4 blendColor = TexBlendSampler.Sample(SampBlendSampler, input.TexCoord1.xy);
+	blendColor.rgb = sRGB2Lin(blendColor.rgb);
 	float4 baseColor = TexBaseSampler.Sample(SampBaseSampler, input.TexCoord0.xy);
+	baseColor.rgb = sRGB2Lin(baseColor.rgb);
 	baseColor = PParams.xxxx * (-baseColor + blendColor) + baseColor;
 #		endif
 
@@ -215,10 +219,10 @@ PS_OUTPUT main(PS_INPUT input)
 		TexNoiseGradSampler.Sample(SampNoiseGradSampler, noiseGradUv).x * 0.03125 + -0.0078125;
 
 #			ifdef TEX
-	psout.Color.xyz = (input.Color.xyz * baseColor.xyz + PParams.yyy) + noiseGrad;
+	psout.Color.xyz = (input.Color.xyz * baseColor.xyz + PParams.y) + noiseGrad;
 	psout.Color.w = baseColor.w * input.Color.w;
 #			else
-	psout.Color.xyz = (PParams.yyy + input.Color.xyz) + noiseGrad;
+	psout.Color.xyz = (PParams.y + input.Color.xyz) + noiseGrad;
 	psout.Color.w = input.Color.w;
 #			endif  // TEX
 
@@ -230,11 +234,11 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 
 #		elif defined(HORIZFADE)
-	psout.Color.xyz = float3(1.5, 1.5, 1.5) * (input.Color.xyz * baseColor.xyz + PParams.yyy);
+	psout.Color.xyz = float3(1.5, 1.5, 1.5) * (input.Color.xyz * baseColor.xyz + PParams.y);
 	psout.Color.w = input.TexCoord2.x * (baseColor.w * input.Color.w);
 #		else
 	psout.Color.w = input.Color.w * baseColor.w;
-	psout.Color.xyz = input.Color.xyz * baseColor.xyz + PParams.yyy;
+	psout.Color.xyz = input.Color.xyz * baseColor.xyz + PParams.y;
 #		endif
 
 #	else

@@ -1253,6 +1253,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	endif  // LANDSCAPE
 
 		float4 rawBaseColor = TexColorSampler.Sample(SampColorSampler, diffuseUv);
+#	if !defined(TRUE_PBR)
+		rawBaseColor.rgb = sRGB2Lin(rawBaseColor.rgb);
+#	endif
 		baseColor = rawBaseColor;
 
 		float landSnowMask1 = GetLandSnowMaskValue(baseColor.w);
@@ -1276,14 +1279,14 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		else
 		normal.xyz = normal.xzy * 2.0.xxx + -1.0.xxx;
 		normal.w = 1;
-		glossiness = TexSpecularSampler.Sample(SampSpecularSampler, uv).x;
+		glossiness = sRGB2Lin(TexSpecularSampler.Sample(SampSpecularSampler, uv).x).x;
 #		endif  // LODLANDNOISE
 #	elif (defined(SNOW) && defined(LANDSCAPE))
 	normal.xyz = GetLandNormal(landSnowMask1, normal.xyz, uv, SampNormalSampler, TexNormalSampler);
-	glossiness = normal.w;
+	glossiness = sRGB2Lin(normal.w).x;
 #	else
 	normal.xyz = TransformNormal(normal.xyz);
-	glossiness = normal.w;
+	glossiness = sRGB2Lin(normal.w).x;
 #	endif  // MODELSPACENORMALS
 
 #	if defined(WORLD_MAP)
@@ -1341,12 +1344,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 	if (input.LandBlendWeights1.y > 0.0) {
 		float4 landColor2 = TexLandColor2Sampler.Sample(SampLandColor2Sampler, uv);
+#		if !defined(TRUE_PBR)
+		landColor2.rgb = sRGB2Lin(landColor2.rgb);
+#		endif
 		float landSnowMask2 = GetLandSnowMaskValue(landColor2.w);
 		baseColor += input.LandBlendWeights1.yyyy * landColor2;
 		float4 landNormal2 = TexLandNormal2Sampler.Sample(SampLandNormal2Sampler, uv);
 		landNormal2.xyz = GetLandNormal(landSnowMask2, landNormal2.xyz, uv, SampLandNormal2Sampler, TexLandNormal2Sampler);
 		normal.xyz += input.LandBlendWeights1.yyy * landNormal2.xyz;
-		glossiness += input.LandBlendWeights1.y * landNormal2.w;
+		glossiness += input.LandBlendWeights1.y * sRGB2Lin(landNormal2.w).x;
 #		if defined(SNOW) && !defined(TRUE_PBR)
 		landSnowMask += LandscapeTexture1to4IsSnow.y * input.LandBlendWeights1.y * landSnowMask2;
 #		endif  // SNOW
@@ -1368,12 +1374,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 	if (input.LandBlendWeights1.z > 0.0) {
 		float4 landColor3 = TexLandColor3Sampler.Sample(SampLandColor3Sampler, uv);
+#		if !defined(TRUE_PBR)
+		landColor3.rgb = sRGB2Lin(landColor3.rgb);
+#		endif
 		float landSnowMask3 = GetLandSnowMaskValue(landColor3.w);
 		baseColor += input.LandBlendWeights1.zzzz * landColor3;
 		float4 landNormal3 = TexLandNormal3Sampler.Sample(SampLandNormal3Sampler, uv);
 		landNormal3.xyz = GetLandNormal(landSnowMask3, landNormal3.xyz, uv, SampLandNormal3Sampler, TexLandNormal3Sampler);
 		normal.xyz += input.LandBlendWeights1.zzz * landNormal3.xyz;
-		glossiness += input.LandBlendWeights1.z * landNormal3.w;
+		glossiness += input.LandBlendWeights1.z * sRGB2Lin(landNormal3.w).x;
 #		if defined(SNOW) && !defined(TRUE_PBR)
 		landSnowMask += LandscapeTexture1to4IsSnow.z * input.LandBlendWeights1.z * landSnowMask3;
 #		endif  // SNOW
@@ -1395,12 +1404,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 	if (input.LandBlendWeights1.w > 0.0) {
 		float4 landColor4 = TexLandColor4Sampler.Sample(SampLandColor4Sampler, uv);
+#		if !defined(TRUE_PBR)
+		landColor4.rgb = sRGB2Lin(landColor4.rgb);
+#		endif
 		float landSnowMask4 = GetLandSnowMaskValue(landColor4.w);
 		baseColor += input.LandBlendWeights1.wwww * landColor4;
 		float4 landNormal4 = TexLandNormal4Sampler.Sample(SampLandNormal4Sampler, uv);
 		landNormal4.xyz = GetLandNormal(landSnowMask4, landNormal4.xyz, uv, SampLandNormal4Sampler, TexLandNormal4Sampler);
 		normal.xyz += input.LandBlendWeights1.www * landNormal4.xyz;
-		glossiness += input.LandBlendWeights1.w * landNormal4.w;
+		glossiness += input.LandBlendWeights1.w * sRGB2Lin(landNormal4.w).x;
 #		if defined(SNOW) && !defined(TRUE_PBR)
 		landSnowMask += LandscapeTexture1to4IsSnow.w * input.LandBlendWeights1.w * landSnowMask4;
 #		endif  // SNOW
@@ -1422,12 +1434,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 	if (input.LandBlendWeights2.x > 0.0) {
 		float4 landColor5 = TexLandColor5Sampler.Sample(SampLandColor5Sampler, uv);
+#		if !defined(TRUE_PBR)
+		landColor5.rgb = sRGB2Lin(landColor5.rgb);
+#		endif
 		float landSnowMask5 = GetLandSnowMaskValue(landColor5.w);
 		baseColor += input.LandBlendWeights2.xxxx * landColor5;
 		float4 landNormal5 = TexLandNormal5Sampler.Sample(SampLandNormal5Sampler, uv);
 		landNormal5.xyz = GetLandNormal(landSnowMask5, landNormal5.xyz, uv, SampLandNormal5Sampler, TexLandNormal5Sampler);
 		normal.xyz += input.LandBlendWeights2.xxx * landNormal5.xyz;
-		glossiness += input.LandBlendWeights2.x * landNormal5.w;
+		glossiness += input.LandBlendWeights2.x * sRGB2Lin(landNormal5.w).x;
 #		if defined(SNOW) && !defined(TRUE_PBR)
 		landSnowMask += LandscapeTexture5to6IsSnow.x * input.LandBlendWeights2.x * landSnowMask5;
 #		endif  // SNOW
@@ -1449,12 +1464,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 	if (input.LandBlendWeights2.y > 0.0) {
 		float4 landColor6 = TexLandColor6Sampler.Sample(SampLandColor6Sampler, uv);
+#		if !defined(TRUE_PBR)
+		landColor6.rgb = sRGB2Lin(landColor6.rgb);
+#		endif
 		float landSnowMask6 = GetLandSnowMaskValue(landColor6.w);
 		baseColor += input.LandBlendWeights2.yyyy * landColor6;
 		float4 landNormal6 = TexLandNormal6Sampler.Sample(SampLandNormal6Sampler, uv);
 		landNormal6.xyz = GetLandNormal(landSnowMask6, landNormal6.xyz, uv, SampLandNormal6Sampler, TexLandNormal6Sampler);
 		normal.xyz += input.LandBlendWeights2.yyy * landNormal6.xyz;
-		glossiness += input.LandBlendWeights2.y * landNormal6.w;
+		glossiness += input.LandBlendWeights2.y * sRGB2Lin(landNormal6.w).x;
 #		if defined(SNOW) && !defined(TRUE_PBR)
 		landSnowMask += LandscapeTexture5to6IsSnow.y * input.LandBlendWeights2.y * landSnowMask6;
 #		endif  // SNOW
@@ -1476,6 +1494,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #		if defined(LOD_LAND_BLEND)
 	float4 lodLandColor = TexLandLodBlend1Sampler.Sample(SampLandLodBlend1Sampler, input.TexCoord0.zw);
+#			if !defined(TRUE_PBR)
+	lodLandColor.rgb = sRGB2Lin(lodLandColor.rgb);
+#			endif
 	float lodBlendParameter = GetLodLandBlendParameter(lodLandColor.xyz);
 	float lodBlendMask = TexLandLodBlend2Sampler.Sample(SampLandLodBlend2Sampler, 3.0.xx * input.TexCoord0.zw).x;
 	float lodLandFadeFactor = GetLodLandBlendMultiplier(lodBlendParameter, lodBlendMask);
@@ -1822,7 +1843,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	waterRoughnessSpecular = 1.0 - wetnessGlossinessSpecular;
 #	endif
 
-	float3 dirLightColor = DirLightColor.xyz;
+	float3 dirLightColor = sRGB2Lin(DirLightColor.xyz);
 	float3 dirLightColorMultiplier = 1;
 
 #	if defined(WATER_LIGHTING)
@@ -1940,7 +1961,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #	if defined(TRUE_PBR)
 	{
-		float3 pbrDirLightColor = PBR::AdjustDirectionalLightColor(DirLightColor.xyz);
+		float3 pbrDirLightColor = PBR::AdjustDirectionalLightColor(sRGB2Lin(DirLightColor.xyz));
 		float3 mainLayerFinalLightColor = fullShadowDirLightColorMultiplier * pbrDirLightColor;
 		float coatShadowDirLightColorMultiplier = fullShadowDirLightColorMultiplier;
 		[branch] if ((PBRFlags & TruePBR_InterlayerParallax) != 0)
@@ -2011,7 +2032,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 			continue;
 
 		float intensityMultiplier = 1 - intensityFactor * intensityFactor;
-		float3 lightColor = PointLightColor[lightIndex].xyz * intensityMultiplier;
+		float3 lightColor = sRGB2Lin(PointLightColor[lightIndex].xyz) * intensityMultiplier;
 		float lightShadow = 1.f;
 		if (PixelShaderDescriptor & _DefShadow) {
 			if (lightIndex < numShadowLights) {
@@ -2097,7 +2118,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 			continue;
 
 		float intensityMultiplier = 1 - intensityFactor * intensityFactor;
-		float3 lightColor = light.color.xyz * intensityMultiplier;
+		float3 lightColor = sRGB2Lin(light.color.xyz) * intensityMultiplier;
 		float lightShadow = 1.f;
 
 		float shadowComponent = 1.0;
@@ -2248,7 +2269,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	diffuseColor += emitColor.xyz;
 #	endif
 
-	float3 directionalAmbientColor = mul(DirectionalAmbient, modelNormal);
+	float3 directionalAmbientColor = sRGB2Lin(mul(DirectionalAmbient, modelNormal));
 #	if defined(TRUE_PBR)
 	directionalAmbientColor = PBR::AdjustAmbientLightColor(directionalAmbientColor);
 #	endif
@@ -2346,9 +2367,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	endif
 
 #	if defined(HAIR)
-	float3 vertexColor = lerp(1, TintColor.xyz, input.Color.y);
+	float3 vertexColor = lerp(1, sRGB2Lin(TintColor.xyz), input.Color.y);
 #	else
-	float3 vertexColor = input.Color.xyz;
+	float3 vertexColor = sRGB2Lin(input.Color.xyz);
 #	endif  // defined (HAIR)
 
 	float4 color = 0;
@@ -2490,7 +2511,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #	if !defined(DEFERRED)
 	if (FrameParams.y && FrameParams.z)
-		color.xyz = lerp(color.xyz, input.FogParam.xyz, input.FogParam.w);
+		color.xyz = lerp(color.xyz, sRGB2Lin(input.FogParam.xyz), input.FogParam.w);
 #	endif
 
 #	if defined(TESTCUBEMAP)
