@@ -683,7 +683,7 @@ void LightLimitFix::UpdateLights()
 		} else {
 			roomIndex = it->second;
 		}
-		light.roomFlags.SetBit(roomIndex, 1);
+		light.roomFlags.set(roomIndex, 1);
 	};
 
 	auto addLight = [&](const RE::NiPointer<RE::BSLight>& e) {
@@ -912,4 +912,176 @@ void LightLimitFix::UpdateLights()
 
 	ID3D11UnorderedAccessView* null_uavs[3] = { nullptr };
 	context->CSSetUnorderedAccessViews(0, 3, null_uavs, nullptr);
+}
+
+void LightLimitFix::CreateDepthStencilTarget(RE::BSGraphics::RenderTargetManager& targetManager,
+	RE::RENDER_TARGET_DEPTHSTENCIL target,
+	RE::BSGraphics::DepthStencilTargetProperties& targetProperties)
+{
+	if (target == RE::RENDER_TARGET_DEPTHSTENCIL::kSHADOWMAPS) {
+		targetProperties.arraySize = MaxShadowmapsCount;
+	}
+
+	auto* renderer = RE::BSGraphics::Renderer::GetSingleton();
+	auto* device = reinterpret_cast<ID3D11Device*>(renderer->GetRuntimeData().forwarder);
+
+	targetManager.depthStencilTargetData[target] = targetProperties;
+
+	auto& depthStencilData = renderer->GetDepthStencilData().depthStencils[target];
+
+	D3D11_TEXTURE2D_DESC textureDesc;
+	textureDesc.Width = targetProperties.width;
+	textureDesc.Height = targetProperties.height;
+	textureDesc.MipLevels = 1;
+	textureDesc.ArraySize = targetProperties.arraySize;
+	textureDesc.Format = targetProperties.stencil ? DXGI_FORMAT_R24G8_TYPELESS : (targetProperties.use16BitsDepth ? DXGI_FORMAT_R16_TYPELESS : DXGI_FORMAT_R32_TYPELESS);
+	textureDesc.SampleDesc = { 1, 0 };
+	textureDesc.Usage = D3D11_USAGE_DEFAULT;
+	textureDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_DEPTH_STENCIL;
+	textureDesc.CPUAccessFlags = 0;
+	textureDesc.MiscFlags = 0;
+	device->CreateTexture2D(&textureDesc, nullptr, &depthStencilData.texture);
+
+	auto MakeDSVDesc = [&](bool readOnly, bool array, uint32_t arrayIndex) {
+		D3D11_DEPTH_STENCIL_VIEW_DESC dsvDesc;
+		dsvDesc.Format = targetProperties.stencil ? DXGI_FORMAT_D24_UNORM_S8_UINT : (targetProperties.use16BitsDepth ? DXGI_FORMAT_D16_UNORM : DXGI_FORMAT_D32_FLOAT);
+		dsvDesc.Flags = readOnly ? (targetProperties.stencil ? (D3D11_DSV_READ_ONLY_DEPTH | D3D11_DSV_READ_ONLY_STENCIL) : D3D11_DSV_READ_ONLY_DEPTH) : 0;
+		if (array) {
+			dsvDesc.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2DARRAY;
+			dsvDesc.Texture2DArray.MipSlice = 0;
+			dsvDesc.Texture2DArray.FirstArraySlice = arrayIndex;
+			dsvDesc.Texture2DArray.ArraySize = 1;
+		} else {
+			dsvDesc.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2D;
+			dsvDesc.Texture2D.MipSlice = 0;
+		}
+		return dsvDesc;
+	};
+
+	if (targetProperties.arraySize > 1) {
+		for (uint32_t arrayIndex = 0; arrayIndex < targetProperties.arraySize; ++arrayIndex) {
+			const D3D11_DEPTH_STENCIL_VIEW_DESC rwViewDesc = MakeDSVDesc(false, true, arrayIndex);
+			const D3D11_DEPTH_STENCIL_VIEW_DESC roViewDesc = MakeDSVDesc(true, true, arrayIndex);
+
+			if (target == RE::RENDER_TARGET_DEPTHSTENCIL::kSHADOWMAPS) {
+				device->CreateDepthStencilView(depthStencilData.texture, &rwViewDesc, &shadowmapViews[arrayIndex]);
+				device->CreateDepthStencilView(depthStencilData.texture, &roViewDesc, &shadowmapReadOnlyViews[arrayIndex]);
+			} else {
+				device->CreateDepthStencilView(depthStencilData.texture, &rwViewDesc, &depthStencilData.views[arrayIndex]);
+				device->CreateDepthStencilView(depthStencilData.texture, &roViewDesc, &depthStencilData.readOnlyViews[arrayIndex]);
+			}
+		}
+	} else {
+		const D3D11_DEPTH_STENCIL_VIEW_DESC rwViewDesc = MakeDSVDesc(false, false, 0);
+		const D3D11_DEPTH_STENCIL_VIEW_DESC roViewDesc = MakeDSVDesc(true, false, 0);
+
+		device->CreateDepthStencilView(depthStencilData.texture, &rwViewDesc, &depthStencilData.views[0]);
+		device->CreateDepthStencilView(depthStencilData.texture, &roViewDesc, &depthStencilData.readOnlyViews[0]);
+	}
+
+	D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
+	srvDesc.Format = targetProperties.stencil ? DXGI_FORMAT_R24_UNORM_X8_TYPELESS : (targetProperties.use16BitsDepth ? DXGI_FORMAT_R16_UNORM : DXGI_FORMAT_R32_FLOAT);
+	if (targetProperties.arraySize > 1) {
+		srvDesc.ViewDimension = D3D_SRV_DIMENSION_TEXTURE2DARRAY;
+		srvDesc.Texture2DArray.MostDetailedMip = 0;
+		srvDesc.Texture2DArray.MipLevels = 1;
+		srvDesc.Texture2DArray.FirstArraySlice = 0;
+		srvDesc.Texture2DArray.ArraySize = targetProperties.arraySize;
+	} else {
+		srvDesc.ViewDimension = D3D_SRV_DIMENSION_TEXTURE2D;
+		srvDesc.Texture2D.MostDetailedMip = 0;
+		srvDesc.Texture2D.MipLevels = 1;
+	}
+	device->CreateShaderResourceView(depthStencilData.texture, &srvDesc, &depthStencilData.depthSRV);
+	if (targetProperties.stencil) {
+		srvDesc.Format = DXGI_FORMAT_X24_TYPELESS_G8_UINT;
+		device->CreateShaderResourceView(depthStencilData.texture, &srvDesc, &depthStencilData.stencilSRV);
+	}
+}
+
+void LightLimitFix::SetupShadowmapRenderTarget([[maybe_unused]]bool isComputeShader)
+{
+	auto* deviceContext = State::GetSingleton()->context;
+	auto& shadowState = RE::BSGraphics::RendererShadowState::GetSingleton()->GetRuntimeData();
+	auto* renderer = RE::BSGraphics::Renderer::GetSingleton();
+	if (shadowState.stateUpdateFlags.any(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET)) {
+		std::array<ID3D11RenderTargetView*, 8> rtViews;
+		ID3D11DepthStencilView* dsv = nullptr;
+		uint32_t rtIndex = 0;
+		if (shadowState.cubeMapRenderTarget == RE::RENDER_TARGETS_CUBEMAP::kNONE) {
+			for (; rtIndex < 8; ++rtIndex) {
+				if (shadowState.renderTargets[rtIndex] == RE::RENDER_TARGETS::kNONE) {
+					break;
+				}
+				rtViews[rtIndex] = renderer->GetRuntimeData().renderTargets[rtIndex].RTV;
+				if (shadowState.setRenderTargetMode[rtIndex] == RE::BSGraphics::SetRenderTargetMode::SRTM_CLEAR) {
+					deviceContext->ClearRenderTargetView(rtViews[rtIndex], renderer->GetRendererData().clearColor);
+					shadowState.setRenderTargetMode[rtIndex] = RE::BSGraphics::SetRenderTargetMode::SRTM_NO_CLEAR;
+				}
+			}
+		} else {
+			rtViews[0] = renderer->GetRendererData().cubemapRenderTargets[shadowState.cubeMapRenderTarget].cubeSideRTV[shadowState.cubeMapRenderTargetView];
+			if (shadowState.setCubeMapRenderTargetMode == RE::BSGraphics::SetRenderTargetMode::SRTM_CLEAR) {
+				deviceContext->ClearRenderTargetView(rtViews[0], renderer->GetRendererData().clearColor);
+				shadowState.setCubeMapRenderTargetMode = RE::BSGraphics::SetRenderTargetMode::SRTM_NO_CLEAR;
+			}
+			++rtIndex;
+		}
+		if (shadowState.depthStencil != RE::RENDER_TARGETS_DEPTHSTENCIL::kNONE) {
+			if (shadowState.setDepthStencilMode == RE::BSGraphics::SetRenderTargetMode::SRTM_CLEAR) {
+				renderer->GetRuntimeData().readOnlyDepth = false;
+			}
+			if (shadowState.depthStencil == RE::RENDER_TARGETS_DEPTHSTENCIL::kSHADOWMAPS) {
+				dsv = renderer->GetRuntimeData().readOnlyDepth ? shadowmapReadOnlyViews[shadowState.depthStencilSlice] : shadowmapViews[shadowState.depthStencilSlice];
+			} else {
+				dsv = renderer->GetRuntimeData().readOnlyDepth ? renderer->GetDepthStencilData().depthStencils[shadowState.depthStencil].readOnlyViews[shadowState.depthStencilSlice] : renderer->GetDepthStencilData().depthStencils[shadowState.depthStencil].views[shadowState.depthStencilSlice];
+			}
+			if (dsv != nullptr && (shadowState.setDepthStencilMode == RE::BSGraphics::SetRenderTargetMode::SRTM_CLEAR_STENCIL ||
+				shadowState.setDepthStencilMode == RE::BSGraphics::SetRenderTargetMode::SRTM_CLEAR ||
+				shadowState.setDepthStencilMode == RE::BSGraphics::SetRenderTargetMode::SRTM_CLEAR_DEPTH)) {
+				UINT clearFlags = 0;
+				if (shadowState.setDepthStencilMode == RE::BSGraphics::SetRenderTargetMode::SRTM_CLEAR_DEPTH || shadowState.setDepthStencilMode == RE::BSGraphics::SetRenderTargetMode::SRTM_CLEAR) {
+					clearFlags |= D3D11_CLEAR_DEPTH;
+				}
+				if (shadowState.setDepthStencilMode == RE::BSGraphics::SetRenderTargetMode::SRTM_CLEAR_STENCIL || shadowState.setDepthStencilMode == RE::BSGraphics::SetRenderTargetMode::SRTM_CLEAR) {
+					clearFlags |= D3D11_CLEAR_STENCIL;
+				}
+				deviceContext->ClearDepthStencilView(dsv, clearFlags, 1.f, 0);
+				shadowState.setDepthStencilMode = RE::BSGraphics::SetRenderTargetMode::SRTM_NO_CLEAR;
+			}
+		}
+		deviceContext->OMSetRenderTargets(rtIndex, rtViews.data(), dsv);
+
+		shadowState.stateUpdateFlags.reset(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);
+	}
+	/*if (!isComputeShader) {
+		if (shadowState.stateUpdateFlags.any(RE::BSGraphics::ShaderFlags::DIRTY_DEPTH_STENCILREF_MODE, RE::BSGraphics::ShaderFlags::DIRTY_DEPTH_MODE)) {
+			static auto& depthStencilStates = *reinterpret_cast<std::array<std::array<ID3D11DepthStencilState*, 40>, 6>*>(REL::RelocationID(524747, 411362).address());
+			deviceContext->OMSetDepthStencilState(depthStencilStates[static_cast<uint32_t>(shadowState.depthStencilDepthMode)][static_cast<uint32_t>(shadowState.depthStencilStencilMode)], shadowState.stencilRef);
+		}
+		if (shadowState.stateUpdateFlags.any(RE::BSGraphics::ShaderFlags::DIRTY_UNKNOWN2, RE::BSGraphics::ShaderFlags::DIRTY_RASTER_DEPTH_BIAS, RE::BSGraphics::ShaderFlags::DIRTY_RASTER_CULL_MODE, RE::BSGraphics::ShaderFlags::DIRTY_UNKNOWN1))
+			static auto& depthStencilStates = *reinterpret_cast<std::array<ID3D11RasterizerState*, 40>*>(REL::RelocationID(524747, 411362).address());
+			deviceContext->RSSetState();
+			(stateUpdateFlags & (DirtyScissorMode | DirtyDepthBias | DirtyCullMode | DirtyFillMode)) != 0) {
+			(ID3D11DeviceContextPtr->lpVtbl->RSSetState)(
+				ID3D11DeviceContextPtr,
+				(&(&(&(&Renderer::RasterizerStates)[72 * RendererShadowState::Instance.rasterStateFillMode])[24 * RendererShadowState::Instance.rasterStateCullMode])[2 * RendererShadowState::Instance.rasterStateDepthBiasMode])[RendererShadowState::Instance.rasterStateScissorMode]);
+			stateUpdateFlags = RendererShadowState::Instance.stateUpdateFlags;
+			if ((RendererShadowState::Instance.stateUpdateFlags & 0x40) != 0) {
+				if (RendererShadowState::Instance.viewPort.MinDepth != RendererShadowState::Instance.cameraData.m_ViewDepthRange.x || (y = RendererShadowState::Instance.viewPort.MaxDepth,
+																																		  RendererShadowState::Instance.viewPort.MaxDepth != RendererShadowState::Instance.cameraData.m_ViewDepthRange.y)) {
+					stateUpdateFlags = RendererShadowState::Instance.stateUpdateFlags | 2;
+					*&RendererShadowState::Instance.viewPort.MinDepth = RendererShadowState::Instance.cameraData.m_ViewDepthRange;
+					RendererShadowState::Instance.stateUpdateFlags |= 2u;
+					y = RendererShadowState::Instance.cameraData.m_ViewDepthRange.y;
+				}
+				if (RendererShadowState::Instance.rasterStateDepthBiasMode) {
+					v16 = y - DepthBiasValues[RendererShadowState::Instance.rasterStateDepthBiasMode];
+					stateUpdateFlags |= 2u;
+					RendererShadowState::Instance.stateUpdateFlags = stateUpdateFlags;
+					RendererShadowState::Instance.viewPort.MaxDepth = v16;
+				}
+			}
+		}
+	}*/
 }

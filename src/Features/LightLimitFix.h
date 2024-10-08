@@ -25,6 +25,9 @@ public:
 
 	bool HasShaderDefine(RE::BSShader::Type) override { return true; };
 
+	constexpr static uint32_t MaxRoomsCount = 128;
+	constexpr static uint32_t MaxShadowmapsCount = 128;
+
 	enum class LightFlags : std::uint32_t
 	{
 		PortalStrict = (1 << 0),
@@ -43,7 +46,7 @@ public:
 		float radius;
 		PositionOpt positionWS[2];
 		PositionOpt positionVS[2];
-		uint128_t roomFlags = uint32_t(0);
+		std::bitset<MaxRoomsCount> roomFlags;
 		stl::enumeration<LightFlags> lightFlags;
 		uint32_t shadowMaskIndex = 0;
 		float pad0[2];
@@ -204,8 +207,18 @@ public:
 
 	eastl::hash_map<RE::NiNode*, uint8_t> roomNodes;
 
+	std::bitset<MaxShadowmapsCount> usedShadowmaps;
+	RE::BSShadowLight::ShadowmapDescriptor* currentShadowmapDescriptor = nullptr;
+	std::array<ID3D11DepthStencilView*, MaxShadowmapsCount> shadowmapViews;
+	std::array<ID3D11DepthStencilView*, MaxShadowmapsCount> shadowmapReadOnlyViews;
+
 	float CalculateLuminance(CachedParticleLight& light, RE::NiPoint3& point);
 	void AddParticleLightLuminance(RE::NiPoint3& targetPosition, int& numHits, float& lightLevel);
+
+	void CreateDepthStencilTarget(RE::BSGraphics::RenderTargetManager& targetManager,
+		RE::RENDER_TARGET_DEPTHSTENCIL target,
+		RE::BSGraphics::DepthStencilTargetProperties& targetProperties);
+	void SetupShadowmapRenderTarget(bool isComputeShader);
 
 	struct Hooks
 	{
@@ -344,6 +357,108 @@ public:
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
+		struct RenderTargetManager__CreateDepthStencilTarget
+		{
+			static void thunk(RE::BSGraphics::RenderTargetManager* targetManager,
+				RE::RENDER_TARGET_DEPTHSTENCIL target,
+				RE::BSGraphics::DepthStencilTargetProperties* targetProperties)
+			{
+				GetSingleton()->CreateDepthStencilTarget(*targetManager, target, *targetProperties);
+			}
+		};
+
+		struct BSShadowLight__RenderShadowmap
+		{
+			static void thunk(RE::BSShadowLight* light,
+				RE::BSShadowLight::ShadowmapDescriptor* shadowmapDescriptor,
+				int* a3,
+				int a4)
+			{
+				if (shadowmapDescriptor->renderTarget == RE::RENDER_TARGETS_DEPTHSTENCIL::kNONE) {
+					GetSingleton()->currentShadowmapDescriptor = shadowmapDescriptor;
+				}
+				func(light, shadowmapDescriptor, a3, a4);
+				GetSingleton()->currentShadowmapDescriptor = nullptr;
+			}
+
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct BSShadowLight__RenderShadowmap__SetClearColor
+		{
+			static void thunk(RE::BSGraphics::Renderer* renderer, float a2, float a3, float a4, int a5)
+			{
+				if (GetSingleton()->currentShadowmapDescriptor != nullptr) {
+					auto& usedShadowmaps = GetSingleton()->usedShadowmaps;
+					for (uint32_t shadowmapIndex = 0; shadowmapIndex < usedShadowmaps.size(); ++shadowmapIndex) {
+						if (!usedShadowmaps[shadowmapIndex]) {
+							usedShadowmaps.set(shadowmapIndex);
+							GetSingleton()->currentShadowmapDescriptor->shadowmapIndex = shadowmapIndex;
+							break;
+						}
+					}
+				}
+
+				func(renderer, a2, a3, a4, a5);
+			}
+
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct BSShadowLight__Reset
+		{
+			static void thunk(RE::BSShadowLight* light)
+			{
+				for (uint32_t shadowmapIndex = 0; shadowmapIndex < light->shadowMapCount; ++shadowmapIndex) {
+					auto& descriptor = light->shadowmapDescriptors[shadowmapIndex];
+					if (descriptor.renderTarget != RE::RENDER_TARGETS_DEPTHSTENCIL::kNONE) {
+						GetSingleton()->usedShadowmaps.reset(descriptor.shadowmapIndex);
+						descriptor.renderTarget = RE::RENDER_TARGETS_DEPTHSTENCIL::kNONE;
+						descriptor.unkCC = 1.f;
+					}
+				}
+			}
+		};
+
+		struct BSShadowLight__ResetShadowmap
+		{
+			static void thunk(RE::BSShadowLight* light, uint32_t shadowmapIndex)
+			{
+				auto& descriptor = light->shadowmapDescriptors[shadowmapIndex];
+				if (descriptor.renderTarget != RE::RENDER_TARGETS_DEPTHSTENCIL::kNONE) {
+					GetSingleton()->usedShadowmaps.reset(descriptor.shadowmapIndex);
+
+					func(light, shadowmapIndex);
+					/*descriptor.renderTarget = RE::RENDER_TARGETS_DEPTHSTENCIL::kNONE;
+					descriptor.shaderAccumulator = nullptr;
+					descriptor.camera = nullptr;
+					if (descriptor.cullingProcess != light->cullingProcess) {
+						if (descriptor.cullingProcess != nullptr) {
+							descriptor.cullingProcess->~BSCullingProcess();
+						}
+						descriptor.cullingProcess = nullptr;
+					}*/
+				}
+			}
+
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct Renderer__SetDirtyRenderTargets
+		{
+			static void thunk(RE::BSGraphics::Renderer* renderer, bool isComputeShader)
+			{
+				const bool dirtyRt = RE::BSGraphics::RendererShadowState::GetSingleton()->GetRuntimeData().stateUpdateFlags.any(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);
+				GetSingleton()->SetupShadowmapRenderTarget(isComputeShader);
+				func(renderer, isComputeShader);
+				if (dirtyRt) {
+					RE::BSGraphics::RendererShadowState::GetSingleton()->GetRuntimeData().stateUpdateFlags.set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);
+				}
+			}
+
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
 		static void Install()
 		{
 			stl::write_thunk_call<ValidLight1>(REL::RelocationID(100994, 107781).address() + 0x92);
@@ -361,6 +476,13 @@ public:
 			stl::write_vfunc<0x6, BSLightingShader_SetupGeometry>(RE::VTABLE_BSLightingShader[0]);
 			stl::write_vfunc<0x6, BSEffectShader_SetupGeometry>(RE::VTABLE_BSEffectShader[0]);
 			stl::write_vfunc<0x6, BSWaterShader_SetupGeometry>(RE::VTABLE_BSWaterShader[0]);
+
+			stl::detour_thunk_ignore_func<RenderTargetManager__CreateDepthStencilTarget>(REL::RelocationID(75639, 77446));
+			stl::detour_thunk<BSShadowLight__RenderShadowmap>(REL::RelocationID(100820, 107604));
+			stl::write_thunk_call<BSShadowLight__RenderShadowmap__SetClearColor>(REL::RelocationID(100820, 107604).address() + REL::Relocate(0x101, 0x103, 0x126));
+			stl::detour_thunk_ignore_func<BSShadowLight__Reset>(REL::RelocationID(100816, 107600));
+			stl::detour_thunk<BSShadowLight__ResetShadowmap>(REL::RelocationID(100814, 107598));
+			stl::detour_thunk<Renderer__SetDirtyRenderTargets>(REL::RelocationID(75462, 77247));
 
 			logger::info("[LLF] Installed hooks");
 
