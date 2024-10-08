@@ -999,7 +999,7 @@ void LightLimitFix::CreateDepthStencilTarget(RE::BSGraphics::RenderTargetManager
 	}
 }
 
-void LightLimitFix::SetupShadowmapRenderTarget([[maybe_unused]]bool isComputeShader)
+void LightLimitFix::SetupShadowmapRenderTarget([[maybe_unused]] bool isComputeShader)
 {
 	auto* deviceContext = State::GetSingleton()->context;
 	auto& shadowState = RE::BSGraphics::RendererShadowState::GetSingleton()->GetRuntimeData();
@@ -1037,8 +1037,8 @@ void LightLimitFix::SetupShadowmapRenderTarget([[maybe_unused]]bool isComputeSha
 				dsv = renderer->GetRuntimeData().readOnlyDepth ? renderer->GetDepthStencilData().depthStencils[shadowState.depthStencil].readOnlyViews[shadowState.depthStencilSlice] : renderer->GetDepthStencilData().depthStencils[shadowState.depthStencil].views[shadowState.depthStencilSlice];
 			}
 			if (dsv != nullptr && (shadowState.setDepthStencilMode == RE::BSGraphics::SetRenderTargetMode::SRTM_CLEAR_STENCIL ||
-				shadowState.setDepthStencilMode == RE::BSGraphics::SetRenderTargetMode::SRTM_CLEAR ||
-				shadowState.setDepthStencilMode == RE::BSGraphics::SetRenderTargetMode::SRTM_CLEAR_DEPTH)) {
+									  shadowState.setDepthStencilMode == RE::BSGraphics::SetRenderTargetMode::SRTM_CLEAR ||
+									  shadowState.setDepthStencilMode == RE::BSGraphics::SetRenderTargetMode::SRTM_CLEAR_DEPTH)) {
 				UINT clearFlags = 0;
 				if (shadowState.setDepthStencilMode == RE::BSGraphics::SetRenderTargetMode::SRTM_CLEAR_DEPTH || shadowState.setDepthStencilMode == RE::BSGraphics::SetRenderTargetMode::SRTM_CLEAR) {
 					clearFlags |= D3D11_CLEAR_DEPTH;
