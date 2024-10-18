@@ -67,7 +67,7 @@ namespace PNHiZ
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
-	template<uint32_t>
+	template <uint32_t>
 	struct BSBatchRenderer_RenderPassImmediately
 	{
 		static void thunk(RE::BSRenderPass* a_pass, uint32_t a_technique, bool a_alphaTest, uint32_t a_renderFlags)
@@ -252,8 +252,7 @@ void HiZ::SetupResources()
 
 void HiZ::ConstructHiZBuffer()
 {
-	if (!isEnabled)
-	{
+	if (!isEnabled) {
 		return;
 	}
 
@@ -423,8 +422,7 @@ void HiZ::CaclulateHiZBufferOcclusion()
 	};
 
 	auto* batchRenderer = accumulator->GetRuntimeData().batchRenderer;
-	for (const auto& passGroup : batchRenderer->passGroups)
-	{
+	for (const auto& passGroup : batchRenderer->passGroups) {
 		for (size_t bucketIndex = 0; bucketIndex < 5; ++bucketIndex) {
 			if ((passGroup.validBuckets & (1 << bucketIndex)) != 0) {
 				for (auto* pass = passGroup.passes[bucketIndex]; pass; pass = pass->passGroupNext) {
@@ -440,7 +438,7 @@ void HiZ::CaclulateHiZBufferOcclusion()
 	}
 
 	context->Unmap(boundsData->resource.get(), 0);
-	
+
 	const CameraData newCameraData{
 		.viewMatrix = Util::GetCameraData(0).viewMat,
 		.projectionMatrix = Util::GetCameraData(0).projMat,
@@ -477,7 +475,7 @@ void HiZ::CaclulateHiZBufferOcclusion()
 	}
 	context->CSSetShader(nullptr, nullptr, 0);
 
-	context->CopyResource(resultReadback->resource.get() , resultData->resource.get());
+	context->CopyResource(resultReadback->resource.get(), resultData->resource.get());
 	//context->Flush();
 	//context->End(readbackQuery.get());
 	isReadbackReady = false;
@@ -608,8 +606,7 @@ bool HiZ::IsRenderPassOccluded(RE::BSRenderPass* pass)
 				return true;
 			}
 		}*/
-		if (auto it = prevGeometryMap.find(pass->geometry); it != prevGeometryMap.end())
-		{
+		if (auto it = prevGeometryMap.find(pass->geometry); it != prevGeometryMap.end()) {
 			if (results[it->second].result) {
 				++skippedRenderPassesLastFrame;
 				return true;
