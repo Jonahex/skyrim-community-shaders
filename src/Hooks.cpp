@@ -242,6 +242,8 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 {
 	const D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_1;  // Create a device with only the latest feature level
 
+	//Flags |= D3D11_CREATE_DEVICE_DEBUGGABLE;
+
 	auto result = Streamline::GetSingleton()->CreateDeviceAndSwapChain(
 		pAdapter,
 		DriverType,

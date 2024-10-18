@@ -6,6 +6,7 @@
 #include "Features/ExtendedMaterials.h"
 #include "Features/GrassCollision.h"
 #include "Features/GrassLighting.h"
+#include "Features/HiZ.h"
 #include "Features/LightLimitFix.h"
 #include "Features/ScreenSpaceGI.h"
 #include "Features/ScreenSpaceShadows.h"
@@ -126,7 +127,8 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		ScreenSpaceGI::GetSingleton(),
 		Skylighting::GetSingleton(),
 		TerrainBlending::GetSingleton(),
-		VolumetricLighting::GetSingleton()
+		VolumetricLighting::GetSingleton(),
+		HiZ::GetSingleton(),
 	};
 
 	static std::vector<Feature*> featuresVR(features);
